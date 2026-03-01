@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Users, UserCog, Calendar, X, Activity, LogOut, Edit2 } from 'lucide-react';
+import { Search, LayoutGrid, List, User, Settings, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 import Login from './Login';
