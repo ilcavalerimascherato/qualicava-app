@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, LayoutGrid, List, User, Settings, LogOut } from 'lucide-react';
+import { 
+  Search, 
+  LayoutGrid, 
+  List, 
+  User, 
+  Settings, 
+  LogOut, 
+  ChevronRight, 
+  CheckCircle2, 
+  AlertCircle, 
+  Clock 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 import Login from './Login';
