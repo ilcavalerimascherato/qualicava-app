@@ -97,7 +97,7 @@ export default function DirectorApp() {
 
 function FacilitySelectionCard({ facility: f, onClick }) {
   const statusConfig = f.isGreen
-    ? { Icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'In regola' }
+    ? { Icon: CheckCircle2, color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'In regola' }
     : f.isRed
     ? { Icon: AlertTriangle, color: 'text-red-500',    bg: 'bg-red-50',     border: 'border-red-200',     label: 'Da avviare' }
     : { Icon: Activity,      color: 'text-indigo-600', bg: 'bg-indigo-50',  border: 'border-indigo-200',  label: 'In corso' };

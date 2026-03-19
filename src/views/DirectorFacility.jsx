@@ -15,6 +15,12 @@ import { useModals }                        from '../contexts/ModalContext';
 import { useDashboardData, useInvalidate }  from '../hooks/useDashboardData';
 import { enrichFacilitiesData }             from '../utils/statusCalculator';
 import { supabase }                         from '../supabaseClient';
+import { detectAnomalies }                   from '../utils/kpiAnomalyEngine';
+import NcFormModal                            from '../components/NcFormModal';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
+import { KPI_RULES }                          from '../config/kpiRules';
+import { computeKpiValue }                    from '../utils/kpiFormulaEngine';
+import { getTimeHorizon }                     from '../utils/kpiTimeHorizon';
 
 import KpiManagerModal  from '../components/KpiManagerModal';
 import DataImportModal  from '../components/DataImportModal';
@@ -24,7 +30,7 @@ const TABS = [
   { id: 'overview',         label: 'Panoramica',     Icon: Activity      },
   { id: 'kpi',              label: 'KPI Mensili',    Icon: BarChart3     },
   { id: 'surveys',          label: 'Survey',         Icon: Database      },
-  { id: 'reports',          label: 'Report AI',      Icon: FileText      },
+  { id: 'analysis',         label: 'Analisi Survey', Icon: BarChart3     },
   { id: 'non_conformities', label: 'Non Conformità', Icon: AlertTriangle },
   { id: 'benchmark',        label: 'Benchmark',      Icon: TrendingUp    },
 ];
@@ -48,6 +54,7 @@ export default function DirectorFacility() {
   const { modals, open, close }           = useModals();
   const invalidate                        = useInvalidate();
   const [activeTab, setActiveTab]         = useState('overview');
+  const [ncEditId, setNcEditId]           = useState(null);
   const [dataTarget, setDataTarget]       = useState(null);
   const year = new Date().getFullYear();
 
@@ -191,19 +198,20 @@ export default function DirectorFacility() {
             onDataClick={handleDataClick}
           />
         )}
-        {activeTab === 'reports' && (
-          <ReportsTab surveys={facilitySurveys} />
+        {activeTab === 'analysis' && (
+          <SurveyAnalysisTab facility={facility} surveys={facilitySurveys} />
         )}
         {activeTab === 'non_conformities' && (
           <NonConformitiesTab
             facility={facility}
             year={year}
             profile={profile}
-            onNew={() => open('nonConformity')}
+            onNew={() => { setNcEditId(null); open('nonConformity'); }}
+            onEdit={(id) => { setNcEditId(id); open('nonConformity'); }}
           />
         )}
         {activeTab === 'benchmark' && (
-          <BenchmarkTab facility={facility} year={year} />
+          <BenchmarkTab facility={facility} kpiRecords={data.kpiRecords} year={year} />
         )}
       </main>
 
@@ -243,13 +251,17 @@ export default function DirectorFacility() {
 
       {modals.nonConformity && (
         <NcFormModal
+          isOpen={modals.nonConformity}
           facility={facility}
           year={year}
           profile={profile}
-          onClose={() => close('nonConformity')}
-          onSaved={() => {
+          ncId={ncEditId}
+          onClose={() => { close('nonConformity'); setNcEditId(null); }}
+          onSaved={(stato) => {
             close('nonConformity');
-            toast.success('Non conformità registrata');
+            setNcEditId(null);
+            invalidate.kpiRecords(year);
+            toast.success(`NC ${stato === 'Chiuso' ? 'chiusa' : stato === 'Pending' ? 'aggiornata a Pending' : 'registrata'}`);
           }}
         />
       )}
@@ -261,7 +273,7 @@ export default function DirectorFacility() {
 
 function StatusPill({ label, isOk, isPartial }) {
   const cfg = isOk
-    ? { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', state: 'OK' }
+    ? { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-400', state: 'OK' }
     : isPartial
     ? { bg: 'bg-indigo-100',  text: 'text-indigo-700',  dot: 'bg-indigo-500',  state: 'Parziale' }
     : { bg: 'bg-red-100',     text: 'text-red-700',     dot: 'bg-red-400',     state: 'Da fare' };
@@ -278,34 +290,28 @@ function OverviewTab({ facility: f, surveys, year }) {
   const operatorSurvey = surveys.filter(s => s.type === 'operator').sort((a,b) => b.calendar_id.localeCompare(a.calendar_id))[0];
 
   const cards = [
-    {
-      label:  'Survey Clienti',
-      value:  f.clientStatus === 'completed' ? 'Completata' : f.clientStatus === 'pending' ? 'In elaborazione' : 'Da avviare',
-      isOk:   f.clientStatus === 'completed',
-      detail: clientSurvey ? `Caricata: ${new Date(clientSurvey.created_at).toLocaleDateString('it')}` : 'Nessun dato',
-    },
-    {
-      label:  'Survey Operatori',
-      value:  f.staffStatus === 'completed' ? 'Completata' : f.staffStatus === 'pending' ? 'In elaborazione' : 'Da avviare',
-      isOk:   f.staffStatus === 'completed',
-      detail: operatorSurvey ? `Caricata: ${new Date(operatorSurvey.created_at).toLocaleDateString('it')}` : 'Nessun dato',
-    },
-    {
-      label:  'KPI Mensili',
-      value:  f.isKpiGreen ? 'In regola' : 'Mesi mancanti',
-      isOk:   f.isKpiGreen,
-      detail: `Anno ${year}`,
-    },
+    { label: 'Survey Clienti',   value: f.clientStatus === 'completed' ? 'Completata' : f.clientStatus === 'pending' ? 'In elaborazione' : 'Da avviare', isOk: f.clientStatus === 'completed', detail: clientSurvey ? `Caricata: ${new Date(clientSurvey.created_at).toLocaleDateString('it')}` : 'Nessun dato' },
+    { label: 'Survey Operatori',  value: f.staffStatus  === 'completed' ? 'Completata' : f.staffStatus  === 'pending' ? 'In elaborazione' : 'Da avviare', isOk: f.staffStatus  === 'completed', detail: operatorSurvey ? `Caricata: ${new Date(operatorSurvey.created_at).toLocaleDateString('it')}` : 'Nessun dato' },
+    { label: 'KPI Mensili',       value: f.isKpiGreen ? 'In regola' : 'Mesi mancanti',                                                                        isOk: f.isKpiGreen,                   detail: `Anno ${year}` },
+  ];
+
+  const ORG = [
+    { label: 'Direttore',       name: f.director,            email: f.email_direzione           },
+    { label: 'Dir. Sanitario',  name: f.director_sanitario,  email: f.email_sanitario           },
+    { label: 'Ref. Struttura',  name: f.referente_struttura, email: f.email_referente_struttura },
+    { label: 'Ref. Qualità',    name: f.referent,            email: f.email_qualita             },
   ];
 
   return (
     <div className="space-y-6">
+
+      {/* 3 card stato */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {cards.map(c => (
           <div key={c.label} className={`bg-white rounded-2xl border p-5 ${c.isOk ? 'border-emerald-200' : 'border-slate-200'}`}>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{c.label}</p>
             <div className="flex items-center gap-2 mb-1">
-              {c.isOk ? <CheckCircle2 size={18} className="text-emerald-500" /> : <Clock size={18} className="text-amber-500" />}
+              {c.isOk ? <CheckCircle2 size={18} className="text-emerald-600" /> : <Clock size={18} className="text-amber-500" />}
               <span className="font-black text-slate-800">{c.value}</span>
             </div>
             <p className="text-xs text-slate-400">{c.detail}</p>
@@ -313,17 +319,15 @@ function OverviewTab({ facility: f, surveys, year }) {
         ))}
       </div>
 
+      {/* Dettagli struttura */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6">
         <h3 className="font-black text-slate-700 mb-4">Dettagli struttura</h3>
         <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
           {[
-            ['Nome',         f.name],
-            ['Tipo (UDO)',   f.udo_name],
-            ['Regione',      f.region],
-            ['Indirizzo',    f.address],
-            ['Direttore',    f.director],
-            ['Referente Q.', f.referent],
-            ['Posti letto',  f.bed_count || null],
+            ['Tipo (UDO)',  f.udo_name],
+            ['Regione',     f.region],
+            ['Indirizzo',   f.address],
+            ['Posti letto', f.bed_count || null],
           ].filter(([,v]) => v).map(([k, v]) => (
             <div key={k}>
               <dt className="text-slate-400 font-medium">{k}</dt>
@@ -332,77 +336,271 @@ function OverviewTab({ facility: f, surveys, year }) {
           ))}
         </dl>
       </div>
+
+      {/* Organico — 4 box su griglia 2x2 */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <h3 className="font-black text-slate-700 mb-4">Organico struttura</h3>
+        <div className="grid grid-cols-2 gap-4">
+          {ORG.map(({ label, name, email }) => (
+            <div key={label} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{label}</p>
+              <p className={`text-sm font-bold mb-2 ${name ? 'text-slate-800' : 'text-slate-300 italic'}`}>
+                {name || 'Non assegnato'}
+              </p>
+              <div className="flex items-center gap-2">
+                {email ? (
+                  <a
+                    href={`mailto:${email}`}
+                    className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition-colors"
+                    title={email}
+                  >
+                    ✉ Email presente
+                  </a>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
+                    ✉ Email mancante
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 }
 
+
 function KpiTab({ facility, kpiRecords, year, onOpenManager }) {
-  const months = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-  const now    = new Date();
+  const now           = new Date();
   const currentMonth  = now.getMonth() + 1;
   const isCurrentYear = Number(year) === now.getFullYear();
+  const timeHorizon   = getTimeHorizon(year);
 
   const facilityKpis = kpiRecords.filter(k =>
     String(k.facility_id) === String(facility.id) && Number(k.year) === year
   );
 
+  const completedMonths = facilityKpis.filter(k => k.status === 'completed').length;
+  const draftMonths     = facilityKpis.filter(k => k.status === 'draft').length;
+  const actionableMonths = isCurrentYear ? currentMonth - 1 : 12;
+  const missingMonths   = Math.max(0, actionableMonths - completedMonths - draftMonths);
+
+  const totalAnomalies = facilityKpis
+    .filter(k => k.status === 'completed' && k.metrics_json)
+    .reduce((sum, k) => sum + detectAnomalies(k.metrics_json).length, 0);
+
+  // Calcola serie trend per ogni KPI sui 12 mesi rolling
+  const kpiSeries = useMemo(() => {
+    return KPI_RULES.map(rule => {
+      const isPerc = !['NUMERI', 'ISPEZIONI'].includes(rule.settore);
+      const data   = timeHorizon.map(t => {
+        const rec = kpiRecords.find(k =>
+          String(k.facility_id) === String(facility.id) &&
+          Number(k.year)  === t.yearNum &&
+          Number(k.month) === t.monthNum &&
+          k.status === 'completed'
+        );
+        const val = rec?.metrics_json
+          ? computeKpiValue(rule, rec.metrics_json, facility)
+          : null;
+        return { name: t.label, value: val };
+      });
+      const hasData = data.some(d => d.value !== null);
+      return { rule, data, isPerc, hasData };
+    });
+  }, [kpiRecords, facility, timeHorizon]);
+
+  // Raggruppa per settore
+  const bySector = useMemo(() => {
+    const map = {};
+    kpiSeries.forEach(s => {
+      if (!map[s.rule.settore]) map[s.rule.settore] = [];
+      map[s.rule.settore].push(s);
+    });
+    return map;
+  }, [kpiSeries]);
+
+  const sectors = [...new Set(KPI_RULES.map(r => r.settore))];
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Header con riepilogo */}
+      <div className="flex justify-between items-start flex-wrap gap-3">
         <div>
           <h2 className="font-black text-slate-800 text-lg">KPI Mensili {year}</h2>
-          <p className="text-sm text-slate-400 mt-0.5">Inserisci i dati per ogni mese completato</p>
+          <p className="text-sm text-slate-400 mt-0.5">
+            {completedMonths} consolidati · {draftMonths} in bozza · {missingMonths} mancanti
+            {totalAnomalies > 0 && (
+              <span className="ml-2 text-red-600 font-bold">
+                · {totalAnomalies} anomali{totalAnomalies === 1 ? 'a' : 'e'}
+              </span>
+            )}
+          </p>
         </div>
         <button
           onClick={onOpenManager}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors shadow"
         >
-          <Activity size={15} /> Gestisci KPI
+          <Activity size={15} /> Inserimento KPI
         </button>
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-        {months.map((m, i) => {
-          const monthNum  = i + 1;
-          const isFuture  = isCurrentYear && monthNum >= currentMonth;
-          const record    = facilityKpis.find(k => Number(k.month) === monthNum);
-          const isDone    = record?.status === 'completed';
-          const isDraft   = record?.status === 'draft';
+      {totalAnomalies > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-red-600 shrink-0" />
+          <p className="text-sm font-bold text-red-700">
+            {totalAnomalies} anomali{totalAnomalies === 1 ? 'a logica rilevata' : 'e logiche rilevate'} nei dati inseriti.
+            Aprire "Inserimento KPI" per i dettagli.
+          </p>
+        </div>
+      )}
 
-          return (
-            <button
-              key={m}
-              onClick={!isFuture ? onOpenManager : undefined}
-              disabled={isFuture}
-              className={`rounded-xl p-3 border text-center transition-all ${
-                isFuture ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed'
-                : isDone  ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400'
-                : isDraft ? 'bg-amber-50 border-amber-200 hover:border-amber-400'
-                :           'bg-white border-rose-200 hover:border-rose-400 hover:shadow-sm'
-              }`}
-            >
-              <p className="text-xs font-bold text-slate-500 uppercase">{m}</p>
-              <div className="mt-2 flex justify-center">
-                {isFuture  ? <Clock size={16} className="text-slate-300" />
-                : isDone   ? <CheckCircle2 size={16} className="text-emerald-500" />
-                : isDraft  ? <Clock size={16} className="text-amber-500" />
-                :            <AlertTriangle size={16} className="text-rose-500" />}
-              </div>
-              <p className={`text-[10px] font-bold mt-1 ${
-                isFuture ? 'text-slate-300'
-                : isDone  ? 'text-emerald-600'
-                : isDraft ? 'text-amber-600'
-                :           'text-rose-600'
-              }`}>
-                {isFuture ? '—' : isDone ? 'OK' : isDraft ? 'Bozza' : 'Mancante'}
-              </p>
-            </button>
-          );
-        })}
-      </div>
+      {/* KPI per settore */}
+      {sectors.map(sector => {
+        const sectorKpis = bySector[sector] || [];
+        const withData   = sectorKpis.filter(s => s.hasData);
+        if (!withData.length) return null;
+        return (
+          <div key={sector}>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <span className="w-8 h-px bg-slate-200 inline-block" />
+              {sector}
+              <span className="w-8 h-px bg-slate-200 inline-block" />
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {withData.map(({ rule, data, isPerc }) => (
+                <KpiCard key={rule.kpi_target} rule={rule} data={data} isPerc={isPerc} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {kpiSeries.every(s => !s.hasData) && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+          <BarChart3 size={40} className="mx-auto text-slate-300 mb-4" />
+          <p className="text-slate-500 font-medium">Nessun dato KPI inserito per il {year}.</p>
+          <button onClick={onOpenManager} className="mt-4 text-indigo-600 font-bold text-sm hover:underline">
+            Apri inserimento KPI →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+
+// Card singolo KPI con grafico appropriato
+function KpiCard({ rule, data, isPerc }) {
+  const hasTarget  = rule.target_verde !== null;
+  const useBar     = ['NUMERI', 'ISPEZIONI'].includes(rule.settore);
+  const multiplier = isPerc ? 100 : 1;
+  const unit       = isPerc ? '%' : '';
+
+  // Valore ultimo mese disponibile
+  const lastVal = [...data].reverse().find(d => d.value !== null);
+
+  // Colore semaforo per valore corrente
+  const getColor = (val) => {
+    if (val === null || !hasTarget) return '#6366f1';
+    const v = isPerc ? val / 100 : val;
+    if (rule.direzione === 'MAX') {
+      if (v >= rule.target_verde) return '#10b981';
+      if (v <= rule.target_rosso) return '#ef4444';
+      return '#f59e0b';
+    }
+    if (v <= rule.target_verde) return '#10b981';
+    if (v >= rule.target_rosso) return '#ef4444';
+    return '#f59e0b';
+  };
+
+  const currentColor = lastVal ? getColor(lastVal.value) : '#94a3b8';
+  const tv = hasTarget ? rule.target_verde * multiplier : null;
+  const tr = hasTarget ? rule.target_rosso * multiplier : null;
+
+  const chartData = data.map(d => ({
+    name:  d.name,
+    value: d.value !== null ? Math.round(d.value * (isPerc ? 10 : 10)) / 10 : null,
+  }));
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-4 hover:shadow-sm transition-shadow">
+      {/* Header card */}
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex-1 pr-2">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wide leading-tight">
+            {rule.settore}
+          </p>
+          <p className="text-xs font-black text-slate-700 leading-tight mt-0.5" title={rule.indicatore}>
+            {rule.kpi_target}
+          </p>
+        </div>
+        {lastVal && (
+          <div className="shrink-0 text-right">
+            <p className="text-lg font-black" style={{ color: currentColor }}>
+              {lastVal.value}{unit}
+            </p>
+            <p className="text-[9px] text-slate-400">ultimo</p>
+          </div>
+        )}
+      </div>
+
+      {/* Grafico */}
+      <ResponsiveContainer width="100%" height={80}>
+        {useBar ? (
+          <BarChart data={chartData} margin={{ top: 2, right: 2, left: -20, bottom: 0 }}>
+            <XAxis dataKey="name" hide />
+            <YAxis hide />
+            <Tooltip
+              formatter={v => v !== null ? [`${v}${unit}`, rule.kpi_target] : ['—', rule.kpi_target]}
+              contentStyle={{ fontSize: '11px', borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+            />
+            <Bar dataKey="value" radius={[2,2,0,0]} maxBarSize={20}>
+              {chartData.map((entry, i) => (
+                <Cell key={i} fill={entry.value !== null ? getColor(entry.value) : '#e2e8f0'} />
+              ))}
+            </Bar>
+          </BarChart>
+        ) : (
+          <LineChart data={chartData} margin={{ top: 2, right: 2, left: -20, bottom: 0 }}>
+            <XAxis dataKey="name" hide />
+            <YAxis hide domain={['auto', 'auto']} />
+            <Tooltip
+              formatter={v => v !== null ? [`${v}${unit}`, rule.kpi_target] : ['—', rule.kpi_target]}
+              contentStyle={{ fontSize: '11px', borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+            />
+            {tv !== null && (
+              <ReferenceLine y={tv} stroke="#10b981" strokeDasharray="3 3" strokeWidth={1} />
+            )}
+            {tr !== null && (
+              <ReferenceLine y={tr} stroke="#ef4444" strokeDasharray="3 3" strokeWidth={1} />
+            )}
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke={currentColor}
+              strokeWidth={2}
+              dot={{ r: 2, fill: currentColor, strokeWidth: 0 }}
+              activeDot={{ r: 4 }}
+              connectNulls
+            />
+          </LineChart>
+        )}
+      </ResponsiveContainer>
+
+      {/* Target legenda */}
+      {hasTarget && (
+        <div className="flex items-center gap-3 mt-2 pt-2 border-t border-slate-50">
+          <span className="text-[9px] text-emerald-600 font-bold">▲ {rule.target_verde * multiplier}{unit}</span>
+          <span className="text-[9px] text-red-500 font-bold">▼ {rule.target_rosso * multiplier}{unit}</span>
+          <span className="text-[9px] text-slate-400 ml-auto">{rule.direzione}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function SurveysTab({ facility, surveys, onDataClick }) {
   const clientSurveys   = surveys.filter(s => s.type === 'client').sort((a,b) => b.calendar_id.localeCompare(a.calendar_id));
@@ -521,7 +719,7 @@ function ReportsTab({ surveys }) {
   );
 }
 
-function NonConformitiesTab({ facility, year, profile, onNew }) {
+function NonConformitiesTab({ facility, year, profile, onNew, onEdit }) {
   const [ncs, setNcs]         = useState([]);
   const [ncLoading, setLoading] = useState(true);
 
@@ -624,6 +822,14 @@ function NonConformitiesTab({ facility, year, profile, onNew }) {
                     <p className="text-xs text-slate-600">{nc.hq_note}</p>
                   </div>
                 )}
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={() => onEdit(nc.id)}
+                    className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    ✏ Modifica / Avanza stato
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -633,9 +839,58 @@ function NonConformitiesTab({ facility, year, profile, onNew }) {
   );
 }
 
-function BenchmarkTab({ facility, year }) {
-  const [benchData, setBenchData] = useState([]);
-  const [loading, setLoading]     = useState(true);
+
+
+// I 15 KPI selezionati con mapping verso la view benchmark
+const BENCH_KPIS = [
+  { target: 'Turn Over',           calcolo: '[OSPITI ASSISTITI NEL MESE] / [POSTI LETTO ATTIVI]',                                                              label: 'Turn Over',       avgKey: 'turn_over_avg',       medKey: 'turn_over_median',      dir: 'MAX', settore: 'ECONOMICO'    },
+  { target: 'Invii PS',            calcolo: '[OSPITI INVIATI AL PS] / [OSPITI ASSISTITI NEL MESE]',                                                            label: 'Invii PS',        avgKey: 'invii_ps_avg',        medKey: 'invii_ps_median',       dir: 'MIN', settore: 'PS'           },
+  { target: 'Val Dolore',          calcolo: '[VALUTAZIONE DEL DOLORE] / [OSPITI ASSISTITI NEL MESE]',                                                          label: 'Val. Dolore',     avgKey: 'val_dolore_avg',      medKey: 'val_dolore_median',     dir: 'MAX', settore: 'SANITARI'     },
+  { target: 'Parametri 15gg',      calcolo: '[RILEVAZIONE PARAMETRI QUINDICINALE] / [OSPITI ASSISTITI NEL MESE]',                                              label: 'Parametri 15gg',  avgKey: 'parametri_avg',       medKey: 'parametri_median',      dir: 'MAX', settore: 'SANITARI'     },
+  { target: 'Ospiti con Lesioni',  calcolo: '[NUMERO OSPITI CON LESIONI DA PRESSIONE IN TRATTAMENTO] / [OSPITI ASSISTITI NEL MESE]',                           label: 'Ospiti Lesioni',  avgKey: 'lesioni_ospiti_avg',  medKey: 'lesioni_ospiti_median', dir: 'MIN', settore: 'LESIONI'      },
+  { target: 'Lesioni > III Stadio',calcolo: '[NUMERO LESIONI DA PRESSIONE SUPERIORI AL III STADIO] / [OSPITI ASSISTITI NEL MESE]',                             label: 'Lesioni >III',    avgKey: 'lesioni_iii_avg',     medKey: 'lesioni_iii_median',    dir: 'MIN', settore: 'LESIONI'      },
+  { target: 'Ospiti Caduti',       calcolo: '[OSPITI CADUTI] / [OSPITI ASSISTITI NEL MESE]',                                                                   label: 'Ospiti Caduti',   avgKey: 'caduti_avg',          medKey: null,                    dir: 'MIN', settore: 'CADUTE'       },
+  { target: 'Cadute Totali',       calcolo: '[CADUTE TOTALI] / [OSPITI ASSISTITI NEL MESE]',                                                                   label: 'Cadute Totali',   avgKey: 'cadute_avg',          medKey: null,                    dir: 'MIN', settore: 'CADUTE'       },
+  { target: 'Cadute Gravi',        calcolo: '[CADUTE GRAVI] / [OSPITI ASSISTITI NEL MESE]',                                                                    label: 'Cadute Gravi',    avgKey: 'cadute_gravi_avg',    medKey: null,                    dir: 'MIN', settore: 'CADUTE'       },
+  { target: 'Contenzioni',         calcolo: '[NUMERO OSPITI CON ALMENO UNA CONTENZIONE PRESCRITTA] / [OSPITI ASSISTITI NEL MESE]',                             label: 'Contenzioni',     avgKey: 'contenzioni_avg',     medKey: 'contenzioni_median',    dir: 'MIN', settore: 'CONTENZIONI'  },
+  { target: 'Cont. solo Spondine', calcolo: '[NUMERO OSPITI CON SOLO SPONDINE A LETTO] / [OSPITI ASSISTITI NEL MESE]',                                         label: 'Spondine',        avgKey: 'spondine_avg',        medKey: 'spondine_median',       dir: 'MIN', settore: 'CONTENZIONI'  },
+  { target: 'PI PAI 30gg',         calcolo: '[OSPITI CON PI PAI REDATTO ENTRO 30 GG DALL INGRESSO] / [OSPITI ASSISTITI NEL MESE]',                             label: 'PI PAI 30gg',     avgKey: 'pipai_30_avg',        medKey: null,                    dir: 'MAX', settore: 'COMPLIANCE'   },
+  { target: 'PI PAI 180gg',        calcolo: '[OSPITI CON PI PAI AGGIORNATO ENTRO 180 GG] / [OSPITI ASSISTITI NEL MESE]',                                       label: 'PI PAI 180gg',    avgKey: 'pipai_180_avg',       medKey: null,                    dir: 'MAX', settore: 'COMPLIANCE'   },
+  { target: 'Form. Sicurezza',     calcolo: '[NUMERO DIPENDENTI CON FORMAZIONE SICUREZZA VALIDA] / [NUMERO TOTALE DIPENDENTI SOGGETTI A FORMAZIONE SICUREZZA]', label: 'Form. Sicurezza', avgKey: 'form_sic_avg',        medKey: null,                    dir: 'MAX', settore: 'COMPLIANCE'   },
+  { target: 'Form. HACCP',         calcolo: '[NUMERO DIPENDENTI CON FORMAZIONE HACCP VALIDA] / [NUMERO TOTALE DIPENDENTI SOGGETTI A FORMAZIONE HACCP]',         label: 'Form. HACCP',     avgKey: 'form_haccp_avg',      medKey: null,                    dir: 'MAX', settore: 'COMPLIANCE'   },
+];
+
+const MONTH_NAMES = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+function getColor(value, rule, isPerc) {
+  if (value === null) return '#94a3b8';
+  const v = isPerc ? value / 100 : value;
+  const tv = rule?.target_verde;
+  const tr = rule?.target_rosso;
+  if (tv === null || tr === null || !rule?.direzione) return '#6366f1';
+  if (rule.direzione === 'MAX') {
+    if (v >= tv) return '#10b981';
+    if (v <= tr) return '#ef4444';
+    return '#f59e0b';
+  }
+  if (v <= tv) return '#10b981';
+  if (v >= tr) return '#ef4444';
+  return '#f59e0b';
+}
+
+function fmt(v) {
+  if (v === null || v === undefined) return '—';
+  return (v * 100).toFixed(1) + '%';
+}
+
+export function BenchmarkTab({ facility, kpiRecords, year }) {
+  const [benchData, setBenchData]     = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const m = new Date().getMonth(); // mese corrente 0-based
+    return m === 0 ? 12 : m;        // mese precedente
+  });
+  const [selectedKpi, setSelectedKpi] = useState(BENCH_KPIS[0].target);
 
   useEffect(() => {
     supabase
@@ -648,211 +903,269 @@ function BenchmarkTab({ facility, year }) {
       });
   }, [year]);
 
-  // Filtra solo il proprio tipo UDO
-  const relevant = benchData.filter(b => b.udo_name === facility.udo_name);
+  const timeHorizon = useMemo(() => getTimeHorizon(year), [year]);
 
-  const kpiBenchmark = [
-    { label: 'Turn Over',        key: 'turn_over',    avg: 'turn_over_avg',  median: 'turn_over_median',  min: 'turn_over_min',  max: 'turn_over_max',  perc: true },
-    { label: 'Invii PS',         key: 'invii_ps',     avg: 'invii_ps_avg',   median: 'invii_ps_median',   min: null, max: null,  perc: true },
-    { label: 'Val. Dolore',      key: 'val_dolore',   avg: 'val_dolore_avg', median: 'val_dolore_median', min: null, max: null,  perc: true },
-    { label: 'Parametri 15gg',   key: 'parametri',    avg: 'parametri_avg',  median: 'parametri_median',  min: null, max: null,  perc: true },
-    { label: 'Form. Sicurezza',  key: 'form_sic',     avg: 'form_sic_avg',   median: null,                min: null, max: null,  perc: true },
-    { label: 'Form. HACCP',      key: 'form_haccp',   avg: 'form_haccp_avg', median: null,                min: null, max: null,  perc: true },
-  ];
+  // Benchmark del mese selezionato per il proprio UDO
+  const monthBench = useMemo(() =>
+    benchData.find(b => b.udo_name === facility.udo_name && Number(b.month) === selectedMonth),
+    [benchData, facility.udo_name, selectedMonth]
+  );
 
-  const fmt = (v, perc) => v == null ? '—' : perc ? `${(v * 100).toFixed(1)}%` : v.toFixed(2);
+  // Record KPI della struttura per il mese selezionato
+  const myRecord = useMemo(() =>
+    kpiRecords.find(k =>
+      String(k.facility_id) === String(facility.id) &&
+      Number(k.year) === year &&
+      Number(k.month) === selectedMonth &&
+      k.status === 'completed'
+    ),
+    [kpiRecords, facility.id, year, selectedMonth]
+  );
+
+  // Dati overview mese: struttura vs media UDO per tutti i 15 KPI
+  const overviewData = useMemo(() => {
+    return BENCH_KPIS.map(kpi => {
+      const rule = KPI_RULES.find(r => r.kpi_target === kpi.target);
+      const isPerc = !['NUMERI', 'ISPEZIONI'].includes(kpi.settore);
+
+      let myValue = null;
+      if (myRecord?.metrics_json) {
+        const raw = computeKpiValue({ ...rule, calcolo: kpi.calcolo }, myRecord.metrics_json, facility);
+        myValue = raw;
+      }
+
+      const udoAvg = monthBench && kpi.avgKey ? monthBench[kpi.avgKey] : null;
+      const udoAvgPerc = udoAvg !== null && udoAvg !== undefined ? Math.round(udoAvg * 1000) / 10 : null;
+
+      return {
+        label:    kpi.label,
+        target:   kpi.target,
+        myValue,
+        udoAvg:   udoAvgPerc,
+        color:    getColor(myValue, rule, isPerc),
+        rule,
+        isPerc,
+        dir:      kpi.dir,
+      };
+    });
+  }, [myRecord, monthBench, facility]);
+
+  // Dati trend: struttura + media UDO per KPI selezionato nei 12 mesi
+  const trendData = useMemo(() => {
+    const kpi  = BENCH_KPIS.find(k => k.target === selectedKpi);
+    const rule = KPI_RULES.find(r => r.kpi_target === selectedKpi);
+    if (!kpi || !rule) return [];
+
+    return timeHorizon.map(t => {
+      const rec = kpiRecords.find(k =>
+        String(k.facility_id) === String(facility.id) &&
+        Number(k.year) === t.yearNum &&
+        Number(k.month) === t.monthNum &&
+        k.status === 'completed'
+      );
+
+      let myVal = null;
+      if (rec?.metrics_json) {
+        myVal = computeKpiValue({ ...rule, calcolo: kpi.calcolo }, rec.metrics_json, facility);
+      }
+
+      const benchMonth = benchData.find(b =>
+        b.udo_name === facility.udo_name &&
+        Number(b.year) === t.yearNum &&
+        Number(b.month) === t.monthNum
+      );
+      const udoVal = benchMonth && kpi.avgKey
+        ? Math.round((benchMonth[kpi.avgKey] || 0) * 1000) / 10
+        : null;
+
+      return { name: t.label, struttura: myVal, udo_media: udoVal };
+    });
+  }, [selectedKpi, timeHorizon, kpiRecords, benchData, facility]);
+
+  const activeKpi = BENCH_KPIS.find(k => k.target === selectedKpi);
+  const activeRule = KPI_RULES.find(r => r.kpi_target === selectedKpi);
+
+  if (loading) {
+    return <div className="text-center py-12 text-slate-400 animate-pulse font-bold">Caricamento benchmark...</div>;
+  }
+
+  const hasEnoughData = !!monthBench;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-black text-slate-800 text-lg">Benchmark {year}</h2>
-        <p className="text-sm text-slate-400 mt-0.5">
-          Confronto anonimo con strutture dello stesso tipo ({facility.udo_name || '—'}).
-          Visibile solo con almeno 3 strutture comparabili.
-        </p>
-      </div>
 
-      {loading ? (
-        <div className="text-center py-12 text-slate-400 animate-pulse font-bold">Caricamento...</div>
-      ) : relevant.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-          <TrendingUp size={40} className="mx-auto text-slate-300 mb-4" />
-          <p className="text-slate-500 font-medium">Dati benchmark non disponibili.</p>
-          <p className="text-slate-400 text-sm mt-1">
-            Servono almeno 3 strutture dello stesso tipo con dati inseriti.
+      {/* Header */}
+      <div className="flex justify-between items-start flex-wrap gap-3">
+        <div>
+          <h2 className="font-black text-slate-800 text-lg">Benchmark {year}</h2>
+          <p className="text-sm text-slate-400 mt-0.5">
+            {facility.udo_name} — confronto anonimo con strutture dello stesso tipo
+            {!hasEnoughData && <span className="ml-2 text-amber-600 font-bold">(servono almeno 3 strutture con dati)</span>}
           </p>
         </div>
-      ) : (
-        relevant.map(b => (
-          <div key={`${b.year}-${b.month}`} className="space-y-3">
-            <h3 className="font-black text-slate-600 text-sm uppercase tracking-widest">
-              {['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][b.month - 1]} {b.year}
-              <span className="ml-2 text-xs font-medium text-slate-400 normal-case">
-                · {b.n_strutture} strutture
-              </span>
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {kpiBenchmark.map(k => (
-                <div key={k.label} className="bg-white rounded-2xl border border-slate-200 p-4">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{k.label}</p>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    {k.min && (
-                      <div>
-                        <p className="text-[10px] text-slate-400">Min</p>
-                        <p className="text-sm font-black text-red-600">{fmt(b[k.min], k.perc)}</p>
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-[10px] text-slate-400">Media</p>
-                      <p className="text-sm font-black text-slate-700">{fmt(b[k.avg], k.perc)}</p>
-                    </div>
-                    {k.median && (
-                      <div>
-                        <p className="text-[10px] text-slate-400">Mediana</p>
-                        <p className="text-sm font-black text-amber-600">{fmt(b[k.median], k.perc)}</p>
-                      </div>
-                    )}
-                    {k.max && (
-                      <div>
-                        <p className="text-[10px] text-slate-400">Max</p>
-                        <p className="text-sm font-black text-emerald-600">{fmt(b[k.max], k.perc)}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
-
-// ── Modal Non Conformità inline ───────────────────────────────
-const INPUT_CLS = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:border-indigo-400 transition-all';
-
-function NcFormModal({ facility, year, profile, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    category: '', severity: 'media', title: '', description: '', source: '', action_plan: '', due_date: '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [err, setErr]       = useState({});
-
-  const set = f => e => setForm(p => ({ ...p, [f]: e.target.value }));
-
-  const handleSave = async () => {
-    const e = {};
-    if (!form.category)       e.category = 'Obbligatorio';
-    if (!form.title.trim())   e.title    = 'Obbligatorio';
-    if (Object.keys(e).length) { setErr(e); return; }
-
-    setSaving(true);
-    const { error } = await supabase.from('non_conformities').insert([{
-      facility_id:    facility.id,
-      company_id:     facility.company_id,
-      year,
-      opened_by:      profile?.id,
-      opened_by_role: profile?.role || 'director',
-      category:       form.category,
-      severity:       form.severity,
-      title:          form.title.trim(),
-      description:    form.description.trim() || null,
-      source:         form.source || null,
-      action_plan:    form.action_plan.trim() || null,
-      due_date:       form.due_date || null,
-      status:         'aperta',
-    }]);
-    setSaving(false);
-    if (error) { setErr({ _g: error.message }); return; }
-    onSaved();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="bg-red-100 p-2 rounded-xl">
-              <AlertTriangle size={18} className="text-red-600" />
-            </div>
-            <div>
-              <h2 className="font-black text-slate-800">Nuova Non Conformità</h2>
-              <p className="text-xs text-slate-400">{facility.name}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl">
-            <X size={18} className="text-slate-500" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4 overflow-y-auto flex-1">
-          {err._g && <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{err._g}</div>}
-
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Severità</p>
-            <div className="grid grid-cols-4 gap-2">
-              {['bassa','media','alta','critica'].map(s => (
-                <button key={s} type="button" onClick={() => setForm(p => ({ ...p, severity: s }))}
-                  className={`py-2 rounded-xl border-2 text-xs font-black uppercase transition-all ${
-                    form.severity === s ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-400'
-                  }`}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria *</label>
-            <select value={form.category} onChange={set('category')} className={INPUT_CLS}>
-              <option value="">Seleziona...</option>
-              {NC_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            {err.category && <p className="text-xs text-red-600 mt-1">{err.category}</p>}
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Titolo *</label>
-            <input type="text" value={form.title} onChange={set('title')} className={INPUT_CLS} placeholder="Descrizione breve del problema" />
-            {err.title && <p className="text-xs text-red-600 mt-1">{err.title}</p>}
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Descrizione</label>
-            <textarea rows={3} value={form.description} onChange={set('description')} className={INPUT_CLS + ' resize-none'} placeholder="Dettagli..." />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Fonte</label>
-            <select value={form.source} onChange={set('source')} className={INPUT_CLS}>
-              <option value="">Seleziona...</option>
-              {NC_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Piano d'azione</label>
-            <textarea rows={2} value={form.action_plan} onChange={set('action_plan')} className={INPUT_CLS + ' resize-none'} placeholder="Azioni previste..." />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Scadenza</label>
-            <input type="date" value={form.due_date} onChange={set('due_date')} min={new Date().toISOString().split('T')[0]} className={INPUT_CLS} />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 px-6 py-4 border-t bg-slate-50 shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors">
-            Annulla
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold disabled:opacity-60 shadow transition-colors">
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {saving ? 'Salvataggio...' : 'Registra NC'}
-          </button>
+        {/* Selettore mese */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Mese</span>
+          <select
+            value={selectedMonth}
+            onChange={e => setSelectedMonth(Number(e.target.value))}
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-indigo-400"
+          >
+            {MONTH_NAMES.map((m, i) => (
+              <option key={i} value={i + 1}>{m}</option>
+            ))}
+          </select>
         </div>
       </div>
+
+      {/* OVERVIEW: barre struttura vs media UDO */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 className="font-black text-slate-700 mb-1">
+          Struttura vs Media UDO — {MONTH_NAMES[selectedMonth - 1]} {year}
+        </h3>
+        <p className="text-xs text-slate-400 mb-4">
+          {myRecord ? 'Dati inseriti per questo mese' : 'Nessun dato inserito per questo mese — solo media UDO visibile'}
+        </p>
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+          {overviewData.map(d => (
+            <div
+              key={d.target}
+              onClick={() => setSelectedKpi(d.target)}
+              className={`rounded-xl p-3 border cursor-pointer transition-all hover:shadow-md ${
+                selectedKpi === d.target ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 truncate" title={d.label}>
+                {d.label}
+              </p>
+              {/* Barra struttura */}
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                <span className="text-sm font-black" style={{ color: d.color }}>
+                  {d.myValue !== null ? `${d.myValue}%` : '—'}
+                </span>
+              </div>
+              {/* Media UDO */}
+              {d.udoAvg !== null && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                  <span className="text-xs font-bold text-slate-400">{d.udoAvg}%</span>
+                </div>
+              )}
+              <p className="text-[9px] text-slate-300 mt-1 uppercase">
+                {d.dir === 'MAX' ? '↑ max' : '↓ min'}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <div className="w-3 h-1 rounded bg-indigo-400" /> Struttura
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <div className="w-3 h-1 rounded bg-slate-400" /> Media UDO
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+            <div className="w-2 h-2 rounded-full bg-emerald-500" /> In target
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-amber-600">
+            <div className="w-2 h-2 rounded-full bg-amber-400" /> Allerta
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-red-600">
+            <div className="w-2 h-2 rounded-full bg-red-500" /> Critico
+          </div>
+        </div>
+      </div>
+
+      {/* TREND: KPI selezionato nei 12 mesi */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
+          <div>
+            <h3 className="font-black text-slate-700">
+              Trend 12 mesi — {activeKpi?.label}
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Clicca un KPI sopra per cambiare indicatore
+            </p>
+          </div>
+          <select
+            value={selectedKpi}
+            onChange={e => setSelectedKpi(e.target.value)}
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-indigo-400"
+          >
+            {BENCH_KPIS.map(k => (
+              <option key={k.target} value={k.target}>{k.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Target lines */}
+        {activeRule?.target_verde && (
+          <div className="flex items-center gap-4 mb-3 text-xs">
+            <span className="flex items-center gap-1.5 text-emerald-600 font-bold">
+              <div className="w-4 h-0.5 bg-emerald-500" />
+              Target verde: {(activeRule.target_verde * 100).toFixed(0)}%
+            </span>
+            <span className="flex items-center gap-1.5 text-red-600 font-bold">
+              <div className="w-4 h-0.5 bg-red-500 border-dashed" style={{borderTop: '2px dashed #ef4444', height: 0}} />
+              Target rosso: {(activeRule.target_rosso * 100).toFixed(0)}%
+            </span>
+          </div>
+        )}
+
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={trendData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 'bold', fill: '#64748b' }} />
+            <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={v => `${v}%`} />
+            <Tooltip
+              formatter={(v, name) => [`${v}%`, name === 'struttura' ? 'Struttura' : 'Media UDO']}
+              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '12px' }}
+            />
+            <Legend
+              formatter={v => v === 'struttura' ? 'Struttura' : 'Media UDO'}
+              wrapperStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+            />
+            {activeRule?.target_verde && (
+              <ReferenceLine
+                y={activeRule.target_verde * 100}
+                stroke="#10b981"
+                strokeDasharray="5 5"
+                strokeWidth={1.5}
+              />
+            )}
+            {activeRule?.target_rosso && (
+              <ReferenceLine
+                y={activeRule.target_rosso * 100}
+                stroke="#ef4444"
+                strokeDasharray="5 5"
+                strokeWidth={1.5}
+              />
+            )}
+            <Line
+              type="monotone"
+              dataKey="struttura"
+              stroke="#4f46e5"
+              strokeWidth={2.5}
+              dot={{ r: 4, fill: '#4f46e5', strokeWidth: 0 }}
+              activeDot={{ r: 6 }}
+              connectNulls
+            />
+            <Line
+              type="monotone"
+              dataKey="udo_media"
+              stroke="#94a3b8"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+              connectNulls
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
     </div>
   );
 }
+
+

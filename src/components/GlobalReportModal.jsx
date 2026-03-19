@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { X, FileSignature, BrainCircuit, FileDown, Layers, Building2 } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { buildPromptGlobaleBoard } from '../config/aiPrompts';
 import html2pdf from 'html2pdf.js';
 
 const metricNames = {
@@ -101,25 +102,15 @@ export default function GlobalReportModal({ isOpen, onClose, facilities, udos, s
 
       const dataPayload = aggregatedData.chartData.map(d => `${d.subject}: ${d.score}/100`).join('\n');
 
-      const prompt = `
-        Sei il Direttore Generale Strategico. Scrivi una Relazione Esecutiva Aggregata.
-        Perimetro di analisi: ${scopeName}. Target: Questionari ${typeName}.
-        Strutture incluse: ${aggregatedData.facilitiesIncluded}. Risposte totali elaborate: ${aggregatedData.totalResponses}.
-        Punteggio Globale Medio: ${aggregatedData.averageScore}/100.
-
-        DATI METRICHE AGGREGATE:
-        ${dataPayload}
-
-        REGOLE TASSATIVE:
-        - Tono esecutivo, asciutto, orientato al Board Direzionale.
-        - Inizia DIRETTAMENTE con "1. SINTESI DIREZIONALE AGGREGATA".
-        - NON ripetere i numeri che ti ho appena fornito nell'introduzione. Concentrati sui trend.
-        - Usa ESATTAMENTE questi titoli in maiuscolo:
-        1. SINTESI DIREZIONALE AGGREGATA (max 4 righe sull'andamento generale del perimetro analizzato)
-        2. AREE DI ECCELLENZA CONSOLIDATE (max 3 bullet point)
-        3. CRITICITÀ SISTEMICHE DA GESTIRE (max 3 bullet point su pattern negativi emersi a livello aggregato)
-        4. DIRETTIVE E STRATEGIE DI INTERVENTO (max 3 azioni operative da calare sulle strutture)
-      `;
+      // Prompt centralizzato — modifica in src/config/aiPrompts.js
+      const prompt = buildPromptGlobaleBoard({
+        scopeName,
+        typeName,
+        facilitiesIncluded: aggregatedData.facilitiesIncluded,
+        totalResponses:     aggregatedData.totalResponses,
+        averageScore:       aggregatedData.averageScore,
+        dataPayload,
+      });
 
       const result = await model.generateContent(prompt);
       setAiReport(result.response.text());

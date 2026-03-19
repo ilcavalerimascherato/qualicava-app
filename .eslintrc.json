@@ -1,14 +1,8 @@
-ntrc · JSON
-Copia
-
 {
-  "extends": [
-    "react-app"
-  ],
+  "extends": ["react-app"],
   "rules": {
     "curly": "off",
     "no-trailing-spaces": "off",
-    "quotes": "off",
-    "no-unused-vars": "warn"
+    "quotes": "off"
   }
 }

@@ -6,7 +6,7 @@ import { createContext, useContext, useReducer, useCallback } from 'react';
 const MODAL_IDS = [
   'udo', 'facility', 'questionnaire', 'dataImport', 'analytics',
   'kpiManager', 'kpiDashboard', 'kpiCharts', 'kpiHub', 'kpiLaser',
-  'kpiXray', 'globalReport', 'userManager', 'nonConformity'
+  'kpiXray', 'globalReport', 'userManager', 'nonConformity', 'qualityDashboard'
 ];
 
 const initialState = Object.fromEntries(MODAL_IDS.map(id => [id, false]));

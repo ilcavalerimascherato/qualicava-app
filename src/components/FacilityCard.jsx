@@ -5,7 +5,7 @@ import { Settings, Database, BarChart3, Activity, Archive, ArchiveRestore, Check
 const ICON_STYLES = {
   empty:     'bg-slate-50 text-slate-400 hover:bg-slate-200 hover:text-slate-600 border-slate-200',
   pending:   'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border-indigo-200 shadow-sm',
-  completed: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white border-emerald-200 shadow-sm',
+  completed: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 border-emerald-200 shadow-sm',
 };
 
 const STATUS_LABELS = {
@@ -92,15 +92,14 @@ const FacilityCard = memo(function FacilityCard({
           {!isUltraCompact && f.address && (
             <p className="truncate">{f.address}</p>
           )}
-          {/* Direttore: visibile solo in modalità larga */}
-          {!isCompact && f.director && (
-            <p className="truncate text-slate-400">Dir: {f.director}</p>
-          )}
           {/* Referente qualità: visibile solo in modalità larga */}
           {!isCompact && f.referent && (
             <p className="truncate text-slate-400">Ref: {f.referent}</p>
           )}
-          
+          {/* Direttore: visibile solo in modalità larga */}
+          {!isCompact && f.director && (
+            <p className="truncate text-slate-400">Dir: {f.director}</p>
+          )}
         </div>
       </div>
 
@@ -111,7 +110,7 @@ const FacilityCard = memo(function FacilityCard({
           onClick={() => onKpiClick(f)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border transition-all group/kpi shadow-sm ${
             f.isKpiGreen
-              ? 'bg-emerald-500 border-emerald-600 text-white hover:bg-emerald-600'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
               : 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white'
           }`}
           title={f.isKpiGreen ? 'KPI in regola' : 'Gestione KPI mensili'}

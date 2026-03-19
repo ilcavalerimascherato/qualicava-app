@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 import {
-  Calendar, Settings, LogOut,
+  Calendar, Settings, LogOut, ShieldCheck,
   Search, Grid2X2, Grid3X3, LayoutGrid, FileSignature, BarChart2, PawPrint
 } from 'lucide-react';
 
@@ -25,7 +25,8 @@ import KpiDashboardModal  from './components/KpiDashboardModal';
 import KpiChartsModal     from './components/KpiChartsModal';
 import KpiHubModal        from './components/KpiHubModal';
 import KpiLaserModal      from './components/KpiLaserModal';
-import KpiXrayModal       from './components/KpiXrayModal';
+import KpiXrayModal           from './components/KpiXrayModal';
+import QualityDashboardModal from './components/QualityDashboardModal';
 
 export default function App() {
   const { session, loading: authLoading, isAdmin, signOut } = useAuth();
@@ -34,7 +35,7 @@ export default function App() {
 
   const [year, setYear]                         = useState(new Date().getFullYear());
   const [showSuspended, setShowSuspended]       = useState(false);
-  const [gridCols, setGridCols]                 = useState('lg:grid-cols-8');
+  const [gridCols, setGridCols]                 = useState('lg:grid-cols-4');
   const [filterUdo, setFilterUdo]               = useState('all');
   const [filterStatus, setFilterStatus]         = useState('all');
   const [searchQuery, setSearchQuery]           = useState('');
@@ -162,27 +163,7 @@ export default function App() {
             </h1>
           </div>
 
-          <div className="hidden lg:flex items-center justify-center gap-8 w-1/3 border-x border-slate-100 px-4">
-            {[
-              { label: 'Report Clienti', pct: processedData.clientPct },
-              { label: 'Report Staff',   pct: processedData.staffPct  },
-            ].map(({ label, pct }) => (
-              <div key={label} className="flex flex-col items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                  {label}
-                </span>
-                <div className="flex items-center gap-2">
-                  <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-500 transition-all duration-500"
-                      style={{ width: `${pct || 0}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-black text-slate-700">{pct || 0}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <div className="w-1/3" />
 
           <div className="flex items-center justify-end gap-3 w-1/3">
             <label className="flex items-center gap-2 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer shadow-sm">
@@ -200,6 +181,13 @@ export default function App() {
               className="bg-slate-800 text-white px-5 py-3 rounded-xl text-xs font-black uppercase shadow-md hover:bg-slate-700 transition-colors flex items-center gap-2"
             >
               <FileSignature size={16} /> Report
+            </button>
+
+            <button
+              onClick={() => open('qualityDashboard')}
+              className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-5 py-3 rounded-xl text-xs font-black uppercase shadow-md hover:bg-emerald-100 transition-colors flex items-center gap-2"
+            >
+              <ShieldCheck size={16} /> Qualità
             </button>
 
             <button
@@ -283,7 +271,25 @@ export default function App() {
             </select>
           </div>
 
-          <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 px-6 py-3 rounded-2xl ml-6 shadow-sm">
+          {/* Progress bar report — ora nella barra filtri, responsive */}
+          <div className="flex items-center gap-4 px-2">
+            {[
+              { label: 'Clienti', pct: processedData.clientPct },
+              { label: 'Staff',   pct: processedData.staffPct  },
+            ].map(({ label, pct }) => (
+              <div key={label} className="flex flex-col items-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${pct || 0}%` }} />
+                  </div>
+                  <span className="text-xs font-black text-slate-700">{pct || 0}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 px-6 py-3 rounded-2xl ml-2 shadow-sm">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-tight text-right">
               Posti Letto<br />Attivi
             </span>
@@ -431,6 +437,15 @@ export default function App() {
         onClose={() => close('kpiXray')}
         facilities={data.facilities}
         kpiRecords={data.kpiRecords}
+        year={Number(year)}
+      />
+      <QualityDashboardModal
+        isOpen={modals.qualityDashboard}
+        onClose={() => close('qualityDashboard')}
+        facilities={data.facilities}
+        udos={data.udos}
+        kpiRecords={data.kpiRecords}
+        surveys={data.surveys}
         year={Number(year)}
       />
     </div>

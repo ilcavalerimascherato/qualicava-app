@@ -3,7 +3,8 @@ import { X, UploadCloud, BrainCircuit, BarChart3, Target, Users, Layers, Activit
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import html2pdf from 'html2pdf.js';
-import { supabase } from '../supabaseClient';
+import { supabase }          from '../supabaseClient';
+import { getPromptAnalytics } from '../config/aiPrompts';
 
 const metricNames = {
   soddisfazione_generale: 'Soddisfazione Globale', info_cura: 'Chiarezza Progetto di Cura', ascolto: "Qualità dell'Ascolto", contatto_struttura: 'Reperibilità Struttura', relazione_equipe: "Relazione con l'Equipe", voto_assistenza: 'Assistenza Personale', voto_alloggio: 'Comfort Alloggio', soddisfazione_pulizia: 'Igiene e Pulizia', voto_animazione: 'Attività Ricreative', cura_bisogni: 'Attenzione ai Bisogni', nps_consiglio: 'Propensione Raccomandazione (NPS)', info_prenotazione: 'Info in Prenotazione', info_ingresso: 'Accoglienza Ingresso', voto_bagno: 'Servizi Igienici', voto_spazio_esterno: 'Spazi Esterni', voto_pulizie: 'Personale Pulizie', voto_ristorazione_qualita: 'Qualità Ristorazione', soddisfazione_tempo: "Tempo Dedicato all'Ospite", appagamento_vita: 'Appagamento Quotidiano', assistenza_diurna: 'Assistenza Diurna', assistenza_notturna: 'Assistenza Notturna', rispetto_dignita: 'Rispetto della Dignità', coinvolgimento_cure: 'Coinvolgimento nelle Cure'
@@ -135,46 +136,13 @@ export default function AnalyticsModal({ isOpen, onClose, facility, type, survey
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const dataPayload = chartData.map(d => `${d.subject}: ${d.score}/100`).join('\n');
 
-      let prompt = '';
-
-      if (target === 'ospiti') {
-        prompt = `
-          Sei il Direttore della struttura "${facility.name}".
-          Scrivi una "Lettera Aperta" agli OSPITI e FAMILIARI sui risultati del questionario (${type === 'client' ? 'Clienti' : 'Operatori'}).
-          DATI:\n${dataPayload}\n
-          
-          REGOLE TASSATIVE:
-          - NESSUN SALUTO INIZIALE TIPO "Gentili ospiti". Inizia subito con i paragrafi.
-          - Lunghezza MASSIMA: 150 parole (molto conciso).
-          - Sii GENERICO sui miglioramenti. NON fare promesse puntuali.
-          - NON ripetere i numeri globali (score, redemption, posti letto).
-          - Usa ESATTAMENTE questi 4 titoli in maiuscolo:
-          1. SINTESI
-          2. I NOSTRI PUNTI DI FORZA
-          3. DOVE VOGLIAMO MIGLIORARE
-          4. IL NOSTRO IMPEGNO
-        `;
-      } else {
-        prompt = `
-          Sei un Auditor Analitico per la struttura "${facility.name}".
-          Scrivi una relazione esecutiva per la DIREZIONE AZIENDALE.
-          DATI METRICHE:\n${dataPayload}\n
-          
-          REGOLE TASSATIVE:
-          - NESSUN paragrafo introduttivo, nessun saluto e nessuna data. Inizia la risposta DIRETTAMENTE con "1. SINTESI".
-          - NON ripetere i dati numerici generali (Score, Redemption, Posti letto) nella sintesi. Usa solo valutazioni sul clima.
-          - Tono: Oggettivo, equilibrato, da osservatore attento. Molto conciso.
-          
-          Usa ESATTAMENTE questa struttura e titoli in maiuscolo:
-          1. SINTESI (Massimo 3 righe di considerazioni esclusive sul clima generale e tendenze)
-          2. PUNTI DI FORZA (Massimo 3 o 4 bullet point chirurgici sulle metriche eccellenti)
-          3. PUNTI DI DEBOLEZZA (Massimo 3 o 4 bullet point chirurgici sulle metriche critiche)
-          4. TEMATICHE DA ATTENZIONARE
-             - Interventi Urgenti: (elenca cosa fare subito)
-             - Interventi Meno Urgenti: (elenca cosa pianificare a medio termine)
-             - Strumenti di Monitoraggio: (suggerisci come misurare i miglioramenti nel tempo)
-        `;
-      }
+      // Prompt centralizzato — modifica in src/config/aiPrompts.js
+      const prompt = getPromptAnalytics({
+        type,
+        target,
+        facilityName: facility.name,
+        dataPayload,
+      });
 
       const result = await model.generateContent(prompt);
       setAiReport(result.response.text());

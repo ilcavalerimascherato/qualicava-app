@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, Save, CheckCircle2, AlertCircle, Clock, Ban, Activity } from 'lucide-react';
-import { supabase } from '../supabaseClient';
+import { supabase }         from '../supabaseClient';
+import { detectAnomalies, maxSeverity } from '../utils/kpiAnomalyEngine';
 
 const MONTHS = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 
@@ -68,8 +69,20 @@ export default function KpiManagerModal({ isOpen, onClose, facility, year, onUpd
     const month = i + 1;
     const record = kpiData.find(d => d.month === month);
 
-    if (record?.status === 'completed') {return { color: 'bg-emerald-500', text: 'Inviato', icon: CheckCircle2, textCol: 'text-emerald-700', bgCol: 'bg-emerald-50', border: 'border-emerald-200' };}
-    if (record?.status === 'draft') {return { color: 'bg-amber-400', text: 'Bozza', icon: Clock, textCol: 'text-amber-700', bgCol: 'bg-amber-50', border: 'border-amber-200' };}
+    if (record?.status === 'completed') {
+      const anomalies = detectAnomalies(record.metrics_json);
+      const sev       = maxSeverity(anomalies);
+      return {
+        color:    sev === 'alta' ? 'bg-red-500' : sev === 'media' ? 'bg-amber-400' : 'bg-emerald-400',
+        text:     sev ? `${anomalies.length} anomali${anomalies.length === 1 ? 'a' : 'e'}` : 'Inviato',
+        icon:     sev ? AlertCircle : CheckCircle2,
+        textCol:  sev === 'alta' ? 'text-red-700' : sev === 'media' ? 'text-amber-700' : 'text-emerald-700',
+        bgCol:    sev === 'alta' ? 'bg-red-50'    : sev === 'media' ? 'bg-amber-50'    : 'bg-emerald-50',
+        border:   sev === 'alta' ? 'border-red-200' : sev === 'media' ? 'border-amber-200' : 'border-emerald-200',
+        anomalies,
+      };
+    }
+    if (record?.status === 'draft') {return { color: 'bg-amber-400', text: 'Bozza', icon: Clock, textCol: 'text-amber-700', bgCol: 'bg-amber-50', border: 'border-amber-200', anomalies: [] };}
 
     // LOGICA TEMPORALE BLINDATA: Il mese è compilabile SOLO se è interamente trascorso.
     const today = new Date();
@@ -154,6 +167,28 @@ export default function KpiManagerModal({ isOpen, onClose, facility, year, onUpd
             </div>
           )}
         </div>
+
+        {/* ANOMALIE — mostrate sotto la lista KPI se presenti */}
+        {activeMonth !== null && (() => {
+          const rec = kpiData.find(d => d.month === activeMonth);
+          const anomalies = rec ? detectAnomalies(rec.metrics_json) : [];
+          if (!anomalies.length) return null;
+          return (
+            <div className="mx-6 mb-4 bg-red-50 border border-red-200 rounded-xl p-4">
+              <p className="text-xs font-black text-red-700 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <AlertCircle size={13} /> {anomalies.length} anomali{anomalies.length === 1 ? 'a' : 'e'} rilevat{anomalies.length === 1 ? 'a' : 'e'}
+              </p>
+              <ul className="space-y-1">
+                {anomalies.map(a => (
+                  <li key={a.id} className={`text-xs font-medium flex items-start gap-2 ${a.severity === 'alta' ? 'text-red-700' : 'text-amber-700'}`}>
+                    <span className="shrink-0 mt-0.5">{a.severity === 'alta' ? '🔴' : '🟡'}</span>
+                    {a.msg}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
 
         {/* FOOTER */}
         {activeMonth !== null && (
