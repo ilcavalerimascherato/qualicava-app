@@ -489,7 +489,6 @@ function OverviewTab({ facility: f, surveys, year }) {
         <div className="divide-y divide-slate-100">
           {ORG_CONFIG.map(({ key, emailKey, label, icon }) => {
             const nome  = editingOrg ? orgForm[key]      : (f[key]      || '');
-            const email = editingOrg ? orgForm[emailKey] : (f[emailKey] || '');
             const isShowingInvito = showInvito === key;
             const userProfile = userProfiles.find(p => p.email === f[emailKey]);
 

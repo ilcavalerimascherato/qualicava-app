@@ -2,7 +2,7 @@
 // Dashboard Qualità HQ — solo admin/superadmin
 // Tab: Mailing List · Non Conformità · Statistiche NC · Export
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Mail, AlertTriangle, BarChart2, Download, CheckCircle2, Search, Bell, Send, AlertCircle, Users, Edit2, Plus, Copy, Eye, EyeOff } from 'lucide-react';
+import { X, Mail, AlertTriangle, BarChart2, Download, CheckCircle2, Search, Bell, Send, AlertCircle, Users, Edit2, Plus, Copy } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 const TABS = [
