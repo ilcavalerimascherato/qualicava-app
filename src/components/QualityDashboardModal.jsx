@@ -19,7 +19,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   X, Mail, AlertTriangle, BarChart2, Download, CheckCircle2,
-  Search, Bell, Send, AlertCircle, Users, Edit2, Plus, Copy
+  Search, Bell, Send, AlertCircle, Users, Edit2, Plus
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -760,8 +760,7 @@ function UtentiTab({ facilities, isSuperAdmin }) {
   const [saving, setSaving]           = useState(false);
   const [inviting, setInviting]       = useState(false);
   const [inviteResult, setInviteResult] = useState(null);
-  const [showSql, setShowSql]         = useState(false);   // eslint-disable-line no-unused-vars
-  const [sqlCmd, setSqlCmd]           = useState('');
+  const [showSql, setShowSql]         = useState(false); // eslint-disable-line no-unused-vars
 
   const loadUtenti = () => {
     setLoading(true);
@@ -828,7 +827,7 @@ function UtentiTab({ facilities, isSuperAdmin }) {
           <h3 className="font-black text-slate-800 text-lg">Gestione Utenti</h3>
           <p className="text-sm text-slate-400 mt-0.5">{utenti.length} utenti registrati</p>
         </div>
-        <button onClick={() => { setShowNewForm(true); setShowSql(false); setSqlCmd(''); }}
+        <button onClick={() => { setShowNewForm(true); setShowSql(false); }}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-black hover:bg-indigo-700 transition-colors shadow">
           <Plus size={15} /> Nuovo utente
         </button>

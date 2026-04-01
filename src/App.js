@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
-  Calendar, Settings, LogOut, ShieldCheck,
+  Settings, LogOut, ShieldCheck,
   Search, Grid2X2, Grid3X3, LayoutGrid, FileSignature, BarChart2, PawPrint
 } from 'lucide-react';
 
@@ -35,7 +35,7 @@ export default function App() {
   const navigate   = useNavigate();
   const invalidate = useInvalidate();
 
-  const [year, setYear]                         = useState(new Date().getFullYear());
+  const [year]                                  = useState(new Date().getFullYear());
   const [showSuspended, setShowSuspended]       = useState(false);
   const [gridCols, setGridCols]                 = useState('lg:grid-cols-4');
   const [filterUdo, setFilterUdo]               = useState('all');

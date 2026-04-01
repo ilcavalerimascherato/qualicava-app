@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Trash2, Loader2, UserPlus, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Save, Trash2, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { supabase }         from '../supabaseClient';
 import { REGIONI_ITALIANE } from '../config/constants';
 
@@ -59,7 +59,7 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
     } else {
       setForm(EMPTY);
     }
-  }, [facility?.id, isOpen]); // dipendenza stabile: solo l'ID, non l'oggetto intero
+  }, [facility?.id, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isOpen) return;

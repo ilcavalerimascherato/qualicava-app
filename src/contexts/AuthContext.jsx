@@ -80,7 +80,7 @@ export function AuthProvider({ children }) {
   const can = useCallback((action) => {
     if (!profile?.role) return false;
     return (PERMISSIONS[profile.role] ?? []).includes(action);
-  }, [profile]);
+  }, [profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = {
     session,
