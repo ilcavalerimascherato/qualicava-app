@@ -760,6 +760,8 @@ function UtentiTab({ facilities, isSuperAdmin }) {
   const [saving, setSaving]           = useState(false);
   const [inviting, setInviting]       = useState(false);
   const [inviteResult, setInviteResult] = useState(null);
+  const [showSql, setShowSql]         = useState(false);   // eslint-disable-line no-unused-vars
+  const [sqlCmd, setSqlCmd]           = useState('');
 
   const loadUtenti = () => {
     setLoading(true);
