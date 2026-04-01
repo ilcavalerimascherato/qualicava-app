@@ -16,7 +16,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceArea
 } from 'recharts';
-import { KPI_RULES }       from '../config/kpiRules';
+import { KPI_RULES, isNumericSettore } from '../config/kpiRules';
 import { computeKpiValue } from '../utils/kpiFormulaEngine';
 import { getTimeHorizon }  from '../utils/kpiTimeHorizon';
 
@@ -44,6 +44,8 @@ export default function KpiLaserModal({ isOpen, onClose, facilities, udos = [], 
   const [selectedKpiTarget, setSelectedKpiTarget] = useState('Turn Over');
   const [selectedUdos, setSelectedUdos]           = useState([]);
   const [hiddenSeries, setHiddenSeries]           = useState({});
+  const [isolatedSeries, setIsolatedSeries]       = useState(null); // nome struttura isolata, null = tutte visibili
+  const [legendSearch, setLegendSearch]           = useState('');
 
   const toggleUdo = (id) => setSelectedUdos(prev =>
     prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]
@@ -51,7 +53,7 @@ export default function KpiLaserModal({ isOpen, onClose, facilities, udos = [], 
 
   const activeRule  = useMemo(() => KPI_RULES.find(r => r.kpi_target === selectedKpiTarget), [selectedKpiTarget]);
   const timeHorizon = useMemo(() => getTimeHorizon(year), [year]);
-  const isPercTab   = activeRule && !['NUMERI', 'ISPEZIONI'].includes(activeRule.settore);
+  const isPercTab   = activeRule && !isNumericSettore(activeRule.settore);
 
   const targetFacilities = useMemo(() => {
     let facs = facilities.filter(f => !f.is_suspended);
@@ -85,7 +87,38 @@ export default function KpiLaserModal({ isOpen, onClose, facilities, udos = [], 
     return Array.from(keys);
   }, [chartData]);
 
-  const toggleSeries = (key) => setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }));
+  // Click singolo: isola la struttura (nasconde tutte le altre)
+  // Click sulla stessa struttura già isolata: torna alla vista completa
+  // Click su checkbox (shift+click opzionale): toggle classico visibilità
+  const handleLegendClick = (key) => {
+    if (isolatedSeries === key) {
+      // Deisola: torna a mostrare tutto
+      setIsolatedSeries(null);
+      setHiddenSeries({});
+    } else {
+      // Isola questa struttura
+      setIsolatedSeries(key);
+      setHiddenSeries({});
+    }
+  };
+
+  const handleCheckboxToggle = (e, key) => {
+    e.stopPropagation();
+    // Se c'era un isolamento attivo, torna alla vista completa prima di fare il toggle
+    if (isolatedSeries) {
+      setIsolatedSeries(null);
+      setHiddenSeries({ [key]: true }); // nasconde quella appena cliccata
+    } else {
+      setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }));
+    }
+  };
+
+  // Una serie è visibile se: non è nascosta E (non c'è isolamento OPPURE è la serie isolata)
+  const isSeriesVisible = (key) => {
+    if (hiddenSeries[key]) return false;
+    if (isolatedSeries && isolatedSeries !== key) return false;
+    return true;
+  };
 
   if (!isOpen) return null;
 
@@ -190,10 +223,10 @@ export default function KpiLaserModal({ isOpen, onClose, facilities, udos = [], 
                       type="monotone"
                       dataKey={key}
                       stroke={PALETTE[index % PALETTE.length]}
-                      strokeWidth={hiddenSeries[key] ? 0 : 2.5}
-                      dot={{ r: 4, strokeWidth: 2 }}
+                      strokeWidth={isSeriesVisible(key) ? 2.5 : 0}
+                      dot={{ r: isSeriesVisible(key) ? 4 : 0, strokeWidth: 2 }}
                       activeDot={{ r: 7, strokeWidth: 0 }}
-                      hide={hiddenSeries[key] === true}
+                      hide={!isSeriesVisible(key)}
                       connectNulls
                     />
                   ))}
@@ -206,25 +239,69 @@ export default function KpiLaserModal({ isOpen, onClose, facilities, udos = [], 
           {dataKeys.length > 0 && (
             <div className="w-56 shrink-0 border-l border-slate-100 p-4 overflow-y-auto bg-slate-50">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Strutture</p>
-              <div className="space-y-1.5">
-                {dataKeys.map((key, index) => (
-                  <button
-                    key={key}
-                    onClick={() => toggleSeries(key)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all ${
-                      hiddenSeries[key] ? 'opacity-40 bg-white' : 'bg-white shadow-sm'
-                    }`}
-                    title={key}
-                  >
-                    <span
-                      style={{ backgroundColor: PALETTE[index % PALETTE.length] }}
-                      className="w-3 h-3 rounded-full shrink-0"
-                    />
-                    <span className="text-xs font-bold text-slate-700 leading-tight line-clamp-2">{key}</span>
-                  </button>
-                ))}
+              {/* Filtro ricerca struttura */}
+              <input
+                type="text"
+                placeholder="Cerca struttura..."
+                value={legendSearch || ''}
+                onChange={e => setLegendSearch(e.target.value)}
+                className="w-full text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-emerald-400 mb-2"
+              />
+
+              {/* Azioni rapide */}
+              <div className="flex gap-1 mb-3">
+                <button
+                  onClick={() => { setIsolatedSeries(null); setHiddenSeries({}); }}
+                  className="flex-1 text-[10px] font-black text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-2 py-1 rounded-lg transition-colors"
+                >
+                  Tutte
+                </button>
+                <button
+                  onClick={() => { setIsolatedSeries(null); const h = {}; dataKeys.forEach(k => h[k] = true); setHiddenSeries(h); }}
+                  className="flex-1 text-[10px] font-black text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-2 py-1 rounded-lg transition-colors"
+                >
+                  Nessuna
+                </button>
               </div>
-              <p className="text-[9px] text-slate-400 mt-4 font-medium">Clicca per nascondere/mostrare</p>
+
+              <div className="space-y-1">
+                {dataKeys.filter(k => !legendSearch || k.toLowerCase().includes(legendSearch.toLowerCase())).map((key, index) => {
+                  const visible = isSeriesVisible(key);
+                  const isIsolated = isolatedSeries === key;
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => handleLegendClick(key)}
+                      className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl cursor-pointer transition-all ${
+                        isIsolated
+                          ? 'bg-emerald-50 border border-emerald-300 shadow-sm'
+                          : !visible
+                          ? 'opacity-35 bg-white'
+                          : 'bg-white hover:bg-slate-50'
+                      }`}
+                      title={`Click: isola ${key}`}
+                    >
+                      {/* Checkbox toggle visibilità */}
+                      <input
+                        type="checkbox"
+                        checked={visible}
+                        onChange={() => {}}
+                        onClick={e => handleCheckboxToggle(e, key)}
+                        className="accent-emerald-600 w-3.5 h-3.5 shrink-0 cursor-pointer"
+                      />
+                      <span
+                        style={{ backgroundColor: PALETTE[index % PALETTE.length] }}
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700 leading-tight line-clamp-2 flex-1">{key}</span>
+                      {isIsolated && <span className="text-[9px] font-black text-emerald-600 shrink-0">●</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[9px] text-slate-400 mt-3 font-medium leading-relaxed">
+                Click: isola struttura<br/>Checkbox: mostra/nascondi
+              </p>
             </div>
           )}
         </div>

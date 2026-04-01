@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, Save, CheckCircle2, AlertCircle, Clock, Ban, Activity } from 'lucide-react';
 import { supabase }         from '../supabaseClient';
 import { detectAnomalies, maxSeverity } from '../utils/kpiAnomalyEngine';
+import { checkAndOpenAutoNcs }         from '../utils/autoNcEngine';
 
 const MONTHS = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 
@@ -56,12 +57,42 @@ export default function KpiManagerModal({ isOpen, onClose, facility, year, onUpd
 
   const handleSave = async (status) => {
     try {
-      const payload = { facility_id: facility.id, year, month: activeMonth, status, metrics_json: formData, updated_at: new Date().toISOString() };
-      const { error } = await supabase.from('fact_kpi_monthly').upsert(payload, { onConflict: 'facility_id, year, month' });
-      if (error) {throw error;}
-      setKpiData(prev => [...prev.filter(p => p.month !== activeMonth), { ...payload, id: 'temp' }]);
+      const payload = {
+        facility_id:  facility.id, year, month: activeMonth,
+        status, metrics_json: formData,
+        updated_at:   new Date().toISOString(),
+      };
+      const { error } = await supabase
+        .from('fact_kpi_monthly')
+        .upsert(payload, { onConflict: 'facility_id, year, month' });
+      if (error) throw error;
+
+      // Aggiorna stato locale
+      setKpiData(prev => [
+        ...prev.filter(p => p.month !== activeMonth),
+        { ...payload, id: 'temp' },
+      ]);
       setActiveMonth(null);
-      if (onUpdateSuccess) {onUpdateSuccess();}
+
+      // Notifica il parent per il refresh (invalidate React Query)
+      if (onUpdateSuccess) onUpdateSuccess();
+
+      // Verifica NC automatiche solo al consolidamento definitivo
+      if (status === 'completed') {
+        const opened = await checkAndOpenAutoNcs(
+          facility.id,
+          facility.name,
+          year,
+          activeMonth,
+          facility,
+        );
+        if (opened.length > 0) {
+          // Piccolo toast informativo (non bloccante)
+          console.info(`[KpiManager] NC aperte automaticamente: ${opened.join(', ')}`);
+          // Se il parent ha un handler per NC, notificalo
+          if (onUpdateSuccess) onUpdateSuccess();
+        }
+      }
     } catch (err) { alert('Errore: ' + err.message); }
   };
 

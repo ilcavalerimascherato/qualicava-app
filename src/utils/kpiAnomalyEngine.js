@@ -51,6 +51,17 @@ export const ANOMALY_RULES = [
       return validi > totale;
     }
   },
+  {
+    id: 'addetti_cucina_gt_lavoratori',
+    msg: 'Addetti cucina (soggetti HACCP) > lavoratori totali (soggetti sicurezza): gli addetti cucina sono un sottoinsieme dei lavoratori',
+    severity: 'alta',
+    check: (j) => {
+      const cucina     = get(j, 'Numero totale dipendenti soggetti a formazione HACCP');
+      const lavoratori = get(j, 'Numero totale dipendenti soggetti a formazione sicurezza');
+      if (cucina === null || lavoratori === null) return false;
+      return cucina > lavoratori;
+    }
+  },
 
   // ── Lesioni ──────────────────────────────────────────────────
   {

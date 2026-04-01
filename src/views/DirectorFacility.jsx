@@ -33,7 +33,7 @@ import {
   ResponsiveContainer, ReferenceLine, LineChart, Line,
   Legend, Cell, PieChart, Pie
 } from 'recharts';
-import { KPI_RULES }        from '../config/kpiRules';
+import { KPI_RULES, isNumericSettore } from '../config/kpiRules';
 import { computeKpiValue }  from '../utils/kpiFormulaEngine';
 import { getTimeHorizon }   from '../utils/kpiTimeHorizon';
 import KpiManagerModal      from '../components/KpiManagerModal';
@@ -357,51 +357,72 @@ function OrgStatoPill({ email, userProfiles }) {
   );
 }
 
-function InvitoPanel({ figura, email, facilityName, onClose }) {
-  const [copied, setCopied] = useState(false);
-  const sql = `-- Invita ${figura} per ${facilityName}
-UPDATE public.user_profiles
-SET role = 'director', full_name = '${figura}'
-WHERE email = '${email}';
+function InvitoPanel({ figura, email, facilityId, companyId, onClose, onSuccess }) {
+  const [status, setStatus] = useState(null); // null | 'sending' | 'sent' | 'error'
+  const [msg, setMsg]       = useState('');
 
-INSERT INTO public.user_facility_access (user_id, facility_id)
-SELECT p.id, f.id
-FROM public.user_profiles p, public.facilities f
-WHERE p.email = '${email}' AND f.name = '${facilityName}'
-ON CONFLICT DO NOTHING;`;
-
-  const copy = () => {
-    navigator.clipboard.writeText(sql);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleInvita = async () => {
+    setStatus('sending');
+    try {
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email,
+          fullName:    figura,
+          role:        'director',
+          companyId:   companyId || null,
+          facilityIds: [facilityId],
+        },
+      });
+      if (error || data?.error) throw new Error(error?.message || data?.error);
+      setStatus('sent');
+      setMsg(data.message || `Invito inviato a ${email}`);
+      setTimeout(() => { onClose(); if (onSuccess) onSuccess(); }, 2500);
+    } catch (err) {
+      setStatus('error');
+      setMsg(err.message);
+    }
   };
 
   return (
     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-2">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs font-black text-amber-700 uppercase tracking-widest">
-          Istruzioni invito — {email}
-        </p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-black text-amber-700 uppercase tracking-widest">Invita {figura}</p>
         <button onClick={onClose} className="text-amber-400 hover:text-amber-700"><X size={14} /></button>
       </div>
-      <div className="bg-slate-900 rounded-lg p-3 mb-3">
-        <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto">{sql}</pre>
-      </div>
-      <div className="flex gap-2">
-        <button onClick={copy}
-          className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
-            copied ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-          }`}>
-          {copied ? '✓ Copiato!' : '📋 Copia SQL'}
-        </button>
-        <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-xs font-bold bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 transition-colors">
-          Apri Supabase →
-        </a>
-      </div>
+
+      {status === null && (
+        <>
+          <p className="text-xs text-slate-600 mb-3">
+            Verrà creato un account per <span className="font-bold">{email}</span> con ruolo Direttore.
+            Riceverà un'email per impostare la password.
+          </p>
+          <button onClick={handleInvita}
+            className="flex items-center gap-2 bg-emerald-600 text-white text-xs font-black px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors">
+            ✉ Invia invito
+          </button>
+        </>
+      )}
+      {status === 'sending' && (
+        <p className="text-xs font-bold text-amber-700 animate-pulse">Creazione account in corso...</p>
+      )}
+      {status === 'sent' && (
+        <p className="text-xs font-bold text-emerald-700">✓ {msg}</p>
+      )}
+      {status === 'error' && (
+        <div>
+          <p className="text-xs font-bold text-red-700 mb-2">✗ {msg}</p>
+          <p className="text-xs text-slate-500">
+            Se il problema persiste, crea l'utente manualmente da{' '}
+            <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer"
+              className="text-indigo-600 hover:underline">Supabase Dashboard</a>
+            {' '}→ Authentication → Users → Add user
+          </p>
+        </div>
+      )}
     </div>
   );
 }
+
 
 function OverviewTab({ facility: f, surveys, year }) {
   const [userProfiles, setUserProfiles] = useState([]);
@@ -510,7 +531,7 @@ function OverviewTab({ facility: f, surveys, year }) {
                           {email && !userProfile && (
                             <button onClick={() => setShowInvito(isShowingInvito ? null : key)}
                               className="text-xs font-bold text-amber-600 hover:bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg transition-colors">
-                              {isShowingInvito ? 'Chiudi' : 'Genera invito'}
+                              {isShowingInvito ? 'Chiudi' : 'Invia invito'}
                             </button>
                           )}
                         </div>
@@ -518,7 +539,7 @@ function OverviewTab({ facility: f, surveys, year }) {
                     )}
 
                     {isShowingInvito && !editingOrg && email && (
-                      <InvitoPanel figura={label} email={email} facilityName={f.name} onClose={() => setShowInvito(null)} />
+                      <InvitoPanel figura={label} email={f[emailKey]} facilityId={f.id} companyId={f.company_id} onClose={() => setShowInvito(null)} onSuccess={() => setUserProfiles([])} />
                     )}
                   </div>
                 </div>
@@ -700,7 +721,7 @@ function KpiTab({ facility, kpiRecords, year, onOpenManager }) {
     .reduce((sum, k) => sum + detectAnomalies(k.metrics_json).length, 0);
 
   const kpiSeries = useMemo(() => KPI_RULES.map(rule => {
-    const isPerc = !['NUMERI', 'ISPEZIONI'].includes(rule.settore);
+    const isPerc = !isNumericSettore(rule.settore);
     const data   = timeHorizon.map(t => {
       const rec = kpiRecords.find(k =>
         String(k.facility_id) === String(facility.id) &&
@@ -784,7 +805,7 @@ function KpiTab({ facility, kpiRecords, year, onOpenManager }) {
 
 function KpiCard({ rule, data, isPerc }) {
   const hasTarget  = rule.target_verde !== null;
-  const useBar     = ['NUMERI', 'ISPEZIONI'].includes(rule.settore);
+  const useBar     = isNumericSettore(rule.settore);
   const unit       = isPerc ? '%' : '';
   const lastVal    = [...data].reverse().find(d => d.value !== null);
 

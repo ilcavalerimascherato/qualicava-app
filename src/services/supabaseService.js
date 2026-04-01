@@ -1,20 +1,6 @@
-/**
- * src/services/supabaseService.js  —  v2
- * ─────────────────────────────────────────────────────────────
- * Regola fondamentale: ogni service lancia l'errore, non lo gestisce.
- * La gestione (toast, UI) spetta al chiamante.
- *
- * MODIFICHE v2:
- *  - userService.invite: rimosso il tentativo di chiamare
- *    supabase.auth.admin.inviteUserByEmail() lato client.
- *    Questa API richiede la SERVICE ROLE KEY, che NON deve mai
- *    essere nel bundle del browser.
- *    La funzione ora lancia un errore descrittivo che guida
- *    lo sviluppatore verso la soluzione corretta.
- *    TODO: implementare Edge Function 'invite-user' in Supabase.
- *  - Tutto il resto invariato.
- * ─────────────────────────────────────────────────────────────
- */
+// src/services/supabaseService.js
+// Regola fondamentale: ogni service lancia l'errore, non lo gestisce.
+// La gestione (toast, UI) spetta al chiamante.
 
 import { supabase } from '../supabaseClient';
 
@@ -81,9 +67,9 @@ export const questionnaireService = {
         year:        payload.year,
         type:        payload.type,
         calendar_id: `${payload.year}-12`,
-        start_date:  payload.start_date || null,
-        end_date:    payload.end_date   || null,
-        esiti_pdf:   payload.esiti_pdf  || null,
+        start_date:  payload.start_date  || null,
+        end_date:    payload.end_date    || null,
+        esiti_pdf:   payload.esiti_pdf   || null,
       }, { onConflict: 'facility_id, type, calendar_id' })
       .select()
       .single();
@@ -93,48 +79,18 @@ export const questionnaireService = {
   },
 };
 
-// ─── User management service ──────────────────────────────────
+// ─── User management service (solo admin/superadmin) ──────────
 export const userService = {
-  /**
-   * Invita un nuovo utente.
-   *
-   * ⚠️  RICHIEDE EDGE FUNCTION — non può funzionare lato client.
-   *
-   * supabase.auth.admin.* richiede la SERVICE ROLE KEY, che non deve
-   * mai essere esposta nel bundle del browser per ragioni di sicurezza.
-   *
-   * SOLUZIONE: implementare una Supabase Edge Function 'invite-user'
-   * che riceve { email, role, companyId, facilityIds } e usa
-   * supabaseAdmin (con service role key nel server env) per creare l'utente.
-   *
-   * Esempio Edge Function (Deno):
-   *   import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-   *   const supabaseAdmin = createClient(
-   *     Deno.env.get('SUPABASE_URL'),
-   *     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')  // solo lato server
-   *   )
-   *   const { data } = await supabaseAdmin.auth.admin.inviteUserByEmail(email)
-   *
-   * Nel frattempo, usa il pannello Supabase Dashboard → Authentication → Users
-   * e lo script SQL generato da InvitoPanel in DirectorFacility.
-   */
-  invite: async ({ email, role, companyId, facilityIds = [] }) => {
-    // Chiamata all'Edge Function (da implementare)
+  // Crea utente + profilo in un'unica operazione
+  invite: async ({ email, fullName, role, companyId, facilityIds = [] }) => {
+    // Usa la Edge Function 'invite-user' che gira server-side con la service role key.
+    // La funzione: crea l'utente in Auth, aggiorna il profilo, assegna le strutture,
+    // invia l'email di reset password al direttore.
     const { data, error } = await supabase.functions.invoke('invite-user', {
-      body: { email, role, companyId, facilityIds },
+      body: { email, fullName, role, companyId, facilityIds },
     });
-
-    if (error) {
-      // Messaggio chiaro se la Edge Function non è ancora deployata
-      if (error.message?.includes('Function not found')) {
-        throw new Error(
-          'La funzione Edge "invite-user" non è ancora deployata su Supabase. ' +
-          'Crea la Edge Function o usa il pannello Supabase Dashboard per invitare manualmente l\'utente.'
-        );
-      }
-      throw error;
-    }
-
+    if (error) throw new Error(error.message || 'Errore Edge Function invite-user');
+    if (data?.error) throw new Error(data.error);
     log('INVITE_USER', { email, role, facilityIds });
     return data;
   },

@@ -34,7 +34,7 @@ import { jsPDF }   from 'jspdf';
 const PAGE_W_MM    = 210;
 const PAGE_H_MM    = 297;
 const MARGIN_H_MM  = 14;   // margine sx e dx
-const MARGIN_T_MM  = 14;   // margine top (sopra il logo)
+const MARGIN_T_MM  = 4;   // margine top (sopra il logo)
 const MARGIN_B_MM  = 10;   // margine bottom
 const LOGO_H_MM    = 10;   // altezza logo
 const LOGO_W_MM    = 40;   // larghezza logo (proporzionale)
@@ -47,34 +47,25 @@ const CONTENT_H_MM    = PAGE_H_MM - CONTENT_TOP_MM - MARGIN_B_MM;
 
 /** Carica un'immagine come JPEG data URL via canvas (evita errori PNG in jsPDF) */
 async function loadAsJpeg(path) {
-  try {
-    const res  = await fetch(path);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    const originalUrl = await new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload  = () => res(r.result);
-      r.onerror = rej;
-      r.readAsDataURL(blob);
-    });
-    return await new Promise((res, rej) => {
-      const img = new Image();
-      img.onload = () => {
-        const c = document.createElement('canvas');
-        c.width = img.naturalWidth; c.height = img.naturalHeight;
-        const ctx = c.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, c.width, c.height);
-        ctx.drawImage(img, 0, 0);
-        res(c.toDataURL('image/jpeg', 0.95));
-      };
-      img.onerror = rej;
-      img.src = originalUrl;
-    });
-  } catch (e) {
-    console.warn('[pdfExport] logo non caricato:', path, e.message);
-    return null;
-  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous'; // Evita blocchi CORS
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; // Sfondo bianco per trasparenze PNG
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    };
+    img.onerror = () => {
+      console.error(`[CRITICO] Impossibile caricare il logo al path: ${path}`);
+      resolve(null);
+    };
+    img.src = path + '?t=' + new Date().getTime(); // Cache busting
+  });
 }
 
 /** Attende render DOM */
@@ -138,7 +129,7 @@ export async function exportPDF({
   elementId,
   sections,
   filename,
-  logoSrc = '/intestazione.png',
+  logoSrc = 'intestazione.jpg',
   onDone,
 }) {
   // Normalizza: supporta sia elementId singolo che array sections

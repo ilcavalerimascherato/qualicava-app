@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { X, ActivitySquare } from 'lucide-react';
 import { LineChart, Line, YAxis, ResponsiveContainer, Tooltip, ReferenceArea } from 'recharts';
-import { KPI_RULES } from '../config/kpiRules';
+import { KPI_RULES, isNumericSettore } from '../config/kpiRules';
 import { computeKpiValue } from '../utils/kpiFormulaEngine';
 import { getTimeHorizon } from '../utils/kpiTimeHorizon';
 
@@ -25,7 +25,7 @@ export default function KpiXrayModal({ isOpen, onClose, facilities, kpiRecords, 
     if (!selectedFacility) {return [];}
 
     return KPI_RULES.map(rule => {
-      const isPerc = !['NUMERI', 'ISPEZIONI'].includes(rule.settore);
+      const isPerc = !isNumericSettore(rule.settore);
       let hasData = false;
 
       const trend = timeHorizon.map(t => {

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, LayoutGrid, Filter, PieChart as PieIcon, BarChart2 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
-import { KPI_RULES, KPI_SECTORS } from '../config/kpiRules';
+import { KPI_RULES, KPI_SECTORS, isNumericSettore } from '../config/kpiRules';
 import { computeKpiValue } from '../utils/kpiFormulaEngine';
 import { MONTHS } from '../config/constants';
 
@@ -62,11 +62,8 @@ export default function KpiChartsModal({ isOpen, onClose, facilities, udos = [],
       const dataPoint = { rawName: f.name, name: `[${udoName}] ${f.name}`, udo: udoName, PostiLetto: f.bed_count || f.posti_letto || 0 };
 
       if (record && record.metrics_json) {
-        // OVERVIEW HR
-        const dipendentiKey = Object.keys(record.metrics_json).find(k => k.toUpperCase().includes('DIPENDENTI SOGGETTI A FORMAZIONE SICUREZZA') || k.toUpperCase() === 'DIPENDENTI');
-        dataPoint['Dipendenti'] = dipendentiKey ? parseFloat(record.metrics_json[dipendentiKey].value) || 0 : 0;
-
         // CALCOLO KPI REALI (motore centralizzato)
+        // Include HR (Lavoratori, Addetti Cucina) calcolati tramite kpiRules settore HR
         KPI_RULES.forEach(rule => {
           const val = computeKpiValue(rule, record.metrics_json, f);
           if (val !== null) {
@@ -90,7 +87,7 @@ export default function KpiChartsModal({ isOpen, onClose, facilities, udos = [],
   // Identifica quali colonne mostrare in base al TAB
   const currentChartKeys = useMemo(() => {
     if (activeTab === 'ASSET') {return [];}
-    if (activeTab === 'OVERVIEW') {return ['PostiLetto', 'Dipendenti'];}
+    if (activeTab === 'OVERVIEW') {return ['PostiLetto', 'Lavoratori', 'Addetti Cucina'];}
 
     const sectorRules = KPI_RULES.filter(r => r.settore === activeTab);
     const expectedKeys = sectorRules.map(r => r.kpi_target);
@@ -112,7 +109,7 @@ export default function KpiChartsModal({ isOpen, onClose, facilities, udos = [],
 
   if (!isOpen) {return null;}
 
-  const isPercTab = activeTab !== 'ASSET' && activeTab !== 'OVERVIEW' && !['NUMERI', 'ISPEZIONI'].includes(activeTab);
+  const isPercTab = activeTab !== 'ASSET' && activeTab !== 'OVERVIEW' && !isNumericSettore(activeTab);
 
   return (
     <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in">

@@ -12,6 +12,8 @@
  */
 import { getKpiStatus } from '../config/kpiRules';
 
+import { isNumericSettore } from '../config/kpiRules';
+
 const VARIABLE_REGEX = /\[([^\]]*)\]/g;
 
 /**
@@ -71,7 +73,7 @@ export function computeKpiValue(rule, metricsJson, facility) {
   const { result, canCalculate } = evaluateKpiFormula(rule.calcolo, metricsJson, facility);
   if (!canCalculate || result === null) return null;
 
-  const isPerc = !['NUMERI', 'ISPEZIONI'].includes(rule.settore);
+  const isPerc = !isNumericSettore(rule.settore);
   return isPerc
     ? Math.round(result * 1000) / 10   // percentuale con 1 decimale
     : Math.round(result * 10)  / 10;   // numero assoluto con 1 decimale

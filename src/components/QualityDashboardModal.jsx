@@ -757,9 +757,9 @@ function UtentiTab({ facilities, isSuperAdmin }) {
   const [editingId, setEditingId]     = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [search, setSearch]           = useState('');
-  const [sqlCmd, setSqlCmd]           = useState('');
-  const [showSql, setShowSql]         = useState(false);
   const [saving, setSaving]           = useState(false);
+  const [inviting, setInviting]       = useState(false);
+  const [inviteResult, setInviteResult] = useState(null);
 
   const loadUtenti = () => {
     setLoading(true);
@@ -797,27 +797,26 @@ function UtentiTab({ facilities, isSuperAdmin }) {
     u.email?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const generateSql = (form) => {
-    const facilityInserts = form.facilityIds.length > 0
-      ? form.facilityIds.map(fid =>
-          `INSERT INTO public.user_facility_access (user_id, facility_id)\n  SELECT id, ${fid} FROM public.user_profiles WHERE email = '${form.email}';`
-        ).join('\n')
-      : '';
-    return `-- 1. Crea utente in Supabase Authentication → Users → Add user
---    Email: ${form.email}
---    Password: (imposta una password temporanea)
-
--- 2. Poi esegui questo SQL:
-UPDATE public.user_profiles
-SET role       = '${form.role}',
-    company_id = ${form.companyId || 'NULL'},
-    full_name  = '${form.fullName}'
-WHERE email = '${form.email}';
-
-${facilityInserts}
-
--- 3. Verifica
-SELECT id, email, role, full_name FROM public.user_profiles WHERE email = '${form.email}';`;
+  const inviteUser = async (form) => {
+    setInviting(true);
+    setInviteResult(null);
+    try {
+      const { userService } = await import('../services/supabaseService');
+      const result = await userService.invite({
+        email:       form.email,
+        fullName:    form.fullName,
+        role:        form.role,
+        companyId:   form.companyId ? parseInt(form.companyId) : null,
+        facilityIds: form.facilityIds,
+      });
+      setInviteResult({ success: true, msg: result.message || `Utente creato. Email inviata a ${form.email}.` });
+      setShowNewForm(false);
+      setTimeout(loadUtenti, 1500);
+    } catch (err) {
+      setInviteResult({ success: false, msg: 'Errore: ' + err.message });
+    } finally {
+      setInviting(false);
+    }
   };
 
   return (
@@ -836,26 +835,26 @@ SELECT id, email, role, full_name FROM public.user_profiles WHERE email = '${for
       {showNewForm && (
         <NuovoUtenteForm
           facilities={facilities}
-          onGenerate={(form) => { setSqlCmd(generateSql(form)); setShowSql(true); }}
+          onGenerate={inviteUser}
           onClose={() => setShowNewForm(false)}
         />
       )}
 
-      {showSql && sqlCmd && (
-        <div className="bg-slate-900 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-black text-emerald-400 uppercase tracking-widest">SQL da eseguire su Supabase → SQL Editor</p>
-            <button onClick={() => navigator.clipboard.writeText(sqlCmd)}
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-white bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">
-              <Copy size={12} /> Copia
-            </button>
+      {inviting && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 text-center">
+          <p className="text-sm font-bold text-indigo-700 animate-pulse">Creazione utente in corso...</p>
+        </div>
+      )}
+      {inviteResult && (
+        <div className={`rounded-2xl p-4 flex items-start gap-3 ${inviteResult.success ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
+          <span className="text-lg">{inviteResult.success ? '✓' : '✗'}</span>
+          <div>
+            <p className={`text-sm font-bold ${inviteResult.success ? 'text-emerald-700' : 'text-red-700'}`}>{inviteResult.msg}</p>
+            {inviteResult.success && (
+              <p className="text-xs text-emerald-600 mt-1">Il direttore riceverà un'email per impostare la sua password.</p>
+            )}
           </div>
-          <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed">{sqlCmd}</pre>
-          <p className="text-xs text-amber-400 mt-3 font-bold">⚠ Prima crea l'utente in Supabase Authentication → Users → Add user, poi esegui questo SQL.</p>
-          <button onClick={() => { setShowSql(false); setShowNewForm(false); loadUtenti(); }}
-            className="mt-3 text-xs font-bold text-emerald-400 hover:text-emerald-300">
-            Ho eseguito il SQL → Ricarica lista
-          </button>
+          <button onClick={() => setInviteResult(null)} className="ml-auto text-slate-400 hover:text-slate-600"><X size={14} /></button>
         </div>
       )}
 
@@ -946,7 +945,7 @@ function NuovoUtenteForm({ facilities, onGenerate, onClose }) {
         <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Annulla</button>
         <button onClick={() => { if (!form.email || !form.fullName) return; onGenerate(form); }}
           className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-black hover:bg-indigo-700 transition-colors">
-          <Copy size={13} /> Genera SQL
+          <Plus size={13} /> Crea utente
         </button>
       </div>
     </div>

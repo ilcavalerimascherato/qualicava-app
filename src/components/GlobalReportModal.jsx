@@ -51,7 +51,6 @@ function computeKpiEntry(rule, metricsJson, facility) {
   if (result === null) return null;
   const isPerc  = !['NUMERI','ISPEZIONI'].includes(rule.settore);
   const display = isPerc ? Math.round(result * 1000) / 10 : Math.round(result * 10) / 10;
-  const norm    = isPerc ? result : result; // getKpiStatus lavora su 0-1
   const status  = getKpiStatus(rule, isPerc ? result : result);
   return { display, status, unit: isPerc ? '%' : '' };
 }
@@ -87,7 +86,7 @@ function aggregateKpiForMonth(rules, facilities, kpiRecords, year, month) {
       : 'green';
 
     return { rule, entries, avg, statusCounts, aggStatus };
-  }).filter(r => r.entries.length > 0);
+  }); // tutti i 37 KPI, anche quelli senza dati (entries vuote)
 }
 
 /**
@@ -120,8 +119,8 @@ function aggregateKpiForPeriod(rules, facilities, kpiRecords, months) {
     const delta     = last - first;
     const trend_dir = delta > 0.5 ? 'crescita' : delta < -0.5 ? 'calo' : 'stabile';
 
-    return { rule, trend, delta, trend_dir };
-  }).filter(Boolean);
+    return { rule, trend, delta: delta ?? 0, trend_dir: trend_dir ?? 'n/d' };
+  }); // tutti i KPI inclusi quelli senza dati
 }
 
 // ── Componente principale ─────────────────────────────────────
@@ -626,7 +625,7 @@ export default function GlobalReportModal({
                     </div>
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Indicatori con dati</p>
-                      <p className="font-black text-emerald-600">{kpiAggregated.length}</p>
+                      <p className="font-black text-emerald-600">{kpiAggregated.filter(r => r.entries.length > 0).length} / {kpiAggregated.length}</p>
                     </div>
                     {kpiMode === 'month' && (
                       <div>
@@ -636,25 +635,24 @@ export default function GlobalReportModal({
                     )}
                   </div>
                   <button onClick={generateKpiReport}
-                    disabled={kpiGenerating || kpiAggregated.length === 0 || (kpiScopeType === 'facility' && kpiScope === 'all')}
+                    disabled={kpiGenerating || kpiAggregated.every(r => r.entries.length === 0) || (kpiScopeType === 'facility' && kpiScope === 'all')}
                     className="flex items-center gap-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest shadow-md transition-all text-sm">
                     <BrainCircuit size={18} />
                     {kpiGenerating ? 'Analisi in corso...' : 'Genera Relazione KPI IA'}
                   </button>
                 </div>
 
-                {/* Preview tabella KPI */}
-                {kpiAggregated.length === 0 ? (
+                {/* Preview tabella KPI — altezza fissa con scroll */}
+                {kpiFacilities.length === 0 ? (
                   <div className="p-12 text-center text-slate-400">
                     <BarChart2 size={48} className="mx-auto mb-4 opacity-40" />
-                    <p className="font-bold uppercase tracking-widest">Nessun dato KPI per la selezione corrente</p>
-                    <p className="text-sm mt-2">Verifica che le strutture selezionate abbiano dati consolidati per il periodo scelto</p>
+                    <p className="font-bold uppercase tracking-widest">Nessuna struttura nel perimetro selezionato</p>
                   </div>
                 ) : kpiMode === 'month' ? (
                   /* Tabella mese singolo */
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto overflow-y-auto max-h-[420px]">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-50 border-b border-slate-200">
+                      <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                         <tr>
                           <th className="text-left px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-widest">Indicatore</th>
                           <th className="text-left px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-widest">Settore</th>
@@ -666,30 +664,35 @@ export default function GlobalReportModal({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
-                        {kpiAggregated.map((r, i) => (
-                          <tr key={i} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-4 py-2.5 font-bold text-slate-800 text-xs">{r.rule.kpi_target}</td>
-                            <td className="px-4 py-2.5 text-xs text-slate-400 font-bold uppercase">{r.rule.settore}</td>
-                            <td className="px-4 py-2.5 text-center font-black text-sm" style={{ color: TRAFFIC_COLOR[r.aggStatus] }}>
-                              {r.avg !== null ? `${r.avg}${r.entries[0]?.unit || ''}` : '—'}
+                        {kpiAggregated.map((r, i) => {
+                          const hasData = r.entries.length > 0;
+                          return (
+                          <tr key={i} className={`transition-colors ${hasData ? 'hover:bg-slate-50' : 'opacity-40'}`}>
+                            <td className="px-4 py-2 font-bold text-slate-800 text-xs">{r.rule.kpi_target}</td>
+                            <td className="px-4 py-2 text-xs text-slate-400 font-bold uppercase">{r.rule.settore}</td>
+                            <td className="px-4 py-2 text-center font-black text-sm" style={{ color: hasData ? TRAFFIC_COLOR[r.aggStatus] : '#94a3b8' }}>
+                              {hasData && r.avg !== null ? `${r.avg}${r.entries[0]?.unit || ''}` : '—'}
                             </td>
-                            <td className="px-4 py-2.5 text-center">
-                              <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-lg"
-                                style={{ backgroundColor: TRAFFIC_COLOR[r.aggStatus] + '22', color: TRAFFIC_COLOR[r.aggStatus] }}>
-                                {STATUS_LABEL[r.aggStatus]}
-                              </span>
+                            <td className="px-4 py-2 text-center">
+                              {hasData ? (
+                                <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-lg"
+                                  style={{ backgroundColor: TRAFFIC_COLOR[r.aggStatus] + '22', color: TRAFFIC_COLOR[r.aggStatus] }}>
+                                  {STATUS_LABEL[r.aggStatus]}
+                                </span>
+                              ) : <span className="text-[10px] text-slate-300">n/d</span>}
                             </td>
-                            <td className="px-4 py-2.5 text-center text-xs font-black text-emerald-600">{r.statusCounts.green || 0}</td>
-                            <td className="px-4 py-2.5 text-center text-xs font-black text-amber-500">{r.statusCounts.yellow || 0}</td>
-                            <td className="px-4 py-2.5 text-center text-xs font-black text-red-500">{r.statusCounts.red || 0}</td>
+                            <td className="px-4 py-2 text-center text-xs font-black text-emerald-600">{r.statusCounts.green || 0}</td>
+                            <td className="px-4 py-2 text-center text-xs font-black text-amber-500">{r.statusCounts.yellow || 0}</td>
+                            <td className="px-4 py-2 text-center text-xs font-black text-red-500">{r.statusCounts.red || 0}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 ) : (
                   /* Tabella periodo */
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto overflow-y-auto max-h-[420px]">
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>

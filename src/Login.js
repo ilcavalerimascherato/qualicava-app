@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
-import { Lock, Mail, LogIn, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, LogIn, AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound } from 'lucide-react';
 
 export default function Login() {
   const navigate                        = useNavigate();
@@ -15,6 +15,7 @@ export default function Login() {
   const [error, setError]               = useState('');
   const [success, setSuccess]           = useState('');
   const [mode, setMode]                 = useState('login');
+  const [forgotEmail, setForgotEmail]   = useState('');
 
   useEffect(() => {
     // Intercetta token recovery
@@ -23,6 +24,12 @@ export default function Login() {
       setMode('recovery');
       window.history.replaceState(null, '', window.location.pathname);
       return;
+    }
+    // Mostra banner sessione scaduta se redirectati da AuthContext
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('expired') === '1') {
+      setError('La tua sessione è scaduta. Accedi di nuovo.');
+      window.history.replaceState(null, '', window.location.pathname);
     }
     // Se già loggato, reindirizza subito
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -59,6 +66,24 @@ export default function Login() {
     setSuccess('Password aggiornata. Accesso in corso...');
     setTimeout(() => navigate('/', { replace: true }), 1500);
     setLoading(false);
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!forgotEmail.trim()) { setError('Inserisci la tua email.'); return; }
+    setLoading(true);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      forgotEmail.trim(),
+      { redirectTo: window.location.origin + '/login' }
+    );
+    setLoading(false);
+    if (resetError) {
+      setError('Errore invio email: ' + resetError.message);
+    } else {
+      setSuccess('Email inviata. Controlla la tua casella (anche la cartella spam).');
+      setTimeout(() => setMode('login'), 4000);
+    }
   };
 
   return (
@@ -116,6 +141,38 @@ export default function Login() {
             <button type="submit" disabled={loading}
               className="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition-all shadow-lg flex justify-center items-center gap-2 mt-2 disabled:opacity-60">
               {loading ? <span className="animate-pulse">Accesso in corso...</span> : <><LogIn size={18} /> Entra nel Sistema</>}
+            </button>
+            <button type="button" onClick={() => { setMode('forgot'); setError(''); setSuccess(''); setForgotEmail(email); }}
+              className="w-full text-center text-xs text-slate-400 hover:text-emerald-600 font-bold mt-3 transition-colors">
+              Password dimenticata?
+            </button>
+          </form>
+        )}
+
+        {mode === 'forgot' && (
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <div className="bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 mb-2">
+              <p className="text-xs font-bold text-sky-700">
+                Inserisci la tua email aziendale. Riceverai un link per reimpostare la password.
+              </p>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-2.5 text-slate-400" size={18} />
+                <input type="email" value={forgotEmail}
+                  onChange={e => { setForgotEmail(e.target.value); setError(''); }}
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                  placeholder="nome@gruppover.it" autoComplete="email" required />
+              </div>
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full bg-sky-600 text-white py-3 rounded-xl font-black hover:bg-sky-700 transition-all shadow-lg flex justify-center items-center gap-2 disabled:opacity-60">
+              {loading ? <span className="animate-pulse">Invio in corso...</span> : <><KeyRound size={18} /> Invia link di reset</>}
+            </button>
+            <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
+              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 font-bold transition-colors">
+              ← Torna al login
             </button>
           </form>
         )}

@@ -8,11 +8,12 @@
  *    Cliccando naviga a /facility/:id per vedere la struttura come la
  *    vedrebbe il direttore. Se la prop non è passata, il tasto non appare.
  */
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import {
   Settings, Database, BarChart3, Activity, Archive,
   ArchiveRestore, CheckCircle2, ExternalLink
 } from 'lucide-react';
+import { calcFacilityRiskScore, RISK_BADGE } from '../utils/riskScoreEngine';
 
 const ICON_STYLES = {
   empty:     'bg-slate-50 text-slate-400 hover:bg-slate-200 hover:text-slate-600 border-slate-200',
@@ -45,11 +46,25 @@ const FacilityCard = memo(function FacilityCard({
   onDataClick,
   onSuspendToggle,
   onKpiClick,
-  onDirectorView,   // ← nuovo: se passato, mostra icona vista direttore
+  onDirectorView,
+  kpiRecords = [],
+  isAdmin = false,
 }) {
   const isCompact      = gridCols?.includes('6') || gridCols?.includes('8');
   const isUltraCompact = gridCols?.includes('8');
-  const subtitle       = [f.udo_name, f.region].filter(Boolean).join(' • ');
+  // In configurazione 4 colonne (default) mostra anche i PL
+  const plLabel        = (!isCompact && f.bed_count > 0) ? `${f.bed_count} PL` : null;
+
+  // Risk score — solo admin, solo 4 colonne, solo se ha dati KPI
+  const riskScore = useMemo(() => {
+    if (!isAdmin || isCompact || !kpiRecords.length) return null;
+    return calcFacilityRiskScore(f, kpiRecords);
+  }, [f, kpiRecords, isAdmin, isCompact]);
+
+  const riskCfg = riskScore?.score !== null && riskScore?.score !== undefined
+    ? RISK_BADGE[riskScore.level]
+    : null;
+  const subtitle       = [f.udo_name, f.region, plLabel].filter(Boolean).join(' • ');
 
   // Stato KPI: distingue verde, futuro (grigio N/D) e da fare (rosso)
   const kpiState = f._kpiFuture
@@ -117,6 +132,18 @@ const FacilityCard = memo(function FacilityCard({
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
             {subtitle}
           </p>
+        )}
+
+        {/* Badge rischio — solo admin, solo 4 colonne */}
+        {riskCfg && riskScore.score !== null && (
+          <div
+            className={`inline-flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-lg border text-[10px] font-black ${riskCfg.bg} ${riskCfg.border} ${riskCfg.text}`}
+            title={riskScore.detail.slice(0, 3).map(d => `${d.kpi}: ${d.status}`).join(' · ')}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${riskCfg.dot}`} />
+            Rischio {riskCfg.label} · {riskScore.score}
+            <span className="text-[9px] opacity-60">/{riskScore.months}m</span>
+          </div>
         )}
 
         <div className="mt-2 text-[11px] font-medium text-slate-500 space-y-0.5">
