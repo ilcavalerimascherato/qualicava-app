@@ -16,6 +16,7 @@ import { ROLES }   from '../config/constants';
 const AdminApp         = lazy(() => import('../App'));
 const DirectorApp      = lazy(() => import('../views/DirectorApp'));
 const DirectorFacility = lazy(() => import('../views/DirectorFacility'));
+const MasterDashboard  = lazy(() => import('../views/MasterDashboard'));
 const Login            = lazy(() => import('../Login'));
 
 function Splash({ msg = 'Caricamento...' }) {
@@ -114,7 +115,8 @@ export default function AppRouter() {
 
             {/* Vista HQ — solo admin/superadmin/sede */}
             <Route element={<RequireAdmin />}>
-              <Route path="/admin" element={<AdminApp />} />
+              <Route path="/admin"  element={<AdminApp />} />
+              <Route path="/master" element={<MasterDashboard />} />
             </Route>
 
             {/* Vista direttore — lista strutture */}

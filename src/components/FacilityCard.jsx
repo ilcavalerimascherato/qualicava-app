@@ -11,7 +11,7 @@
 import React, { memo, useMemo } from 'react';
 import {
   Settings, Database, BarChart3, Activity, Archive,
-  ArchiveRestore, CheckCircle2, ExternalLink
+  ArchiveRestore, CheckCircle2, ExternalLink, ChefHat
 } from 'lucide-react';
 import { calcFacilityRiskScore, RISK_BADGE } from '../utils/riskScoreEngine';
 
@@ -47,6 +47,7 @@ const FacilityCard = memo(function FacilityCard({
   onSuspendToggle,
   onKpiClick,
   onDirectorView,
+  onHaccpClick,
   kpiRecords = [],
   isAdmin = false,
 }) {
@@ -78,6 +79,17 @@ const FacilityCard = memo(function FacilityCard({
     future: { cls: 'bg-slate-100 border-slate-200 text-slate-400 cursor-default',            Icon: Activity,     label: 'KPI N/D' },
     todo:   { cls: 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white', Icon: Activity, label: 'KPI' },
   }[kpiState];
+
+  // Semaforo HACCP — colore cappello da chef
+  const haccpCfg = !f.haccp_obbligatorio
+    ? { color: 'text-slate-300', bg: 'hover:bg-slate-50', title: 'Non soggetta a HACCP' }
+    : f.haccp_semaforo === 'verde'
+    ? { color: 'text-emerald-500', bg: 'hover:bg-emerald-50', title: 'HACCP in regola' }
+    : f.haccp_semaforo === 'giallo'
+    ? { color: 'text-amber-400',   bg: 'hover:bg-amber-50',   title: 'HACCP — attenzione scadenze' }
+    : f.haccp_semaforo === 'rosso'
+    ? { color: 'text-red-500',     bg: 'hover:bg-red-50',     title: 'HACCP — situazione critica' }
+    : { color: 'text-slate-300',   bg: 'hover:bg-slate-50',   title: 'HACCP non censito' };
 
   return (
     <div
@@ -171,7 +183,20 @@ const FacilityCard = memo(function FacilityCard({
           <span className="text-[10px] font-black uppercase tracking-wider">{kpiCfg.label}</span>
         </button>
 
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 items-center">
+          {/* Cappello HACCP — sempre visibile, colore semaforo */}
+          <button
+            onClick={() => onHaccpClick && onHaccpClick(f)}
+            disabled={!f.haccp_obbligatorio}
+            className={`flex items-center justify-center w-8 h-7 rounded-md border transition-all
+              ${f.haccp_obbligatorio
+                ? `border-transparent ${haccpCfg.bg} cursor-pointer`
+                : 'border-transparent cursor-default'
+              }`}
+            title={haccpCfg.title}
+          >
+            <ChefHat size={15} className={haccpCfg.color} />
+          </button>
           <SurveyButton
             status={f.clientStatus}
             icon={BarChart3}

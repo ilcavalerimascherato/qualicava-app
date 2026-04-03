@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
-  Settings, LogOut, ShieldCheck,
+  Settings, LogOut, ShieldCheck, Map,
   Search, Grid2X2, Grid3X3, LayoutGrid, FileSignature, BarChart2, PawPrint
 } from 'lucide-react';
 
@@ -79,6 +79,10 @@ export default function App() {
 
   const handleDirectorView = (facility) => {
     navigate(`/facility/${facility.id}`);
+  };
+
+  const handleHaccpClick = (facility) => {
+    navigate(`/master?facility=${facility.id}`);
   };
 
   const handleFacilitySave = async (d) => {
@@ -175,6 +179,13 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/master')}
+              className="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
+            >
+              <Map size={14} /> Master
+            </button>
+
             <button
               onClick={() => open('globalReport')}
               className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
@@ -345,6 +356,7 @@ export default function App() {
                   open('facility');
                 }}
                 onDirectorView={isAdmin ? handleDirectorView : undefined}
+                onHaccpClick={isAdmin ? handleHaccpClick : undefined}
                 onSuspendToggle={handleSuspendToggle}
                 onKpiClick={(facility) => { setSelectedFacility(facility); open('kpiManager'); }}
                 onDataClick={handleDataClick}
