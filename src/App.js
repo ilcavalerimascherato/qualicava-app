@@ -10,6 +10,7 @@ import {
 import { useAuth }                                           from './contexts/AuthContext';
 import { useModals }                                         from './contexts/ModalContext';
 import { useDashboardData, useInvalidate }                   from './hooks/useDashboardData';
+import { useHaccpSemafori }                                  from './hooks/useHaccpData';
 import { facilityService, questionnaireService, udoService } from './services/supabaseService';
 import { enrichFacilitiesData, calculateDashboardStats }     from './utils/statusCalculator';
 
@@ -45,6 +46,7 @@ export default function App() {
   const [dataTarget, setDataTarget]             = useState(null);
 
   const { loading: dataLoading, data, errors } = useDashboardData(year);
+  const { semafori: haccpSemafori }            = useHaccpSemafori();
 
   useEffect(() => {
     errors.forEach(msg => toast.error(`Errore dati: ${msg}`, { id: msg }));
@@ -52,9 +54,14 @@ export default function App() {
 
   const processedData = useMemo(() => {
     const enriched = enrichFacilitiesData(data.facilities, data.surveys, data.kpiRecords, year, data.udos);
-    const stats    = calculateDashboardStats(enriched, 'all');
-    return { list: enriched, ...stats };
-  }, [data.facilities, data.surveys, data.kpiRecords, data.udos, year]);
+    // Aggiungo semaforo HACCP a ogni struttura
+    const withHaccp = enriched.map(f => ({
+      ...f,
+      haccp_semaforo: haccpSemafori[f.id] ?? (f.haccp_obbligatorio ? 'grigio' : null),
+    }));
+    const stats = calculateDashboardStats(withHaccp, 'all');
+    return { list: withHaccp, ...stats };
+  }, [data.facilities, data.surveys, data.kpiRecords, data.udos, year, haccpSemafori]);
 
   const filteredFacilities = useMemo(() => {
     return processedData.list.filter(f => {

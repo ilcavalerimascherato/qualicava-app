@@ -14,6 +14,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChefHat, ArrowLeft, Search, Filter } from 'lucide-react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useHaccpSemafori } from '../hooks/useHaccpData';
+import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
 
 // Configurazione colori semaforo
 const SEMAFORO_CFG = {
@@ -203,7 +204,7 @@ export default function MasterDashboard() {
 
       {/* ── Modale fascicolo HACCP ── */}
       {selectedFacility && (
-        <HaccpFascicoloPlaceholder
+        <HaccpFascicoloModal
           facility={selectedFacility}
           onClose={() => setSelectedFacility(null)}
         />
@@ -263,41 +264,4 @@ function HaccpCard({ f, udos, onClick }) {
   );
 }
 
-// ── Placeholder modale fascicolo ───────────────────────────────
-// Verrà sostituito da HaccpFascicoloModal nella prossima sessione
-function HaccpFascicoloPlaceholder({ facility, onClose }) {
-  return (
-    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-        <div className="bg-amber-500 px-8 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <ChefHat size={24} className="text-white" />
-            <div>
-              <h2 className="text-lg font-black text-white uppercase tracking-wider">
-                Fascicolo HACCP
-              </h2>
-              <p className="text-xs text-amber-100 font-bold">{facility.name}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 text-white/70 hover:text-white rounded-full transition-colors">
-            ✕
-          </button>
-        </div>
-        <div className="p-12 text-center">
-          <ChefHat size={48} className="mx-auto text-amber-200 mb-4" />
-          <p className="font-black text-slate-700 text-lg mb-2">Fascicolo in costruzione</p>
-          <p className="text-slate-400 text-sm">
-            Il modulo completo (Profilo HACCP, SCIA, Manuale, Analisi, Formazione)
-            sarà disponibile nella prossima sessione di sviluppo.
-          </p>
-          <button
-            onClick={onClose}
-            className="mt-6 bg-amber-500 text-white px-6 py-2.5 rounded-xl font-black hover:bg-amber-600 transition-colors"
-          >
-            Chiudi
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// Fine MasterDashboard
