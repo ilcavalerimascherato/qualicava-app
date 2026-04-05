@@ -32,7 +32,7 @@ const FacilityCard = memo(function FacilityCard({
   // In configurazione 4 colonne (default) mostra anche i PL
   const plLabel        = (!isCompact && f.bed_count > 0) ? `${f.bed_count} PL` : null;
 
-  // Risk score — solo admin, solo 4 colonne, solo se ha dati KPI
+  // Risk score — solo 4 colonne, solo se ha dati KPI
   const riskScore = useMemo(() => {
     if (!isAdmin || isCompact || !kpiRecords.length) return null;
     return calcFacilityRiskScore(f, kpiRecords);
@@ -116,17 +116,7 @@ const FacilityCard = memo(function FacilityCard({
           </p>
         )}
 
-        {/* Badge rischio — solo admin, solo 4 colonne */}
-        {riskCfg && riskScore.score !== null && (
-          <div
-            className={`inline-flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-lg border text-[10px] font-black ${riskCfg.bg} ${riskCfg.border} ${riskCfg.text}`}
-            title={riskScore.detail.slice(0, 3).map(d => `${d.kpi}: ${d.status}`).join(' · ')}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${riskCfg.dot}`} />
-            Rischio {riskCfg.label} · {riskScore.score}
-            <span className="text-[9px] opacity-60">/{riskScore.months}m</span>
-          </div>
-        )}
+        {/* Badge rischio rimosso dal corpo — spostato nel footer */}
 
         <div className="mt-2 text-[11px] font-medium text-slate-500 space-y-0.5">
           {!isUltraCompact && f.address && (
@@ -141,10 +131,25 @@ const FacilityCard = memo(function FacilityCard({
         </div>
       </div>
 
-      {/* Footer: tutte le icone allineate a destra */}
-      <div className="mt-2 flex justify-end items-center pt-3 border-t border-slate-50 gap-2">
+      {/* Footer: badge rischio + icone allineate a destra */}
+      <div className="mt-2 pt-3 border-t border-slate-50">
 
-        {/* Cappello HACCP */}
+        {/* Icone + badge rischio sulla stessa riga */}
+        <div className="flex justify-between items-center">
+
+          {/* Sx: badge rischio — solo se disponibile */}
+          {riskCfg && riskScore?.score !== null ? (
+            <div
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[11px] font-black ${riskCfg.text}`}
+              title={riskScore.detail?.slice(0, 3).map(d => `${d.kpi}: ${d.status}`).join(' · ')}
+            >
+              <span className={`w-2 h-2 rounded-full shrink-0 ${riskCfg.dot}`} />
+              {riskScore.score}<span className="text-[9px] font-bold opacity-60">/{riskScore.months}m</span>
+            </div>
+          ) : <span />}
+
+          {/* Dx: icone */}
+          <div className="flex items-center gap-2">
         <button
           onClick={() => onHaccpClick && onHaccpClick(f)}
           disabled={!f.haccp_obbligatorio}
@@ -206,7 +211,9 @@ const FacilityCard = memo(function FacilityCard({
                                            'text-slate-300'
           } />
         </button>
-      </div>
+        </div> {/* fine flex icone dx */}
+        </div> {/* fine riga badge+icone */}
+      </div>  {/* fine footer */}
     </div>
   );
 });

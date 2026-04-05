@@ -357,16 +357,17 @@ export default function App() {
                 f={f}
                 gridCols={gridCols}
                 onEdit={() => {
-                  // Legge sempre dalla lista aggiornata per evitare dati stale
                   const fresh = data.facilities.find(x => x.id === f.id) || f;
                   setSelectedFacility(fresh);
                   open('facility');
                 }}
                 onDirectorView={isAdmin ? handleDirectorView : undefined}
-                onHaccpClick={isAdmin ? handleHaccpClick : undefined}
+                onHaccpClick={handleHaccpClick}
                 onSuspendToggle={handleSuspendToggle}
                 onKpiClick={(facility) => { setSelectedFacility(facility); open('kpiManager'); }}
                 onDataClick={handleDataClick}
+                isAdmin={['superadmin','admin','sede'].includes(profile?.role)}
+                kpiRecords={data.kpiRecords}
               />
             ))}
           </div>
