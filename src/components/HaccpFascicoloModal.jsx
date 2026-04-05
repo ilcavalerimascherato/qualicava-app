@@ -156,7 +156,7 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
             </div>
           ) : (
             <>
-              {activeTab === 'profilo'    && <ProfiloTab    facility={facility} profilo={data.profilo}       invalidate={invalidate} isDirector={isDirector} isUdoPsi={isUdoPsi} />}
+              {activeTab === 'profilo'    && <ProfiloTab    facility={facility} profilo={data.profilo}       invalidate={invalidate} isDirector={isDirector} isUdoPsi={isUdoPsi} onSaved={() => setActiveTab('scia')} />}
               {activeTab === 'scia'       && <SciaTab       facility={facility} scia={data.scia}             invalidate={invalidate} canEdit={canEdit} />}
               {activeTab === 'manuale'    && <ManualeTab    facility={facility} manuali={data.manuali}       profilo={data.profilo}  invalidate={invalidate} canGenerate={canGenerate} isUdoPsi={isUdoPsi} />}
               {activeTab === 'analisi'    && <AnalisiTab    facility={facility} analisi={data.analisi}       invalidate={invalidate} canEdit={canEdit} />}
@@ -172,7 +172,7 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
 // ══════════════════════════════════════════════════════════════
 // TAB 1 — PROFILO HACCP
 // ══════════════════════════════════════════════════════════════
-function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi }) {
+function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSaved }) {
   const EMPTY = {
     modello_ristorazione:        'cucina_interna',
     piva_osa:                    '',
@@ -321,6 +321,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi }) {
       if (error) throw error;
       await invalidate.profilo();
       await invalidate.semafori();
+      onSaved?.();
     } catch (err) {
       alert('Errore salvataggio: ' + err.message);
     } finally {
@@ -502,12 +503,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi }) {
         <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2">
           Dati revisione manuale
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <label className={LBL}>Rev. precedente</label>
-            <input type="text" value={form.rev_precedente} onChange={set('rev_precedente')} className={INP}
-              placeholder="es. 0 – prima emissione" />
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div>
             <label className={LBL}>N° revisione corrente</label>
             <input type="text" value={form.rev_corrente} onChange={set('rev_corrente')} className={INP}
@@ -912,14 +908,22 @@ function UploadPdf({ facilityId, sciaId, tipoLabel, onDone, onCancel }) {
 }
 
 function SciaCard({ scia, facilityId, onUpdateStato, onUploadDone, canEdit }) {
-  const statoCfg = STATI_SCIA.find(s => s.value === scia.stato) || STATI_SCIA[1];
+  const statoCfg  = STATI_SCIA.find(s => s.value === scia.stato) || STATI_SCIA[1];
   const [showUpload, setShowUpload] = useState(false);
+  const [nota, setNota]             = useState(scia.note || '');
+  const [savingNota, setSavingNota] = useState(false);
 
   const tipoLabel = {
     notifica_852:    'Notifica 852/2004',
     scia_commerciale:'SCIA Commerciale',
     scia_fornitore:  'SCIA Fornitore',
   }[scia.tipo] || scia.tipo;
+
+  const handleSaveNota = async () => {
+    setSavingNota(true);
+    await supabase.from('haccp_scia').update({ note: nota || null }).eq('id', scia.id);
+    setSavingNota(false);
+  };
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -948,7 +952,23 @@ function SciaCard({ scia, facilityId, onUpdateStato, onUploadDone, canEdit }) {
           {scia.portale_suap       && <div><span className="font-bold text-slate-400">Portale:</span> {scia.portale_suap}</div>}
           {scia.comune_suap        && <div><span className="font-bold text-slate-400">Comune:</span> {scia.comune_suap}</div>}
         </div>
-        {scia.note && <p className="text-xs text-slate-400 italic border-t border-slate-100 pt-2">{scia.note}</p>}
+
+        {/* Note — sempre visibile, editabile se canEdit */}
+        {canEdit ? (
+          <div className="flex items-start gap-2 pt-1 border-t border-slate-100">
+            <textarea
+              value={nota}
+              onChange={e => setNota(e.target.value)}
+              onBlur={handleSaveNota}
+              rows={2}
+              placeholder="Note sulla SCIA (es. solo somministrazione interna, da voltare, intestata a precedente gestore…)"
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 outline-none focus:border-amber-400 resize-none"
+            />
+            {savingNota && <Loader2 size={13} className="animate-spin text-amber-400 mt-2 shrink-0" />}
+          </div>
+        ) : (
+          nota && <p className="text-xs text-slate-400 italic border-t border-slate-100 pt-2">{nota}</p>
+        )}
 
         {/* Azioni PDF */}
         <div className="flex items-center gap-2 pt-1">
@@ -1876,12 +1896,6 @@ function NoteOperativeSection({ form, set, modello }) {
         </div>
       </div>
 
-      {/* ── NOTE LIBERE RESIDUALI ── */}
-      <div>
-        <label className={LBL}>Altre note operative non coperte sopra</label>
-        <textarea value={form.note_operative} onChange={set('note_operative')} rows={2} className={INP}
-          placeholder="Qualsiasi altra specificità rilevante per il manuale HACCP..." />
-      </div>
     </section>
   );
 }

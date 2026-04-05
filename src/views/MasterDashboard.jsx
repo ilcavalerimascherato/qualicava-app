@@ -11,7 +11,7 @@
  */
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChefHat, ArrowLeft, Search, Filter } from 'lucide-react';
+import { ChefHat, ArrowLeft, Search, Filter, BookOpen } from 'lucide-react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useHaccpSemafori } from '../hooks/useHaccpData';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
@@ -30,7 +30,7 @@ export default function MasterDashboard() {
   const facilityIdParam = searchParams.get('facility');
 
   const { data, loading } = useDashboardData(new Date().getFullYear());
-  const { semafori, loading: loadingSem } = useHaccpSemafori();
+  const { semafori, scadenzario, loading: loadingSem } = useHaccpSemafori();
 
   const [search,          setSearch]          = useState('');
   const [filterSemaforo,  setFilterSemaforo]  = useState('all');
@@ -47,11 +47,15 @@ export default function MasterDashboard() {
 
   // Arricchisce facilities con semaforo HACCP
   const enriched = useMemo(() => {
-    return data.facilities.map(f => ({
-      ...f,
-      haccp_semaforo: semafori[f.id] ?? (f.haccp_obbligatorio ? 'grigio' : null),
-    }));
-  }, [data.facilities, semafori]);
+    return data.facilities.map(f => {
+      const sc = scadenzario?.[f.id];
+      return {
+        ...f,
+        haccp_semaforo:    semafori[f.id] ?? (f.haccp_obbligatorio ? 'grigio' : null),
+        manuale_presente:  sc ? !!sc.manuale_scadenza : false,
+      };
+    });
+  }, [data.facilities, semafori, scadenzario]);
 
   // Regioni disponibili per filtro
   const regioni = useMemo(() => {
@@ -107,7 +111,7 @@ export default function MasterDashboard() {
               </div>
               <div>
                 <h1 className="text-lg font-black tracking-tight text-slate-900">
-                  MASTER HACCP <span className="text-amber-500">GRUPPO OVER</span>
+                  HACCP <span className="text-amber-500">GRUPPO OVER</span>
                 </h1>
                 <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
                   Gestione sicurezza alimentare · {counts.totale} strutture soggette
@@ -218,6 +222,7 @@ function HaccpCard({ f, udos, onClick }) {
   const semaforo = f.haccp_semaforo ?? (f.haccp_obbligatorio ? 'grigio' : null);
   const cfg      = SEMAFORO_CFG[semaforo] ?? SEMAFORO_CFG.grigio;
   const udoName  = udos?.find(u => u.id === f.udo_id)?.name || '';
+  const haManualeArchiviato = f.manuale_presente;
 
   return (
     <div
@@ -233,7 +238,7 @@ function HaccpCard({ f, udos, onClick }) {
       `}
       style={{ borderTopWidth: '4px', borderTopColor: f.udo_color || '#cbd5e1' }}
     >
-      {/* Cappello semaforo */}
+      {/* Nome + cappello */}
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-xs font-black text-slate-800 leading-tight line-clamp-2 flex-1">
           {f.name}
@@ -253,15 +258,34 @@ function HaccpCard({ f, udos, onClick }) {
         <p className="text-[10px] text-slate-400 truncate">{f.region}</p>
       )}
 
-      {/* Badge stato */}
-      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg ${cfg.bg} border ${cfg.border} mt-auto`}>
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
-        <span className={`text-[10px] font-black uppercase tracking-widest ${cfg.color}`}>
-          {f.haccp_obbligatorio ? cfg.label : 'Non HACCP'}
-        </span>
+      {/* Badge doppio: semaforo sx | manuale dx */}
+      <div className="flex gap-1.5 mt-auto">
+        {/* Metà sinistra — stato semaforo */}
+        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg flex-1 ${cfg.bg} border ${cfg.border}`}
+          title={cfg.label}>
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+          <span className={`text-[10px] font-black uppercase tracking-widest truncate ${cfg.color}`}>
+            {f.haccp_obbligatorio ? cfg.label : 'Non HACCP'}
+          </span>
+        </div>
+
+        {/* Metà destra — manuale archiviato */}
+        {f.haccp_obbligatorio && (
+          <div
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg border ${
+              haManualeArchiviato
+                ? 'bg-emerald-50 border-emerald-200'
+                : 'bg-red-50 border-red-200'
+            }`}
+            title={haManualeArchiviato ? 'Manuale prodotto e archiviato' : 'Manuale non ancora prodotto'}
+          >
+            <BookOpen
+              size={12}
+              className={haManualeArchiviato ? 'text-emerald-500' : 'text-red-400'}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
-// Fine MasterDashboard

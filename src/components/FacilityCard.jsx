@@ -10,34 +10,10 @@
  */
 import React, { memo, useMemo } from 'react';
 import {
-  Settings, Database, BarChart3, Activity, Archive,
-  ArchiveRestore, CheckCircle2, ExternalLink, ChefHat
+  Settings, Database, BarChart3, Archive,
+  ArchiveRestore, ExternalLink, ChefHat
 } from 'lucide-react';
 import { calcFacilityRiskScore, RISK_BADGE } from '../utils/riskScoreEngine';
-
-const ICON_STYLES = {
-  empty:     'bg-slate-50 text-slate-400 hover:bg-slate-200 hover:text-slate-600 border-slate-200',
-  pending:   'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border-indigo-200 shadow-sm',
-  completed: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 border-emerald-200 shadow-sm',
-};
-
-const STATUS_LABELS = {
-  empty:     'Carica dati',
-  pending:   'Da elaborare',
-  completed: 'Relazione OK',
-};
-
-function SurveyButton({ status, icon: Icon, label, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center justify-center w-8 h-7 rounded-md border transition-all ${ICON_STYLES[status]}`}
-      title={`${label} — ${STATUS_LABELS[status]}`}
-    >
-      <Icon size={14} className={status === 'empty' ? 'opacity-50' : ''} />
-    </button>
-  );
-}
 
 const FacilityCard = memo(function FacilityCard({
   f,
@@ -73,12 +49,6 @@ const FacilityCard = memo(function FacilityCard({
     : f.isKpiGreen
     ? 'ok'
     : 'todo';
-
-  const kpiCfg = {
-    ok:     { cls: 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100', Icon: CheckCircle2, label: 'KPI' },
-    future: { cls: 'bg-slate-100 border-slate-200 text-slate-400 cursor-default',            Icon: Activity,     label: 'KPI N/D' },
-    todo:   { cls: 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white', Icon: Activity, label: 'KPI' },
-  }[kpiState];
 
   // Semaforo HACCP — colore cappello da chef
   const haccpCfg = !f.haccp_obbligatorio
@@ -171,45 +141,71 @@ const FacilityCard = memo(function FacilityCard({
         </div>
       </div>
 
-      {/* Footer: KPI + Survey */}
-      <div className="mt-2 flex justify-between items-center pt-3 border-t border-slate-50">
+      {/* Footer: tutte le icone allineate a destra */}
+      <div className="mt-2 flex justify-end items-center pt-3 border-t border-slate-50 gap-2">
+
+        {/* Cappello HACCP */}
+        <button
+          onClick={() => onHaccpClick && onHaccpClick(f)}
+          disabled={!f.haccp_obbligatorio}
+          className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all
+            ${f.haccp_obbligatorio ? `${haccpCfg.bg} cursor-pointer` : 'cursor-default'}`}
+          title={haccpCfg.title}
+        >
+          <ChefHat size={15} className={haccpCfg.color} />
+        </button>
+
+        {/* KPI — scritta colorata */}
         <button
           onClick={() => kpiState !== 'future' && onKpiClick(f)}
           disabled={kpiState === 'future'}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border transition-all group/kpi shadow-sm ${kpiCfg.cls}`}
-          title={kpiState === 'future' ? 'Nessun mese rendicontabile per questo anno' : kpiState === 'ok' ? 'KPI in regola' : 'Gestione KPI mensili'}
+          className={`flex items-center justify-center h-7 px-1.5 rounded-lg transition-all ${
+            kpiState === 'ok'     ? 'hover:bg-emerald-50' :
+            kpiState === 'future' ? 'cursor-default'       :
+                                   'hover:bg-indigo-50'
+          }`}
+          title={kpiState === 'future' ? 'Nessun mese rendicontabile' : kpiState === 'ok' ? 'KPI in regola' : 'KPI da completare'}
         >
-          <kpiCfg.Icon size={13} className={kpiState === 'todo' ? 'group-hover/kpi:animate-pulse' : ''} />
-          <span className="text-[10px] font-black uppercase tracking-wider">{kpiCfg.label}</span>
+          <span className={`text-[11px] font-black tracking-wider ${
+            kpiState === 'ok'     ? 'text-emerald-500' :
+            kpiState === 'future' ? 'text-slate-300'   :
+                                   'text-indigo-500'
+          }`}>KPI</span>
         </button>
 
-        <div className="flex gap-1.5 items-center">
-          {/* Cappello HACCP — sempre visibile, colore semaforo */}
-          <button
-            onClick={() => onHaccpClick && onHaccpClick(f)}
-            disabled={!f.haccp_obbligatorio}
-            className={`flex items-center justify-center w-8 h-7 rounded-md border transition-all
-              ${f.haccp_obbligatorio
-                ? `border-transparent ${haccpCfg.bg} cursor-pointer`
-                : 'border-transparent cursor-default'
-              }`}
-            title={haccpCfg.title}
-          >
-            <ChefHat size={15} className={haccpCfg.color} />
-          </button>
-          <SurveyButton
-            status={f.clientStatus}
-            icon={BarChart3}
-            label="Clienti"
-            onClick={() => onDataClick(f, 'client')}
-          />
-          <SurveyButton
-            status={f.staffStatus}
-            icon={Database}
-            label="Operatori"
-            onClick={() => onDataClick(f, 'operator')}
-          />
-        </div>
+        {/* Clienti */}
+        <button
+          onClick={() => onDataClick(f, 'client')}
+          className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all ${
+            f.clientStatus === 'completed' ? 'hover:bg-emerald-50' :
+            f.clientStatus === 'pending'   ? 'hover:bg-indigo-50'  :
+                                            'hover:bg-slate-100'
+          }`}
+          title={`Clienti — ${f.clientStatus === 'completed' ? 'Relazione OK' : f.clientStatus === 'pending' ? 'Da elaborare' : 'Carica dati'}`}
+        >
+          <BarChart3 size={14} className={
+            f.clientStatus === 'completed' ? 'text-emerald-500' :
+            f.clientStatus === 'pending'   ? 'text-indigo-500'  :
+                                            'text-slate-300'
+          } />
+        </button>
+
+        {/* Operatori */}
+        <button
+          onClick={() => onDataClick(f, 'operator')}
+          className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all ${
+            f.staffStatus === 'completed' ? 'hover:bg-emerald-50' :
+            f.staffStatus === 'pending'   ? 'hover:bg-indigo-50'  :
+                                           'hover:bg-slate-100'
+          }`}
+          title={`Operatori — ${f.staffStatus === 'completed' ? 'Relazione OK' : f.staffStatus === 'pending' ? 'Da elaborare' : 'Carica dati'}`}
+        >
+          <Database size={14} className={
+            f.staffStatus === 'completed' ? 'text-emerald-500' :
+            f.staffStatus === 'pending'   ? 'text-indigo-500'  :
+                                           'text-slate-300'
+          } />
+        </button>
       </div>
     </div>
   );

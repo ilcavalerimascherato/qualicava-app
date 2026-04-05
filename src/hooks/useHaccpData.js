@@ -25,15 +25,16 @@ export function useHaccpSemafori() {
     staleTime: 5 * 60 * 1000, // 5 minuti
   });
 
-  // Costruisce mappa facility_id → semaforo
   const semafori = {};
+  const scadenzario = {};
   if (data) {
     data.forEach(row => {
-      semafori[row.struttura_id] = row.semaforo;
+      semafori[row.struttura_id]    = row.semaforo;
+      scadenzario[row.struttura_id] = row;
     });
   }
 
-  return { semafori, loading: isLoading, error };
+  return { semafori, scadenzario, loading: isLoading, error };
 }
 
 // ── useHaccpFascicolo ─────────────────────────────────────────

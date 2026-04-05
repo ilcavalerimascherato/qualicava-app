@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
-  Settings, LogOut, ShieldCheck, Map,
+  Settings, LogOut, ShieldCheck, ChefHat,
   Search, Grid2X2, Grid3X3, LayoutGrid, FileSignature, BarChart2, PawPrint
 } from 'lucide-react';
 
@@ -190,7 +190,7 @@ export default function App() {
               onClick={() => navigate('/master')}
               className="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
             >
-              <Map size={14} /> Master
+              <ChefHat size={14} /> HACCP
             </button>
 
             <button
@@ -217,7 +217,7 @@ export default function App() {
             {isAdmin && (
               <button
                 onClick={() => { setSelectedFacility(null); open('facility'); }}
-                className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
+                className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
               >
                 + Struttura
               </button>
