@@ -55,28 +55,24 @@ const INP2 = 'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-
 const LBL  = 'block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5';
 
 // ── Sezioni manuale (speculare al configuratore HTML) ─────────
-const SEZIONI_BASE = [
-  { k: 'intro',        label: 'Introduzione e definizioni HACCP' },
-  { k: 'normativa',    label: 'Normativa di riferimento' },
-  { k: 'cultura',      label: 'Cultura sicurezza alimentare' },
-  { k: 'team',         label: 'Gruppo HACCP e team' },
-  { k: 'struttura',    label: 'Paragrafo struttura' },
-  { k: 'diagrammi',    label: 'Diagrammi di flusso' },
-  { k: 'ccp',          label: 'Analisi pericoli e CCP' },
-  { k: 'celiachia',    label: 'Celiachia e allergeni' },
+// Sezioni sempre attive (non selezionabili)
+const SEZIONI_FISSE = [
+  'intro', 'normativa', 'cultura', 'struttura', 'diagrammi', 'ccp', 'celiachia',
 ];
+// Sezione base selezionabile
+const SEZIONE_TEAM = { k: 'team', label: 'Gruppo HACCP e composizione del team', desc: 'Organigramma HACCP, ruoli e responsabilità dei membri del team' };
+// Sezioni opzionali non coperte da "Specificità ospiti" — stile checkbox con descrizione
 const SEZIONI_OPT = [
-  { k: 'microbio',        label: 'Piano analisi microbiologiche' },
-  { k: 'formazione',      label: 'Piano formazione' },
-  { k: 'manutenzione',    label: 'Manutenzione e taratura' },
-  { k: 'documentazione',  label: 'Documentazione e archiviazione' },
-  { k: 'srtr',            label: 'Specificità SRTR psichiatrica' },
-  { k: 'monouso',         label: 'Pazienti infetti — pasto monouso' },
-  { k: 'disfagia',        label: 'Ospiti disfagici' },
-  { k: 'abbattuto',       label: 'Teglie abbattute (cena)' },
-  { k: 'riabilitazione',  label: 'Coinvolgimento pazienti (riabilitazione)' },
+  { k: 'microbio',       label: 'Piano analisi microbiologiche',     desc: 'Superfici, mani operatori, acqua — frequenze e parametri' },
+  { k: 'formazione',     label: 'Piano formazione',                  desc: 'Calendario formativo, ore obbligatorie per regione, attestati' },
+  { k: 'manutenzione',   label: 'Manutenzione e taratura',           desc: 'Registro manutenzioni attrezzature, taratura strumenti di misura' },
+  { k: 'documentazione', label: 'Documentazione e archiviazione',    desc: 'Elenco moduli, tempi di conservazione, gestione dei registri' },
 ];
-const SEZIONI_BASE_DEFAULT = SEZIONI_BASE.map(s => s.k); // tutte attive per default
+// Le sezioni ospiti (disfagia, srtr, monouso, abbattuto, riabilitazione)
+// NON appaiono qui — vengono incluse automaticamente dal buildPrompt
+// in base alle checkbox di "Specificità ospiti" già compilate sopra
+
+const SEZIONI_BASE_DEFAULT = [...SEZIONI_FISSE, 'team'];
 
 // ── Componente principale ─────────────────────────────────────
 export default function HaccpFascicoloModal({ facility, onClose }) {
@@ -88,6 +84,21 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
 
   const { data, loading }         = useHaccpFascicolo(facility?.id);
   const invalidate                = useHaccpInvalidate(facility?.id);
+
+  // Rileva automaticamente se la struttura è PSI dalla tabella udos
+  const [isUdoPsi, setIsUdoPsi]   = useState(false);
+  useEffect(() => {
+    if (!facility?.udo_id) return;
+    supabase
+      .from('udos')
+      .select('name')
+      .eq('id', facility.udo_id)
+      .single()
+      .then(({ data: udoData }) => {
+        const nome = (udoData?.name || '').toUpperCase();
+        setIsUdoPsi(nome.includes('PSI') || nome.includes('PSICHI') || nome.includes('SRTR'));
+      });
+  }, [facility?.udo_id]);
 
   const semaforo = data.scadenzario?.semaforo ?? 'grigio';
   const semCfg   = SEMAFORO_CFG[semaforo] ?? SEMAFORO_CFG.grigio;
@@ -145,9 +156,9 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
             </div>
           ) : (
             <>
-              {activeTab === 'profilo'    && <ProfiloTab    facility={facility} profilo={data.profilo}       invalidate={invalidate} isDirector={isDirector} />}
+              {activeTab === 'profilo'    && <ProfiloTab    facility={facility} profilo={data.profilo}       invalidate={invalidate} isDirector={isDirector} isUdoPsi={isUdoPsi} />}
               {activeTab === 'scia'       && <SciaTab       facility={facility} scia={data.scia}             invalidate={invalidate} canEdit={canEdit} />}
-              {activeTab === 'manuale'    && <ManualeTab    facility={facility} manuali={data.manuali}       profilo={data.profilo}  invalidate={invalidate} canGenerate={canGenerate} />}
+              {activeTab === 'manuale'    && <ManualeTab    facility={facility} manuali={data.manuali}       profilo={data.profilo}  invalidate={invalidate} canGenerate={canGenerate} isUdoPsi={isUdoPsi} />}
               {activeTab === 'analisi'    && <AnalisiTab    facility={facility} analisi={data.analisi}       invalidate={invalidate} canEdit={canEdit} />}
               {activeTab === 'formazione' && <FormazioneTab facility={facility} formazione={data.formazione} invalidate={invalidate} canEdit={canEdit} />}
             </>
@@ -161,9 +172,10 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
 // ══════════════════════════════════════════════════════════════
 // TAB 1 — PROFILO HACCP
 // ══════════════════════════════════════════════════════════════
-function ProfiloTab({ facility, profilo, invalidate, isDirector }) {
+function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi }) {
   const EMPTY = {
     modello_ristorazione:        'cucina_interna',
+    piva_osa:                    '',
     fornitore_nome:              '',
     fornitore_piva:              '',
     fornitore_ha_scia:           false,
@@ -171,6 +183,8 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector }) {
     lr_attuale:                  '',
     r_haccp:                     '',
     r_haccp_formazione_scadenza: '',
+    // Gruppo HACCP dinamico — array di { ruolo, nome }
+    team_haccp:                  [],
     // Apparecchiature e logistica (comuni)
     apparecchiature_frigorifere: '',
     n_cucina:                    '',
@@ -212,6 +226,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector }) {
       const sa = profilo.sezioni_attive || {};
       setForm({
         modello_ristorazione:        profilo.modello_ristorazione        || 'cucina_interna',
+        piva_osa:                    sa.piva_osa                         || '',
         fornitore_nome:              profilo.fornitore_nome              || '',
         fornitore_piva:              profilo.fornitore_piva              || '',
         fornitore_ha_scia:           profilo.fornitore_ha_scia           || false,
@@ -219,6 +234,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector }) {
         lr_attuale:                  profilo.lr_attuale                  || '',
         r_haccp:                     profilo.r_haccp                     || '',
         r_haccp_formazione_scadenza: profilo.r_haccp_formazione_scadenza || '',
+        team_haccp:                  sa.team_haccp                       || [],
         apparecchiature_frigorifere: profilo.apparecchiature_frigorifere || '',
         n_cucina:                    profilo.unita_cucina                || '',
         n_distribuzione:             sa.n_distribuzione                  || '',
@@ -258,6 +274,8 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector }) {
     try {
       // Costruisco sezioni_attive jsonb con tutti i campi operativi
       const sezioni_attive = {
+        piva_osa:                form.piva_osa,
+        team_haccp:              form.team_haccp,
         sezioni_manuale:         form.sezioni_manuale,
         rev_precedente:          form.rev_precedente,
         rev_corrente:            form.rev_corrente,
@@ -366,24 +384,113 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector }) {
         </section>
       )}
 
-      {/* Responsabili */}
-      <section className="space-y-4">
+      {/* Responsabili e Gruppo HACCP */}
+      <section className="space-y-5">
         <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2">
           Responsabili
         </h3>
+
+        {/* P.IVA OSA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className={LBL}>Legale Rappresentante attuale</label>
-            <input type="text" value={form.lr_attuale} onChange={set('lr_attuale')} className={INP} placeholder="Nome Cognome" />
+            <label className={LBL}>P.IVA OSA (Ragione sociale che presenta la SCIA)</label>
+            <input type="text" value={form.piva_osa} onChange={set('piva_osa')} className={INP}
+              placeholder="es. IT12345678901" />
+          </div>
+        </div>
+
+        {/* LR e R-HACCP — sempre fissi */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className={LBL}>Legale Rappresentante attuale *</label>
+            <input type="text" value={form.lr_attuale} onChange={set('lr_attuale')} className={INP}
+              placeholder="Nome Cognome" />
           </div>
           <div>
-            <label className={LBL}>Responsabile HACCP (R-HACCP)</label>
-            <input type="text" value={form.r_haccp} onChange={set('r_haccp')} className={INP} placeholder="Nome Cognome" />
+            <label className={LBL}>Responsabile HACCP (R-HACCP) *</label>
+            <input type="text" value={form.r_haccp} onChange={set('r_haccp')} className={INP}
+              placeholder="Nome Cognome" />
           </div>
           <div>
             <label className={LBL}>Scadenza formazione R-HACCP</label>
-            <input type="date" value={form.r_haccp_formazione_scadenza} onChange={set('r_haccp_formazione_scadenza')} className={INP} />
+            <input type="date" value={form.r_haccp_formazione_scadenza}
+              onChange={set('r_haccp_formazione_scadenza')} className={INP} />
           </div>
+        </div>
+
+        {/* Gruppo HACCP dinamico */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-black text-slate-500 uppercase tracking-widest">
+              Altri membri del Gruppo HACCP
+            </p>
+            <button type="button"
+              onClick={() => setForm(p => ({
+                ...p,
+                team_haccp: [...p.team_haccp, { ruolo: '', nome: '' }]
+              }))}
+              className="flex items-center gap-1.5 text-xs font-black text-amber-600 border border-amber-200 hover:bg-amber-50 px-3 py-1.5 rounded-xl transition-colors"
+            >
+              <Plus size={12} /> Aggiungi membro
+            </button>
+          </div>
+
+          {form.team_haccp.length === 0 && (
+            <p className="text-xs text-slate-400 italic px-1">
+              Nessun membro aggiuntivo. Premi "+" per aggiungere (es. Direttore, Cuoco, Referente Igiene, Dietista…)
+            </p>
+          )}
+
+          <div className="space-y-2">
+            {form.team_haccp.map((membro, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={membro.ruolo}
+                  onChange={e => {
+                    const updated = form.team_haccp.map((m, i) =>
+                      i === idx ? { ...m, ruolo: e.target.value } : m
+                    );
+                    setForm(p => ({ ...p, team_haccp: updated }));
+                  }}
+                  className={INP2 + ' flex-1'}
+                  placeholder="Ruolo (es. Direttore, Cuoco, Dietista)"
+                />
+                <input
+                  type="text"
+                  value={membro.nome}
+                  onChange={e => {
+                    const updated = form.team_haccp.map((m, i) =>
+                      i === idx ? { ...m, nome: e.target.value } : m
+                    );
+                    setForm(p => ({ ...p, team_haccp: updated }));
+                  }}
+                  className={INP2 + ' flex-1'}
+                  placeholder="Nome Cognome (opzionale)"
+                />
+                <button type="button"
+                  onClick={() => setForm(p => ({
+                    ...p,
+                    team_haccp: p.team_haccp.filter((_, i) => i !== idx)
+                  }))}
+                  className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Banner UDO PSI — SRTR automatico */}
+          {isUdoPsi && (
+            <div className="flex items-start gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
+              <span className="text-indigo-500 text-sm mt-0.5">ℹ</span>
+              <p className="text-xs font-bold text-indigo-700">
+                Struttura PSI — la sezione <strong>Specificità SRTR psichiatrica</strong> verrà inclusa
+                automaticamente nel manuale HACCP.
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -419,58 +526,79 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector }) {
         <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2 mt-2">
           Sezioni manuale da includere
         </h3>
+
+        {/* Sezioni fisse — sempre incluse, non modificabili */}
         <div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Sezioni base (sempre incluse)</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+            Sempre incluse
+          </p>
           <div className="flex flex-wrap gap-2">
-            {SEZIONI_BASE.map(s => {
-              const attiva = form.sezioni_manuale.includes(s.k);
-              return (
-                <button key={s.k} type="button"
-                  onClick={() => {
-                    const current = form.sezioni_manuale;
-                    set('sezioni_manuale')({ target: { value: attiva
-                      ? current.filter(k => k !== s.k)
-                      : [...current, s.k]
-                    }});
-                  }}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
-                    attiva
-                      ? 'bg-amber-100 text-amber-700 border-amber-400'
-                      : 'bg-slate-100 text-slate-400 border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
+            {['Introduzione e definizioni', 'Normativa di riferimento', 'Cultura sicurezza alimentare',
+              'Paragrafo struttura', 'Diagrammi di flusso', 'Analisi pericoli e CCP', 'Celiachia e allergeni'
+            ].map(label => (
+              <span key={label}
+                className="px-3 py-1.5 rounded-full text-xs font-bold border bg-slate-100 text-slate-500 border-slate-200 cursor-default">
+                ✓ {label}
+              </span>
+            ))}
           </div>
         </div>
-        <div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Sezioni opzionali</p>
-          <div className="flex flex-wrap gap-2">
-            {SEZIONI_OPT.map(s => {
-              const attiva = form.sezioni_manuale.includes(s.k);
-              return (
-                <button key={s.k} type="button"
-                  onClick={() => {
-                    const current = form.sezioni_manuale;
-                    set('sezioni_manuale')({ target: { value: attiva
-                      ? current.filter(k => k !== s.k)
-                      : [...current, s.k]
-                    }});
-                  }}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
-                    attiva
-                      ? 'bg-indigo-100 text-indigo-700 border-indigo-400'
-                      : 'bg-slate-100 text-slate-400 border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
+
+        {/* Team HACCP — selezionabile */}
+        <div
+          onClick={() => {
+            const cur    = form.sezioni_manuale;
+            const attiva = cur.includes('team');
+            set('sezioni_manuale')({ target: { value: attiva ? cur.filter(k => k !== 'team') : [...cur, 'team'] }});
+          }}
+          className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+            form.sezioni_manuale.includes('team')
+              ? 'border-amber-400 bg-amber-50'
+              : 'border-slate-200 hover:border-slate-300 bg-white'
+          }`}
+        >
+          <input type="checkbox" readOnly checked={form.sezioni_manuale.includes('team')}
+            className="mt-0.5 accent-amber-500 w-4 h-4 shrink-0" />
+          <div>
+            <p className="text-sm font-black text-slate-700">{SEZIONE_TEAM.label}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{SEZIONE_TEAM.desc}</p>
           </div>
         </div>
+
+        {/* Sezioni opzionali — stile specificità ospiti */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Sezioni opzionali
+          </p>
+          {SEZIONI_OPT.map(s => {
+            const attiva = form.sezioni_manuale.includes(s.k);
+            return (
+              <div key={s.k}
+                onClick={() => {
+                  const cur = form.sezioni_manuale;
+                  set('sezioni_manuale')({ target: { value: attiva ? cur.filter(k => k !== s.k) : [...cur, s.k] }});
+                }}
+                className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                  attiva
+                    ? 'border-indigo-400 bg-indigo-50'
+                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                }`}
+              >
+                <input type="checkbox" readOnly checked={attiva}
+                  className="mt-0.5 accent-indigo-500 w-4 h-4 shrink-0" />
+                <div>
+                  <p className="text-sm font-black text-slate-700">{s.label}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{s.desc}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="text-[10px] text-slate-400 italic">
+          Le sezioni relative a ospiti disfagici, SRTR, pazienti infetti, teglie abbattute e riabilitazione
+          vengono incluse automaticamente in base alle specificità indicate sopra.
+        </p>
       </section>
 
       {/* Salva */}
@@ -878,7 +1006,7 @@ function SciaCard({ scia, facilityId, onUpdateStato, onUploadDone, canEdit }) {
 // ══════════════════════════════════════════════════════════════
 // TAB 3 — MANUALE
 // ══════════════════════════════════════════════════════════════
-function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate }) {
+function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, isUdoPsi }) {
   const [generating, setGenerating] = useState(false);
   const [generatedText, setGeneratedText] = useState('');
   const [showGenerated, setShowGenerated] = useState(false);
@@ -899,10 +1027,25 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate }) {
       distribuzione_veicolata:'SOLO DISTRIBUZIONE pasti veicolati da centro cottura esterno',
     }[p.modello_ristorazione] || p.modello_ristorazione;
 
-    const sezioniLabel = [...SEZIONI_BASE, ...SEZIONI_OPT]
-      .filter(s => sezioni.includes(s.k))
-      .map(s => s.label)
-      .join(', ');
+    const sezioniLabel = [
+      ...SEZIONI_FISSE.map(k => {
+        const labels = {
+          intro: 'Introduzione e definizioni', normativa: 'Normativa di riferimento',
+          cultura: 'Cultura sicurezza alimentare', struttura: 'Paragrafo struttura',
+          diagrammi: 'Diagrammi di flusso', ccp: 'Analisi pericoli e CCP',
+          celiachia: 'Celiachia e allergeni',
+        };
+        return labels[k] || k;
+      }),
+      ...(sezioni.includes('team') ? [SEZIONE_TEAM.label] : []),
+      ...SEZIONI_OPT.filter(s => sezioni.includes(s.k)).map(s => s.label),
+      // Sezioni ospiti da specificità operative
+      ...(sa.op_disfagici     ? ['Ospiti disfagici']                        : []),
+      ...(sa.op_srtr || isUdoPsi ? ['Specificità SRTR psichiatrica']            : []),
+      ...(sa.op_monouso_infetti ? ['Pazienti infetti — pasto monouso']      : []),
+      ...(sa.op_cena_abbattuta  ? ['Teglie abbattute (cena)']                : []),
+      ...(sa.op_riabilitazione  ? ['Coinvolgimento pazienti riabilitazione'] : []),
+    ].join(', ');
 
     const righeFreigo = p.apparecchiature_frigorifere
       ? p.apparecchiature_frigorifere.split('\n').filter(Boolean).join('\n')
@@ -914,6 +1057,7 @@ Il documento deve essere formattato come un manuale aziendale reale, con intesta
 
 ━━ DATI STRUTTURA ━━
 Ragione sociale OSA: ${facility.name}
+P.IVA OSA: ${sa.piva_osa || '—'}
 Tipo struttura: ${facility.udo_name || 'struttura socio-sanitaria'}
 Regione: ${facility.region || ''}
 Indirizzo: ${facility.address || ''}
@@ -923,9 +1067,10 @@ ${modelloLabel}
 ${p.fornitore_nome ? `Fornitore: ${p.fornitore_nome}${p.fornitore_piva ? ' (P.IVA ' + p.fornitore_piva + ')' : ''}` : ''}
 ${p.fornitore_ha_scia && p.fornitore_scia_estremi ? `SCIA fornitore: ${p.fornitore_scia_estremi}` : ''}
 
-━━ RESPONSABILI ━━
+━━ RESPONSABILI E GRUPPO HACCP ━━
 Legale Rappresentante / OSA: ${p.lr_attuale || '—'}
 Responsabile HACCP struttura (R-HACCP): ${p.r_haccp || '—'}
+${(sa.team_haccp || []).filter(m => m.ruolo).map(m => `${m.ruolo}: ${m.nome || '(da nominare)'}`).join('\n')}
 Redatto da: ${sa.redattore || 'Ufficio Qualità OVER'}
 Rev. precedente: ${sa.rev_precedente || '0 – prima emissione'}
 Rev. corrente: ${sa.rev_corrente || '1'}  Data: ${sa.data_revisione || new Date().toLocaleDateString('it-IT')}
@@ -945,7 +1090,7 @@ ${sa.op_distributore_acqua ? `Distributore acqua: ${sa.op_distributore_acqua_not
 ${sa.op_disfagici ? `Ospiti disfagici: SÌ — ${sa.op_disfagici_note || 'gestione dedicata'}` : 'Ospiti disfagici: NO'}
 ${sa.op_cena_abbattuta ? `Cena con teglie abbattute: SÌ — ${sa.op_cena_abbattuta_note || 'riattivazione ≥75°C'}` : ''}
 ${sa.op_cucinette_nuclei ? `Cucinette di nucleo: SÌ — ${sa.op_cucinette_note || 'per colazione e merenda'}` : ''}
-${sa.op_srtr ? 'Struttura SRTR psichiatrica: SÌ' : ''}
+${(sa.op_srtr || isUdoPsi) ? 'Struttura SRTR psichiatrica: SÌ (UDO PSI automatico)' : ''}
 ${sa.op_monouso_infetti ? 'Pazienti infetti con pasto monouso: SÌ' : ''}
 ${sa.op_riabilitazione ? 'Coinvolgimento pazienti in attività cucina: SÌ' : ''}
 ${sa.op_celiachia_note ? `Allergeni/celiachia: ${sa.op_celiachia_note}` : ''}
@@ -967,10 +1112,11 @@ ${facility.region ? `Per la regione ${facility.region}: includi normativa formaz
 - NON includere nomi di persone nel corpo del manuale (solo ruoli: LR, R-HACCP, ecc.)
 - Il registro revisioni deve riportare le revisioni indicate
 ${sezioni.includes('microbio') ? '- Piano analisi microbiologiche: superfici, mani operatori, acqua (NO campionamento alimenti routinario)' : ''}
-${sezioni.includes('disfagia') ? '- Sezione disfagici: locale dedicato, frigorifero identificato, pasto nominale, procedure specifiche' : ''}
-${sezioni.includes('abbattuto') ? '- Gestione teglie abbattute: temperatura ricevimento ≤4°C, riattivazione ≥75°C al cuore' : ''}
-${sezioni.includes('srtr') ? '- Sezione SRTR: specificità psichiatrica, sicurezza posateria, gestione crisi' : ''}
-${sezioni.includes('monouso') ? '- Gestione pazienti infetti: pasto monouso, smaltimento come rifiuti speciali (non RSU)' : ''}`;
+${sa.op_disfagici       ? '- Sezione disfagici: locale dedicato, frigorifero identificato, pasto nominale, procedure specifiche' : ''}
+${sa.op_cena_abbattuta  ? '- Gestione teglie abbattute: temperatura ricevimento ≤4°C, riattivazione ≥75°C al cuore' : ''}
+${(sa.op_srtr || isUdoPsi) ? '- Sezione SRTR: sicurezza posateria (conta cutlery), supervisione tavoli, gestione crisi, pasto in camera per isolamento' : ''}
+${sa.op_monouso_infetti ? '- Gestione pazienti infetti: pasto monouso, smaltimento come rifiuti speciali (non RSU)' : ''}
+${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: procedure sicurezza, supervisione' : ''}`;
   };
 
   const handleGenera = async () => {
