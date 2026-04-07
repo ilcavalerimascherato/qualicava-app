@@ -237,13 +237,18 @@ serve(async (req) => {
     });
 
     const buffer = await Packer.toBuffer(doc);
+    const uint8  = new Uint8Array(buffer);
 
-    return new Response(buffer, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="Manuale_HACCP_${nomestruttura.replace(/\s+/g, '_')}_Rev${numRev}.docx"`,
-      },
+    // base64 robusto per buffer grandi
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8.length; i += chunkSize) {
+      binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
+    }
+    const base64 = btoa(binary);
+
+    return new Response(JSON.stringify({ docx_base64: base64 }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (err) {

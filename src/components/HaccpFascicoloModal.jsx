@@ -1289,16 +1289,23 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
 
       const { data: fnData, error: fnError } = await supabase.functions.invoke(
         'generate-haccp-docx',
-        { body: docxParams, responseType: 'arrayBuffer' }
+        { body: docxParams }
       );
 
-      if (fnError || !fnData) throw new Error(fnError?.message || 'Errore generazione .docx — riprova.');
+      if (fnError) throw new Error(fnError.message || 'Errore Edge Function generate-haccp-docx');
+      if (!fnData?.docx_base64) throw new Error(fnData?.error || 'Risposta vuota dalla Edge Function');
+
+      // Decodifica base64 → Uint8Array
+      const binaryStr = atob(fnData.docx_base64);
+      const bytes     = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+      const docxBuffer = bytes.buffer;
 
       // 2. Upload .docx in Storage
       const path = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.docx`;
       const { error: upErr } = await supabase.storage
         .from('haccp-documents')
-        .upload(path, fnData, {
+        .upload(path, docxBuffer, {
           contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           upsert: true,
         });
