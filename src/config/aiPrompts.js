@@ -236,6 +236,169 @@ Usa ESATTAMENTE questi titoli in maiuscolo:
 5. TEMPI STIMATI RAGGIUNGIMENTO OBIETTIVI
 `.trim(),
   },
+
+  // ── 8. HACCP → Manuale struttura ────────────────────────────
+  haccpManuale: {
+    required: ['facilityName', 'modello', 'lr', 'rHaccp'],
+    build: ({
+      facilityName, pivaOsa, udoName, region, address, bedCount,
+      modello, fornitoreNome, fornitorePiva, fornitoreScia,
+      lr, rHaccp, teamHaccp = [], redattore, revPrecedente, revCorrente, dataRevisione,
+      nucleiNote, orariDistribuzione,
+      apparecchiature,
+      macchinettaColazioni, macchinettaNote,
+      distributoreAcqua, distributoreNote,
+      opDisfagici, opDisfagiciNote,
+      opCenaAbbattuta, opCenaAbbatutaNote,
+      opCarrelloTermico,
+      opCucinette, opCucinetteNote,
+      opSrtr, opMonousoInfetti, opRiabilitazione,
+      opCeliaciaNote, noteOperative,
+      sezioni = [],
+      isUdoPsi = false,
+    }) => {
+      const isCucinaInterna = modello === 'cucina_interna';
+      const isAppalto       = modello === 'appalto_fresco_caldo';
+      const isEsterno       = isAppalto || modello === 'distribuzione_veicolata';
+
+      const modelloLabel = {
+        cucina_interna:          'CUCINA INTERNA – produzione diretta dei pasti da parte del personale OSA',
+        appalto_fresco_caldo:    'CUCINA IN APPALTO – pasti prodotti da fornitore in cucina presente in struttura; nostro personale distribuisce e sporziona',
+        distribuzione_veicolata: 'DISTRIBUZIONE VEICOLATA – pasti pronti da centro cottura esterno; nostro personale riceve, eventualmente riscalda, porziona e distribuisce. NON gestiamo fasi di produzione.',
+      }[modello] || modello;
+
+      const personale = isCucinaInterna
+        ? 'Personale cucina (cuochi/aiuto cuochi), ASA/OSS addetti alla distribuzione e sporzionamento.'
+        : isAppalto
+        ? 'ASA/OSS addetti al ricevimento, sporzionamento e distribuzione. Il personale di cucina è del fornitore.'
+        : 'ASA/OSS addetti al ricevimento, eventuale riattivazione, sporzionamento e distribuzione. Non abbiamo personale di cucina.';
+
+      const fasiCompetenza = isCucinaInterna
+        ? 'Ricevimento derrate, stoccaggio, preparazione, cottura, raffreddamento, porzionamento, distribuzione, lavaggio stoviglie, sanificazione.'
+        : isAppalto
+        ? `Ricevimento pasti dal fornitore, stoccaggio breve pasti abbattuti, riattivazione, porzionamento, distribuzione, raccolta, lavaggio stoviglie, sanificazione refettori.
+IMPORTANTE: le fasi di produzione (cottura, preparazione) sono di esclusiva competenza del FORNITORE con propria SCIA e proprio HACCP. Non descrivere la loro cucina.`
+        : `Ricevimento pasti pronti/abbattuti in contenitori isotermici, stoccaggio brevissimo, riattivazione a caldo (se abbattuti ≥75°C al cuore), porzionamento, distribuzione vassoi, raccolta, lavaggio stoviglie, sanificazione locali.
+IMPORTANTE: la cucina è del FORNITORE${fornitoreNome ? ' (' + fornitoreNome + ')' : ''}. Non gestiamo produzione. Non monitoriamo i loro frigoriferi (F1, C1 del fornitore non sono nostri). Il CCP principale è la temperatura di ricezione pasti.`;
+
+      const teamRighe = teamHaccp.filter(m => m.ruolo)
+        .map(m => `${m.ruolo}: ${m.nome || '(da nominare)'}`).join('\n');
+
+      const distribuzioneNote = opCarrelloTermico
+        ? 'CARRELLO TERMICO – scomparti caldo ≥65°C e freddo ≤10°C durante trasporto ai reparti.'
+        : isEsterno
+        ? 'SERVIZIO ESPRESSO – vassoi portati in sala/reparto subito dopo ricezione/riattivazione, senza carrello termico. Tempo max 20 min. Verifica T° al reparto.'
+        : 'SERVIZIO ESPRESSO – senza carrello termico. Distribuzione immediata post-cottura/ravvivo. Tempo max 15-20 min.';
+
+      return `Sei un esperto di sicurezza alimentare e normativa HACCP italiana. Genera un Manuale HACCP completo e professionale in italiano.
+
+━━ DATI STRUTTURA ━━
+Struttura / OSA: ${facilityName}
+P.IVA OSA: ${pivaOsa || '—'}
+Tipo struttura: ${udoName || 'struttura socio-sanitaria'}
+Regione: ${region || '—'} | Indirizzo: ${address || '—'}
+${bedCount ? 'Posti letto: ' + bedCount : ''}
+
+━━ MODELLO RISTORAZIONE ━━
+${modelloLabel}
+${fornitoreNome ? 'Fornitore pasti: ' + fornitoreNome + (fornitorePiva ? ' – P.IVA ' + fornitorePiva : '') : ''}
+${isEsterno && fornitoreScia ? 'SCIA fornitore: ' + fornitoreScia : isEsterno ? 'La SCIA è del fornitore, non dell\'OSA.' : ''}
+
+━━ PERSONALE ━━
+${personale}
+Destinatari del manuale: ${isEsterno ? 'ASA/OSS e addetti alla distribuzione (NON cuochi del fornitore).' : 'personale cucina, ASA/OSS.'}
+
+━━ FASI DI COMPETENZA OSA ━━
+${fasiCompetenza}
+
+━━ RESPONSABILI ━━
+Legale Rappresentante (LR): ${lr}
+Responsabile HACCP (R-HACCP): ${rHaccp}
+${teamRighe}
+Redatto da: ${redattore || 'Ufficio Qualità OVER'}
+Rev. precedente: ${revPrecedente || '0 – prima emissione'} | Rev. corrente: ${revCorrente || '1'} – ${dataRevisione || new Date().toLocaleDateString('it-IT')}
+
+━━ LOCALI DI COMPETENZA OSA ━━
+${nucleiNote || (isEsterno ? 'Cucina/dispensa in nostra gestione, area lavaggio, spogliatoio personale, sala da pranzo/refettori.' : 'Non specificato')}
+Orari distribuzione: ${orariDistribuzione || 'Non specificati'}
+
+━━ APPARECCHIATURE FRIGORIFERE IN NOSTRA GESTIONE ━━
+${apparecchiature || 'Da definire'}
+${isEsterno ? 'NOTA: i frigoriferi del centro cottura (F1, C1 ecc.) NON sono nostri e NON vanno monitorati.' : ''}
+
+━━ DISTRIBUTORI ━━
+${macchinettaColazioni ? 'Macchinetta colazioni (erogatore bevande calde): ' + (macchinettaNote || 'presente') : 'Nessuna macchinetta colazioni'}
+${distributoreAcqua ? 'Distributore acqua potabile: ' + (distributoreNote || 'presente') : 'Nessun distributore acqua'}
+
+━━ SPECIFICITÀ OPERATIVE ━━
+Disfagici: ${opDisfagici ? 'SÌ – ' + (opDisfagiciNote || 'gestione dedicata') : 'NO'}
+${opCenaAbbattuta ? 'Riattivazione teglie abbattute (cena): SÌ – ' + (opCenaAbbatutaNote || 'riattivazione ≥75°C al cuore') : ''}
+Distribuzione: ${distribuzioneNote}
+${opCucinette ? 'Cucinette di nucleo: SÌ – ' + (opCucinetteNote || 'colazione e merenda') : ''}
+${(opSrtr || isUdoPsi) ? 'Struttura SRTR psichiatrica: SÌ' : ''}
+${opMonousoInfetti ? 'Pazienti in isolamento infettivo con vassoio monouso: SÌ' : ''}
+${opRiabilitazione ? 'Attività cucina terapeutica con pazienti: SÌ' : ''}
+${opCeliaciaNote ? 'Note celiachia/allergeni: ' + opCeliaciaNote : ''}
+${noteOperative ? 'Note operative: ' + noteOperative : ''}
+
+━━ ISTRUZIONI TASSATIVE ━━
+COMPLETA tutte le sezioni. Non troncare il documento.
+- Reg. CE 852/2004, D.Lgs 27/2021, Reg. UE 2021/382, Reg. CE 178/2002, D.Lgs 18/2023
+- Usa sempre "vassoio" (mai "vascello")
+- Usa "macchinetta colazioni" o "erogatore bevande calde" (mai "macchinetta caffè")
+- Numera sezioni: 1., 1.1, 1.2, 2., 2.1 ecc.
+- Tabelle markdown (| col | col |) per CCP, pericoli, temperature, analisi
+- Diagrammi di flusso con → tra le fasi
+- NON includere nomi di persone nel corpo, solo ruoli
+- NON ripetere il registro revisioni nel corpo (è già in copertina)
+${isEsterno ? `- Campo applicazione: SOLO fasi OSA (non la cucina del fornitore)
+- Diagrammi: iniziano da RICEVIMENTO PASTI (non dalla produzione)
+- CCP principale: temperatura ricezione pasti (freddi ≤10°C), riattivazione ≥75°C
+- Registro allergie: conservare per periodo utilizzo (privacy GDPR)` : '- Inventario frigoriferi senza indicare capacità'}
+
+STRUTTURA SEZIONI (genera TUTTE in ordine):
+1. Introduzione – campo di applicazione: SOLO fasi di competenza OSA
+2. Normativa di riferimento (tabella)
+3. Cultura della sicurezza alimentare
+4. Descrizione struttura – locali e attrezzature DI NOSTRA COMPETENZA${bedCount ? ', ' + bedCount + ' posti letto' : ''}
+5. Diagrammi di flusso con →${isEsterno ? ' (da RICEVIMENTO PASTI)' : ''}
+6. Analisi pericoli e CCP (tabella per fase)
+7. Celiachia e gestione allergeni
+${sezioni.includes('team') ? `8. Gruppo HACCP – R-HACCP: verifiche PERIODICHE non quotidiane; taratura strumenti: annuale; punto 4 = supervisione` : ''}
+${opDisfagici ? '- Ospiti disfagici: frigo dedicato (FD), pasto nominale etichettato con consistenza IDDSI' : ''}
+${(opSrtr || isUdoPsi) ? '- SRTR psichiatrica: sicurezza posateria (conta cutlery), supervisione tavoli, gestione crisi, pasto in camera, rapporto operatori/ospiti a seconda criticità' : ''}
+${opMonousoInfetti ? '- Isolamento infettivo: vassoio monouso, smaltimento rifiuti speciali, DPI' : ''}
+${opCenaAbbattuta ? '- Riattivazione teglie abbattute: ricezione ≤4°C, riattivazione ≥75°C, max una riattivazione' : ''}
+${opCarrelloTermico ? '- Carrello termico: scomparti caldo/freddo, pulizia, sanificazione, registrazione T°' : isEsterno ? '- Servizio espresso: tempo max 20 min da fine riattivazione a servizio' : ''}
+${opRiabilitazione ? '- Attività terapeutiche cucina: attività consentite/vietate, supervisione, igiene, separazione' : ''}
+${sezioni.includes('microbio') ? '- Analisi microbiologiche: superfici e mani operatori (non campionamento routinario alimenti)' : ''}
+${sezioni.includes('formazione') ? '- Piano formazione (tabella: argomento, destinatari, frequenza triennale, ore)' : ''}
+${sezioni.includes('manutenzione') ? '- Manutenzione attrezzature e taratura annuale strumenti' : ''}
+${sezioni.includes('documentazione') ? '- Documentazione: elenco moduli, conservazione. Registro allergie: periodo utilizzo (GDPR).' : ''}`;
+    },
+  },
+Sei il Senior Quality Manager del Gruppo.
+Scrivi una Relazione di Analisi Trend KPI per il BOARD DIREZIONALE.
+Perimetro: ${scopeName}. Periodo analizzato: ${periodoStart} — ${periodoEnd}.
+
+DATI TREND KPI (andamento mensile e variazione per ogni indicatore):
+${kpiTrendPayload}
+
+REGOLE TASSATIVE:
+- Parti DIRETTAMENTE con "1. SINTESI DEL PERIODO". Nessuna intestazione.
+- Focalizzati sui TREND nel tempo, non sui valori assoluti del singolo mese.
+- Evidenzia miglioramenti significativi e peggioramenti preoccupanti.
+- Tono: strategico, orientato alle decisioni di medio-lungo periodo.
+- Massimo 500 parole totali.
+
+Usa ESATTAMENTE questi titoli in maiuscolo:
+1. SINTESI DEL PERIODO
+2. TREND POSITIVI
+3. TREND NEGATIVI O INSTABILI
+4. RACCOMANDAZIONI STRATEGICHE
+5. TEMPI STIMATI RAGGIUNGIMENTO OBIETTIVI
+`.trim(),
+  },
 };
 
 // ── FACTORY UNIFICATA ─────────────────────────────────────────
@@ -274,3 +437,4 @@ export const buildPromptOperatoreDirezione = (p) => buildPrompt('operatoreDirezi
 export const buildPromptGlobaleBoard     = (p) => buildPrompt('globaleBoard',     p);
 export const buildPromptKpiMensile       = (p) => buildPrompt('kpiMensile',       p);
 export const buildPromptKpiPeriodo       = (p) => buildPrompt('kpiPeriodo',       p);
+export const buildPromptHaccpManuale     = (p) => buildPrompt('haccpManuale',     p);

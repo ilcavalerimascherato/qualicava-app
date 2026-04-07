@@ -18,6 +18,7 @@ import {
 import { supabase }            from '../supabaseClient';
 import { useHaccpFascicolo, useHaccpInvalidate } from '../hooks/useHaccpData';
 import { useAuth }             from '../contexts/AuthContext';
+import { buildPromptHaccpManuale } from '../config/aiPrompts';
 
 // ── Costanti ──────────────────────────────────────────────────
 const TABS = [
@@ -237,6 +238,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
     op_disfagici_note:           '',
     op_cena_abbattuta:           false,
     op_cena_abbattuta_note:      '',
+    op_carrello_termico:         false,
     op_srtr:                     false,
     op_monouso_infetti:          false,
     op_cucinette_nuclei:         false,
@@ -283,6 +285,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_disfagici_note:           sa.op_disfagici_note                || '',
         op_cena_abbattuta:           sa.op_cena_abbattuta                || false,
         op_cena_abbattuta_note:      sa.op_cena_abbattuta_note           || '',
+        op_carrello_termico:         sa.op_carrello_termico              || false,
         op_srtr:                     sa.op_srtr                          || false,
         op_monouso_infetti:          sa.op_monouso_infetti               || false,
         op_cucinette_nuclei:         sa.op_cucinette_nuclei              || false,
@@ -319,6 +322,8 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_disfagici:            form.op_disfagici,
         op_disfagici_note:       form.op_disfagici_note,
         op_cena_abbattuta:       form.op_cena_abbattuta,
+        op_cena_abbattuta_note:  form.op_cena_abbattuta_note,
+        op_carrello_termico:     form.op_carrello_termico,
         op_cena_abbattuta_note:  form.op_cena_abbattuta_note,
         op_srtr:                 form.op_srtr,
         op_monouso_infetti:      form.op_monouso_infetti,
@@ -1097,137 +1102,67 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
     }
   };
 
-  // ── buildPrompt — speculare al configuratore HTML ────────────
+
+  // ── buildPrompt — delegato a src/config/aiPrompts.js ────────
   const buildPrompt = (p) => {
-    const sa = p.sezioni_attive || {};
+    const sa     = p.sezioni_attive || {};
     const sezioni = sa.sezioni_manuale || SEZIONI_BASE_DEFAULT;
-
-    const modelloLabel = {
-      cucina_interna:         'CUCINA INTERNA – modello base cucina propria',
-      appalto_fresco_caldo:   'CUCINA IN APPALTO fresco/caldo in struttura – modello doppia responsabilità gestione/fornitore',
-      distribuzione_veicolata:'SOLO DISTRIBUZIONE pasti veicolati da centro cottura esterno',
-    }[p.modello_ristorazione] || p.modello_ristorazione;
-
-    const sezioniLabel = [
-      ...SEZIONI_FISSE.map(k => {
-        const labels = {
-          intro: 'Introduzione e definizioni', normativa: 'Normativa di riferimento',
-          cultura: 'Cultura sicurezza alimentare', struttura: 'Paragrafo struttura',
-          diagrammi: 'Diagrammi di flusso', ccp: 'Analisi pericoli e CCP',
-          celiachia: 'Celiachia e allergeni',
-        };
-        return labels[k] || k;
-      }),
-      ...(sezioni.includes('team') ? [SEZIONE_TEAM.label] : []),
-      ...SEZIONI_OPT.filter(s => sezioni.includes(s.k)).map(s => s.label),
-      // Sezioni ospiti da specificità operative
-      ...(sa.op_disfagici     ? ['Ospiti disfagici']                        : []),
-      ...(sa.op_srtr || isUdoPsi ? ['Specificità SRTR psichiatrica']            : []),
-      ...(sa.op_monouso_infetti ? ['Pazienti infetti — pasto monouso']      : []),
-      ...(sa.op_cena_abbattuta  ? ['Teglie abbattute (cena)']                : []),
-      ...(sa.op_riabilitazione  ? ['Coinvolgimento pazienti riabilitazione'] : []),
-    ].join(', ');
-
-    const righeFreigo = p.apparecchiature_frigorifere
-      ? p.apparecchiature_frigorifere.split('\n').filter(Boolean).join('\n')
-      : 'da definire';
-
-    // Parsing strutturato per il piano temperature
-    const app = parseApparecchiature(p.apparecchiature_frigorifere || '');
-    const riepilogoApp = [
-      app.frigoCucina.length  ? `Frigoriferi cucina (scheda unica con ${app.frigoCucina.length} colonne): ${app.frigoCucina.map(f => f.codice + ' ' + f.desc).join(', ')}` : '',
-      app.congelatori.length  ? `Congelatori cucina (scheda unica con ${app.congelatori.length} colonne): ${app.congelatori.map(f => f.codice + ' ' + f.desc).join(', ')}` : '',
-      app.frigoReparti.filter(f => f.tipo === 'frigorifero_reparto').length ? `Frigoriferi reparto (scheda separata per ognuno): ${app.frigoReparti.filter(f => f.tipo === 'frigorifero_reparto').map(f => f.codice + ' ' + f.desc).join(', ')}` : '',
-      app.frigoReparti.filter(f => f.tipo === 'congelatore_reparto').length ? `Congelatori reparto (scheda separata per ognuno): ${app.frigoReparti.filter(f => f.tipo === 'congelatore_reparto').map(f => f.codice + ' ' + f.desc).join(', ')}` : '',
-    ].filter(Boolean).join('\n');
-
-    return `Sei un esperto di sicurezza alimentare e normativa HACCP italiana. Genera un Manuale HACCP completo e professionale in italiano per la struttura socio-sanitaria indicata di seguito.
-
-Il documento deve essere formattato come un manuale aziendale reale, con intestazioni, numerazione sezioni, tabelle dove opportuno, e linguaggio tecnico-normativo corretto.
-
-━━ DATI STRUTTURA ━━
-Ragione sociale OSA: ${facility.name}
-P.IVA OSA: ${sa.piva_osa || '—'}
-Tipo struttura: ${facility.udo_name || 'struttura socio-sanitaria'}
-Regione: ${facility.region || ''}
-Indirizzo: ${facility.address || ''}
-
-━━ MODELLO RISTORAZIONE ━━
-${modelloLabel}
-${p.fornitore_nome ? `Fornitore: ${p.fornitore_nome}${p.fornitore_piva ? ' (P.IVA ' + p.fornitore_piva + ')' : ''}` : ''}
-${p.fornitore_ha_scia && p.fornitore_scia_estremi ? `SCIA fornitore: ${p.fornitore_scia_estremi}` : ''}
-
-━━ RESPONSABILI E GRUPPO HACCP ━━
-Legale Rappresentante / OSA: ${p.lr_attuale || '—'}
-Responsabile HACCP struttura (R-HACCP): ${p.r_haccp || '—'}
-${(sa.team_haccp || []).filter(m => m.ruolo).map(m => `${m.ruolo}: ${m.nome || '(da nominare)'}`).join('\n')}
-Redatto da: ${sa.redattore || 'Ufficio Qualità OVER'}
-Rev. precedente: ${sa.rev_precedente || '0 – prima emissione'}
-Rev. corrente: ${sa.rev_corrente || '1'}  Data: ${sa.data_revisione || new Date().toLocaleDateString('it-IT')}
-
-━━ LOCALI E LAYOUT ━━
-${sa.op_nuclei_note || 'Non specificato'}
-Orari distribuzione: ${sa.op_orari_distribuzione || 'Non specificati'}
-
-━━ APPARECCHIATURE FRIGORIFERE ━━
-${riepilogoApp || righeFreigo}
-
-Nel piano di monitoraggio temperature del manuale:
-- Le apparecchiature F1, F2... vanno in un'unica scheda Autoc 2A cucina con una colonna per ognuna
-- Le apparecchiature C1, C2... vanno in un'unica scheda Autoc 2B con una colonna per ognuna  
-- Le apparecchiature FR1, FR2..., FD, CR1... hanno ciascuna una scheda separata (la scheda resta sull'apparecchio)
-
-━━ DISTRIBUTORI AUTOMATICI ━━
-${sa.op_macchinetta_caffe ? `Macchinette caffè/bevande: ${sa.op_macchinetta_caffe_note || 'presenti'}` : 'Nessuna macchinetta caffè'}
-${sa.op_distributore_acqua ? `Distributore acqua: ${sa.op_distributore_acqua_note || 'presente'}` : 'Nessun distributore acqua'}
-
-━━ SPECIFICITÀ OPERATIVE ━━
-${sa.op_disfagici ? `Ospiti disfagici: SÌ — ${sa.op_disfagici_note || 'gestione dedicata'}` : 'Ospiti disfagici: NO'}
-${sa.op_cena_abbattuta ? `Cena con teglie abbattute: SÌ — ${sa.op_cena_abbattuta_note || 'riattivazione ≥75°C'}` : ''}
-${sa.op_cucinette_nuclei ? `Cucinette di nucleo: SÌ — ${sa.op_cucinette_note || 'per colazione e merenda'}` : ''}
-${(sa.op_srtr || isUdoPsi) ? 'Struttura SRTR psichiatrica: SÌ (UDO PSI automatico)' : ''}
-${sa.op_monouso_infetti ? 'Pazienti infetti con pasto monouso: SÌ' : ''}
-${sa.op_riabilitazione ? 'Coinvolgimento pazienti in attività cucina: SÌ' : ''}
-${sa.op_celiachia_note ? `Allergeni/celiachia: ${sa.op_celiachia_note}` : ''}
-${p.note_operative ? `Note aggiuntive: ${p.note_operative}` : ''}
-
-━━ SEZIONI DA INCLUDERE ━━
-${sezioniLabel}
-
-━━ NORMATIVA REGIONALE ━━
-${facility.region ? `Per la regione ${facility.region}: includi normativa formazione regionale specifica e riferimento ASL/ATS competente.` : ''}
-
-━━ ISTRUZIONI OBBLIGATORIE ━━
-IMPORTANTE: Genera TUTTE le sezioni elencate sopra, senza fermarti. Non troncare il documento.
-- Produci un manuale completo e professionale, NON una bozza
-- Ogni sezione deve essere pienamente sviluppata con contenuto normativo corretto
-- Usa Reg. CE 852/2004, Reg. UE 625/2017, D.Lgs 27/2021, Reg. UE 2021/382, D.Lgs 18/2023
-- I diagrammi di flusso vanno descritti testualmente con frecce (→) e punti di controllo
-- Il piano monitoraggio temperature deve elencare OGNI apparecchiatura frigorífera indicata
-- Per ogni CCP: pericolo, limite critico, monitoraggio, azione correttiva, verifica, registrazione
-- NON includere nomi di persone nel corpo del manuale (solo ruoli: LR, R-HACCP, ecc.)
-- Il registro revisioni è già nella copertina — NON includerlo nel corpo del testo
-- Usa tabelle markdown (| col | col |) per CCP, pericoli, temperature e piani analisi
-- Numera le sezioni progressivamente: 1., 1.1, 1.2, 2., 2.1 ecc.
-- STRUTTURA OBBLIGATORIA — genera TUTTE queste sezioni nell'ordine indicato:
-  1. Introduzione e campo di applicazione
-  2. Normativa di riferimento
-  3. Cultura della sicurezza alimentare
-  4. Descrizione della struttura e dei locali
-  5. Diagrammi di flusso (descritti con →)
-  6. Analisi dei pericoli e identificazione CCP (con tabella)
-  7. Celiachia e gestione allergeni
-  ${sezioni.includes('team') ? '8. Gruppo HACCP e composizione del team' : ''}
-  ${sa.op_disfagici ? '- Sezione ospiti disfagici: locale dedicato, frigorifero identificato (FD), pasto nominale, consistenze IDDSI' : ''}
-  ${(sa.op_srtr || isUdoPsi) ? '- Sezione SRTR psichiatrica: sicurezza posateria, supervisione tavoli, gestione crisi pasto, pasto in camera' : ''}
-  ${sa.op_monouso_infetti ? '- Pazienti in isolamento infettivo: vassoio monouso, smaltimento rifiuti speciali, DPI operatore' : ''}
-  ${sa.op_cena_abbattuta ? '- Teglie abbattute per cena: temperatura ricezione ≤4°C, riattivazione ≥75°C al cuore' : ''}
-  ${sa.op_riabilitazione ? '- Laboratori alimentari terapeutici: attività consentite/vietate, igiene, supervisione, separazione area produzione' : ''}
-  ${sezioni.includes('microbio') ? '- Piano analisi microbiologiche (tabella: tipo analisi, matrice, frequenza, laboratorio, parametri)' : ''}
-  ${sezioni.includes('formazione') ? '- Piano formazione (tabella: argomento, destinatari, frequenza, ore, ente formatore)' : ''}
-  ${sezioni.includes('manutenzione') ? '- Manutenzione e taratura attrezzature' : ''}
-  ${sezioni.includes('documentazione') ? '- Documentazione e archiviazione (elenco moduli, tempi conservazione)' : ''}`;
+    return buildPromptHaccpManuale({
+      facilityName:        facility.name,
+      pivaOsa:             sa.piva_osa            || '—',
+      udoName:             facility.udo_name       || '',
+      region:              facility.region         || '',
+      address:             facility.address        || '',
+      bedCount:            facility.bed_count      || null,
+      modello:             p.modello_ristorazione  || 'cucina_interna',
+      fornitoreNome:       p.fornitore_nome        || '',
+      fornitorePiva:       p.fornitore_piva        || '',
+      fornitoreScia:       p.fornitore_ha_scia && p.fornitore_scia_estremi ? p.fornitore_scia_estremi : '',
+      lr:                  p.lr_attuale            || '—',
+      rHaccp:              p.r_haccp               || '—',
+      teamHaccp:           sa.team_haccp           || [],
+      redattore:           sa.redattore            || 'Ufficio Qualità OVER',
+      revPrecedente:       sa.rev_precedente       || '0 – prima emissione',
+      revCorrente:         sa.rev_corrente         || '1',
+      dataRevisione:       sa.data_revisione       || new Date().toLocaleDateString('it-IT'),
+      nucleiNote:          sa.op_nuclei_note       || '',
+      orariDistribuzione:  sa.op_orari_distribuzione || '',
+      apparecchiature:     (() => {
+        const app = parseApparecchiature(p.apparecchiature_frigorifere || '');
+        const isInt = p.modello_ristorazione === 'cucina_interna';
+        if (isInt) {
+          return [
+            app.frigoCucina.length  ? 'Frigoriferi cucina: ' + app.frigoCucina.map(f => f.codice + ' – ' + f.desc).join(', ') : '',
+            app.congelatori.length  ? 'Congelatori cucina: ' + app.congelatori.map(f => f.codice + ' – ' + f.desc).join(', ') : '',
+            app.frigoReparti.filter(f => f.tipo === 'frigorifero_reparto').length ? 'Frigoriferi reparto: ' + app.frigoReparti.filter(f => f.tipo === 'frigorifero_reparto').map(f => f.codice + ' – ' + f.desc).join(', ') : '',
+            app.frigoReparti.filter(f => f.tipo === 'congelatore_reparto').length ? 'Congelatori reparto: ' + app.frigoReparti.filter(f => f.tipo === 'congelatore_reparto').map(f => f.codice + ' – ' + f.desc).join(', ') : '',
+          ].filter(Boolean).join('\n') || 'Da definire';
+        }
+        return app.frigoReparti.length
+          ? 'Frigoriferi in nostra gestione: ' + app.frigoReparti.map(f => f.codice + ' – ' + f.desc).join(', ')
+          : 'Nessun frigorifero di nostra diretta responsabilità';
+      })(),
+      macchinettaColazioni: sa.op_macchinetta_caffe        || false,
+      macchinettaNote:      sa.op_macchinetta_caffe_note   || '',
+      distributoreAcqua:    sa.op_distributore_acqua       || false,
+      distributoreNote:     sa.op_distributore_acqua_note  || '',
+      opDisfagici:          sa.op_disfagici                || false,
+      opDisfagiciNote:      sa.op_disfagici_note           || '',
+      opCenaAbbattuta:      sa.op_cena_abbattuta           || false,
+      opCenaAbbatutaNote:   sa.op_cena_abbattuta_note      || '',
+      opCarrelloTermico:    sa.op_carrello_termico         || false,
+      opCucinette:          sa.op_cucinette_nuclei         || false,
+      opCucinetteNote:      sa.op_cucinette_note           || '',
+      opSrtr:               sa.op_srtr                     || false,
+      opMonousoInfetti:     sa.op_monouso_infetti          || false,
+      opRiabilitazione:     sa.op_riabilitazione           || false,
+      opCeliaciaNote:       sa.op_celiachia_note           || '',
+      noteOperative:        p.note_operative               || '',
+      sezioni,
+      isUdoPsi,
+    });
   };
+
 
   const handleGenera = async () => {
     if (!profiloCompleto) {
@@ -1330,6 +1265,7 @@ IMPORTANTE: Genera TUTTE le sezioni elencate sopra, senza fermarti. Non troncare
           op_macchinetta_caffe:        sa.op_macchinetta_caffe        || false,
           op_macchinetta_caffe_note:   sa.op_macchinetta_caffe_note   || '',
           op_cena_abbattuta:           sa.op_cena_abbattuta           || false,
+          op_carrello_termico:         sa.op_carrello_termico         || false,
         });
         const modPath = `${facility.id}/manuali/modulistica_rev${numRev}_${oggi}.docx`;
         const { error: modErr } = await supabase.storage
@@ -2124,6 +2060,13 @@ function NoteOperativeSection({ form, set, modello }) {
                 placeholder="es. Teglie consegnate il mattino ≤4°C. Riattivazione forni reparto dalle 17:30." />
             </div>
           )}
+          <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
+            <input type="checkbox" checked={form.op_carrello_termico} onChange={set('op_carrello_termico')} className="accent-amber-500 w-4 h-4" />
+            <div>
+              <span className="text-sm font-bold text-slate-700">Presente carrello termico</span>
+              <p className="text-xs text-slate-400">Distribuzione pasti ai reparti tramite carrello caldo/freddo. Se non selezionato: servizio espresso (distribuzione immediata post-cottura).</p>
+            </div>
+          </label>
         </div>
       )}
 
