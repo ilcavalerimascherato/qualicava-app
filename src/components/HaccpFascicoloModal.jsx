@@ -79,7 +79,8 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
   const [activeTab, setActiveTab] = useState('profilo');
   const { profile }               = useAuth();
   const isDirector                = profile?.role === 'director';
-  const canGenerate               = ['superadmin','admin','sede','director'].includes(profile?.role);
+  const canGenerate               = profile?.role === 'superadmin';
+  const canRequest                = ['admin','sede','director'].includes(profile?.role);
   const canEdit                   = !isDirector;
 
   const { data, loading }         = useHaccpFascicolo(facility?.id);
@@ -158,7 +159,7 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
             <>
               {activeTab === 'profilo'    && <ProfiloTab    facility={facility} profilo={data.profilo}       invalidate={invalidate} isDirector={isDirector} isUdoPsi={isUdoPsi} onSaved={() => setActiveTab('scia')} />}
               {activeTab === 'scia'       && <SciaTab       facility={facility} scia={data.scia}             invalidate={invalidate} canEdit={canEdit} />}
-              {activeTab === 'manuale'    && <ManualeTab    facility={facility} manuali={data.manuali}       profilo={data.profilo}  invalidate={invalidate} canGenerate={canGenerate} isUdoPsi={isUdoPsi} />}
+              {activeTab === 'manuale'    && <ManualeTab    facility={facility} manuali={data.manuali}       profilo={data.profilo}  invalidate={invalidate} canGenerate={canGenerate} canRequest={canRequest} isUdoPsi={isUdoPsi} />}
               {activeTab === 'analisi'    && <AnalisiTab    facility={facility} analisi={data.analisi}       invalidate={invalidate} canEdit={canEdit} />}
               {activeTab === 'formazione' && <FormazioneTab facility={facility} formazione={data.formazione} invalidate={invalidate} canEdit={canEdit} />}
             </>
@@ -1026,15 +1027,44 @@ function SciaCard({ scia, facilityId, onUpdateStato, onUploadDone, canEdit }) {
 // ══════════════════════════════════════════════════════════════
 // TAB 3 — MANUALE
 // ══════════════════════════════════════════════════════════════
-function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, isUdoPsi }) {
-  const [generating, setGenerating] = useState(false);
+function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRequest, isUdoPsi }) {
+  const [generating, setGenerating]   = useState(false);
   const [generatedText, setGeneratedText] = useState('');
   const [showGenerated, setShowGenerated] = useState(false);
-  const [revNote, setRevNote] = useState('');
-  const [saving, setSaving]   = useState(false);
+  const [revNote, setRevNote]         = useState('');
+  const [saving, setSaving]           = useState(false);
+  const [logoVariante, setLogoVariante] = useState('A');
+  const [requesting, setRequesting]   = useState(false);
   const ultimo = manuali[0] ?? null;
 
   const profiloCompleto = profilo?.modello_ristorazione && profilo?.r_haccp && profilo?.lr_attuale;
+
+  const LOGO_OPTIONS = [
+    { value: 'A', label: 'OVER società consortile' },
+    { value: 'B', label: 'Pittogramma gruppo OVER' },
+    { value: 'C', label: 'Logo personalizzato struttura' },
+  ];
+
+  const handleRichiedi = async () => {
+    setRequesting(true);
+    try {
+      // Salva la richiesta come record con flag richiesta_pending = true
+      const { error } = await supabase.from('haccp_manuali').insert([{
+        struttura_id:      facility.id,
+        numero_revisione:  0,
+        data_emissione:    new Date().toISOString().split('T')[0],
+        note_revisione:    `RICHIESTA MANUALE da ${profilo?.lr_attuale || 'struttura'} — in attesa di generazione da superadmin`,
+        richiesta_pending: true,
+      }]);
+      if (error) throw error;
+      await invalidate.manuali();
+      alert('Richiesta inviata. Il superadmin riceverà notifica e provvederà alla generazione del manuale.');
+    } catch (err) {
+      alert('Errore richiesta: ' + err.message);
+    } finally {
+      setRequesting(false);
+    }
+  };
 
   // ── buildPrompt — speculare al configuratore HTML ────────────
   const buildPrompt = (p) => {
@@ -1149,19 +1179,31 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
     setGeneratedText('');
     try {
       const prompt = buildPrompt(profilo);
+      const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error('REACT_APP_ANTHROPIC_API_KEY non configurata nel .env');
+
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type':                              'application/json',
+          'x-api-key':                                apiKey,
+          'anthropic-version':                        '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model:      'claude-haiku-4-5-20251001',
           max_tokens: 8000,
-          messages: [{ role: 'user', content: prompt }],
+          messages:   [{ role: 'user', content: prompt }],
         }),
       });
-      if (!response.ok) throw new Error(`Errore API: ${response.status}`);
-      const data = await response.json();
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Anthropic ${response.status}: ${err}`);
+      }
+      const data  = await response.json();
       const testo = data.content?.map(b => b.text || '').join('') || '';
-      if (!testo) throw new Error('Risposta API vuota');
+      if (!testo) throw new Error('Risposta vuota');
       setGeneratedText(testo);
       setShowGenerated(true);
     } catch (err) {
@@ -1180,26 +1222,60 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
       const oggi     = new Date().toISOString().split('T')[0];
       const scadenza = new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0];
 
-      // 1. Salva testo come file .txt in Storage (placeholder per .docx futuro)
-      const blob    = new Blob([generatedText], { type: 'text/plain' });
-      const path    = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.txt`;
-      const { error: upErr } = await supabase.storage
-        .from('haccp-documents')
-        .upload(path, blob, { upsert: true });
-      if (upErr) throw upErr;
+      // 1. Genera .docx via Edge Function
+      const docxParams = {
+        nomestruttura: facility.name,
+        osa:           facility.name,
+        pivaOsa:       sa.piva_osa            || '—',
+        modello:       profilo.modello_ristorazione || 'cucina_interna',
+        lr:            profilo.lr_attuale      || '—',
+        rHaccp:        profilo.r_haccp         || '—',
+        teamHaccp:     sa.team_haccp           || [],
+        numRev:        String(numRev),
+        dataRev:       new Date().toLocaleDateString('it-IT'),
+        redattore:     sa.redattore            || 'Ufficio Qualità OVER',
+        noteRevisione: revNote                 || 'Prima emissione',
+        testoManuale:  generatedText,
+        logoVariante:  logoVariante,
+      };
 
-      const { data: signData } = await supabase.storage
-        .from('haccp-documents')
-        .createSignedUrl(path, 60 * 60 * 24 * 365);
+      const { data: fnData, error: fnError } = await supabase.functions.invoke(
+        'generate-haccp-docx',
+        { body: docxParams, responseType: 'arrayBuffer' }
+      );
 
-      // 2. Inserisce record in haccp_manuali
+      let fileUrl = null;
+      if (!fnError && fnData) {
+        // 2. Upload .docx in Storage
+        const path = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.docx`;
+        const { error: upErr } = await supabase.storage
+          .from('haccp-documents')
+          .upload(path, fnData, { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', upsert: true });
+        if (!upErr) {
+          const { data: signData } = await supabase.storage
+            .from('haccp-documents')
+            .createSignedUrl(path, 60 * 60 * 24 * 365);
+          fileUrl = signData?.signedUrl || null;
+        }
+      } else {
+        // Fallback: salva testo come .txt se Edge Function non disponibile
+        const blob = new Blob([generatedText], { type: 'text/plain' });
+        const path = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.txt`;
+        await supabase.storage.from('haccp-documents').upload(path, blob, { upsert: true });
+        const { data: signData } = await supabase.storage.from('haccp-documents').createSignedUrl(path, 60 * 60 * 24 * 365);
+        fileUrl = signData?.signedUrl || null;
+      }
+
+      // 3. Inserisce record in haccp_manuali
       const { error: dbErr } = await supabase.from('haccp_manuali').insert([{
-        struttura_id:          facility.id,
-        numero_revisione:      numRev,
-        data_emissione:        oggi,
+        struttura_id:            facility.id,
+        numero_revisione:        numRev,
+        data_emissione:          oggi,
         data_scadenza_revisione: scadenza,
-        file_url_manuale:      signData?.signedUrl || null,
-        note_revisione:        revNote || null,
+        file_url_manuale:        fileUrl,
+        note_revisione:          revNote || null,
+        logo_variante:           logoVariante,
+        richiesta_pending:       false,
       }]);
       if (dbErr) throw dbErr;
 
@@ -1278,23 +1354,89 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
         </div>
       )}
 
-      {/* Tasto genera */}
-      {canGenerate && (
-        <div className="flex justify-center pt-4">
-          <button
-            onClick={handleGenera}
-            disabled={generating || !profiloCompleto}
-            className="flex items-center gap-3 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-all text-sm"
-          >
-            {generating
-              ? <><Loader2 size={18} className="animate-spin" /> Generazione in corso (può richiedere 30-60 sec.)...</>
-              : <><ChefHat size={18} /> Genera Manuale HACCP</>
-            }
-          </button>
+      {/* Banner richieste pending — visibile solo a superadmin */}
+      {canGenerate && manuali.some(m => m.richiesta_pending) && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-xl px-5 py-4">
+          <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-black text-amber-700">Richiesta manuale in attesa</p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              La struttura ha richiesto la generazione del manuale HACCP.
+              Completa il profilo se necessario e premi "Genera Manuale".
+            </p>
+          </div>
+        </div>
+      )}
+        <section className="space-y-4">
+          {/* Selettore variante logo */}
+          <div>
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">
+              Logo da utilizzare nel documento
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {LOGO_OPTIONS.map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => setLogoVariante(opt.value)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                    logoVariante === opt.value
+                      ? 'bg-amber-100 text-amber-700 border-amber-400'
+                      : 'bg-slate-100 text-slate-400 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {opt.value === 'A' ? '🏢' : opt.value === 'B' ? '💚' : '📎'} {opt.label}
+                </button>
+              ))}
+            </div>
+            {logoVariante === 'C' && (
+              <p className="text-xs text-amber-600 mt-2 italic">
+                Logo personalizzato: funzionalità in sviluppo — verrà usato il logo OVER come fallback.
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-center">
+            <button
+              onClick={handleGenera}
+              disabled={generating || !profiloCompleto}
+              className="flex items-center gap-3 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-all text-sm"
+            >
+              {generating
+                ? <><Loader2 size={18} className="animate-spin" /> Generazione in corso (30-60 sec.)...</>
+                : <><ChefHat size={18} /> Genera Manuale HACCP</>
+              }
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Tasto richiedi — admin / sede / director */}
+      {canRequest && !canGenerate && (
+        <div className="flex flex-col items-center gap-3 pt-4">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-6 py-4 text-center max-w-md">
+            <p className="text-sm font-bold text-indigo-700 mb-1">Generazione manuale riservata al superadmin</p>
+            <p className="text-xs text-indigo-500">Puoi inviare una richiesta che verrà notificata al responsabile qualità di gruppo.</p>
+          </div>
+          {/* Controlla se c'è già una richiesta pending */}
+          {manuali.some(m => m.richiesta_pending) ? (
+            <div className="flex items-center gap-2 text-sm font-bold text-amber-600">
+              <Loader2 size={15} /> Richiesta già inviata — in attesa di elaborazione
+            </div>
+          ) : (
+            <button
+              onClick={handleRichiedi}
+              disabled={requesting || !profiloCompleto}
+              className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-all text-sm"
+            >
+              {requesting
+                ? <><Loader2 size={18} className="animate-spin" /> Invio richiesta...</>
+                : <><FileText size={18} /> Richiedi Manuale HACCP</>
+              }
+            </button>
+          )}
         </div>
       )}
 
-      {/* Area testo generato */}
+      {/* Area testo generato — solo superadmin può editare */}
       {showGenerated && generatedText && (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
@@ -1304,16 +1446,25 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
             <button onClick={() => setShowGenerated(false)}
               className="text-xs text-slate-400 hover:text-slate-600 font-bold">Chiudi anteprima</button>
           </div>
-          <textarea
-            value={generatedText}
-            onChange={e => setGeneratedText(e.target.value)}
-            rows={20}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-800 font-mono leading-relaxed outline-none focus:border-amber-400 resize-y"
-          />
+
+          {/* Solo superadmin può modificare il testo */}
+          {canGenerate ? (
+            <textarea
+              value={generatedText}
+              onChange={e => setGeneratedText(e.target.value)}
+              rows={20}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-800 font-mono leading-relaxed outline-none focus:border-amber-400 resize-y"
+            />
+          ) : (
+            <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">
+              {generatedText}
+            </div>
+          )}
+
           <div>
             <label className={LBL}>Note di revisione (opzionale)</label>
             <input type="text" value={revNote} onChange={e => setRevNote(e.target.value)}
-              className={INP} placeholder="es. Aggiornamento R-HACCP, variazione fornitore, ecc." />
+              className={INP} placeholder="es. Prima emissione, aggiornamento R-HACCP, variazione fornitore..." />
           </div>
           <div className="flex justify-end gap-3">
             <button onClick={() => { setShowGenerated(false); setGeneratedText(''); }}

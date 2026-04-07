@@ -16,6 +16,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
   PawPrint, LogOut, ArrowLeft, Activity, BarChart3, Database,
+  ChefHat,
   AlertTriangle, TrendingUp,
   Plus, Save, Loader2, X
 } from 'lucide-react';
@@ -39,6 +40,7 @@ import { getTimeHorizon }   from '../utils/kpiTimeHorizon';
 import KpiManagerModal      from '../components/KpiManagerModal';
 import DataImportModal      from '../components/DataImportModal';
 import AnalyticsModal       from '../components/AnalyticsModal';
+import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
 
 const TABS = [
   { id: 'overview',         label: 'Panoramica',     Icon: Activity      },
@@ -47,6 +49,7 @@ const TABS = [
   { id: 'analysis',         label: 'Analisi Survey', Icon: BarChart3     },
   { id: 'non_conformities', label: 'Non Conformità', Icon: AlertTriangle },
   { id: 'benchmark',        label: 'Benchmark',      Icon: TrendingUp    },
+  { id: 'haccp',            label: 'HACCP',          Icon: ChefHat       },
 ];
 
 // FIX v3: hook wrapper — sceglie la sorgente dati in base al ruolo.
@@ -246,6 +249,9 @@ export default function DirectorFacility() {
         )}
         {activeTab === 'benchmark' && (
           <BenchmarkTab facility={facility} kpiRecords={data.kpiRecords} year={year} />
+        )}
+        {activeTab === 'haccp' && (
+          <HaccpTab facility={facility} />
         )}
       </main>
 
@@ -1173,6 +1179,52 @@ function SurveyAnalysisTab({ facility, surveys }) {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab HACCP ─────────────────────────────────────────────────
+function HaccpTab({ facility }) {
+  const [showModal, setShowModal] = useState(false);
+
+  if (!facility?.haccp_obbligatorio) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <ChefHat size={48} className="text-slate-200 mb-4" />
+        <p className="font-black text-slate-400 text-lg">Struttura non soggetta a HACCP</p>
+        <p className="text-sm text-slate-300 mt-1">Questa struttura non ha l'obbligo di autocontrollo alimentare.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
+        <div className="flex items-center gap-5">
+          <div className="bg-amber-50 p-4 rounded-2xl">
+            <ChefHat size={32} className="text-amber-500" />
+          </div>
+          <div>
+            <h2 className="text-lg font-black text-slate-800">Fascicolo HACCP</h2>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Profilo, SCIA, manuale, analisi microbiologiche e formazione.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-wider shadow transition-all"
+        >
+          <ChefHat size={16} /> Apri fascicolo
+        </button>
+      </div>
+
+      {showModal && (
+        <HaccpFascicoloModal
+          facility={facility}
+          onClose={() => setShowModal(false)}
+        />
       )}
     </div>
   );
