@@ -84,7 +84,7 @@ export function parseApparecchiature(testo = '') {
   const frigoReparti = [];
 
   for (const riga of righe) {
-    const [codiceRaw, ...descParts] = riga.split(/[–\-]/);
+    const [codiceRaw, ...descParts] = riga.split(/[–-]/);
     const codice = codiceRaw.trim().toUpperCase();
     const desc   = descParts.join('–').trim() || codice;
 
@@ -1198,6 +1198,7 @@ ${sezioniLabel}
 ${facility.region ? `Per la regione ${facility.region}: includi normativa formazione regionale specifica e riferimento ASL/ATS competente.` : ''}
 
 ━━ ISTRUZIONI OBBLIGATORIE ━━
+IMPORTANTE: Genera TUTTE le sezioni elencate sopra, senza fermarti. Non troncare il documento.
 - Produci un manuale completo e professionale, NON una bozza
 - Ogni sezione deve essere pienamente sviluppata con contenuto normativo corretto
 - Usa Reg. CE 852/2004, Reg. UE 625/2017, D.Lgs 27/2021, Reg. UE 2021/382, D.Lgs 18/2023
@@ -1205,13 +1206,27 @@ ${facility.region ? `Per la regione ${facility.region}: includi normativa formaz
 - Il piano monitoraggio temperature deve elencare OGNI apparecchiatura frigorífera indicata
 - Per ogni CCP: pericolo, limite critico, monitoraggio, azione correttiva, verifica, registrazione
 - NON includere nomi di persone nel corpo del manuale (solo ruoli: LR, R-HACCP, ecc.)
-- Il registro revisioni deve riportare le revisioni indicate
-${sezioni.includes('microbio') ? '- Piano analisi microbiologiche: superfici, mani operatori, acqua (NO campionamento alimenti routinario)' : ''}
-${sa.op_disfagici       ? '- Sezione disfagici: locale dedicato, frigorifero identificato, pasto nominale, procedure specifiche' : ''}
-${sa.op_cena_abbattuta  ? '- Gestione teglie abbattute: temperatura ricevimento ≤4°C, riattivazione ≥75°C al cuore' : ''}
-${(sa.op_srtr || isUdoPsi) ? '- Sezione SRTR: sicurezza posateria (conta cutlery), supervisione tavoli, gestione crisi, pasto in camera per isolamento' : ''}
-${sa.op_monouso_infetti ? '- Gestione pazienti infetti: pasto monouso, smaltimento come rifiuti speciali (non RSU)' : ''}
-${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: procedure sicurezza, supervisione' : ''}`;
+- Il registro revisioni è già nella copertina — NON includerlo nel corpo del testo
+- Usa tabelle markdown (| col | col |) per CCP, pericoli, temperature e piani analisi
+- Numera le sezioni progressivamente: 1., 1.1, 1.2, 2., 2.1 ecc.
+- STRUTTURA OBBLIGATORIA — genera TUTTE queste sezioni nell'ordine indicato:
+  1. Introduzione e campo di applicazione
+  2. Normativa di riferimento
+  3. Cultura della sicurezza alimentare
+  4. Descrizione della struttura e dei locali
+  5. Diagrammi di flusso (descritti con →)
+  6. Analisi dei pericoli e identificazione CCP (con tabella)
+  7. Celiachia e gestione allergeni
+  ${sezioni.includes('team') ? '8. Gruppo HACCP e composizione del team' : ''}
+  ${sa.op_disfagici ? '- Sezione ospiti disfagici: locale dedicato, frigorifero identificato (FD), pasto nominale, consistenze IDDSI' : ''}
+  ${(sa.op_srtr || isUdoPsi) ? '- Sezione SRTR psichiatrica: sicurezza posateria, supervisione tavoli, gestione crisi pasto, pasto in camera' : ''}
+  ${sa.op_monouso_infetti ? '- Pazienti in isolamento infettivo: vassoio monouso, smaltimento rifiuti speciali, DPI operatore' : ''}
+  ${sa.op_cena_abbattuta ? '- Teglie abbattute per cena: temperatura ricezione ≤4°C, riattivazione ≥75°C al cuore' : ''}
+  ${sa.op_riabilitazione ? '- Laboratori alimentari terapeutici: attività consentite/vietate, igiene, supervisione, separazione area produzione' : ''}
+  ${sezioni.includes('microbio') ? '- Piano analisi microbiologiche (tabella: tipo analisi, matrice, frequenza, laboratorio, parametri)' : ''}
+  ${sezioni.includes('formazione') ? '- Piano formazione (tabella: argomento, destinatari, frequenza, ore, ente formatore)' : ''}
+  ${sezioni.includes('manutenzione') ? '- Manutenzione e taratura attrezzature' : ''}
+  ${sezioni.includes('documentazione') ? '- Documentazione e archiviazione (elenco moduli, tempi conservazione)' : ''}`;
   };
 
   const handleGenera = async () => {
@@ -1237,7 +1252,7 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
         },
         body: JSON.stringify({
           model:      'claude-haiku-4-5-20251001',
-          max_tokens: 8000,
+          max_tokens: 16000,
           messages:   [{ role: 'user', content: prompt }],
         }),
       });
@@ -1263,15 +1278,15 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
     setSaving(true);
     try {
       const sa     = profilo?.sezioni_attive || {};
-      // Rev: se è il primo manuale usa rev_corrente dal profilo, altrimenti incrementa
       const numRev = manuali.filter(m => !m.richiesta_pending).length > 0
         ? (parseInt(manuali.find(m => !m.richiesta_pending)?.numero_revisione || '0') || 0) + 1
         : parseInt(sa.rev_corrente) || 1;
       const oggi     = new Date().toISOString().split('T')[0];
       const scadenza = new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0];
 
-      // 1. Genera .docx via Edge Function
-      const docxParams = {
+      // 1. Genera .docx nel browser (nessuna Edge Function)
+      const { generaManualeHaccp } = await import('../services/haccpManualeService');
+      const docxBuffer = await generaManualeHaccp({
         nomestruttura: facility.name,
         osa:           facility.name,
         pivaOsa:       sa.piva_osa            || '—',
@@ -1285,23 +1300,9 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
         noteRevisione: revNote                 || 'Prima emissione',
         testoManuale:  generatedText,
         logoVariante:  logoVariante,
-      };
+      });
 
-      const { data: fnData, error: fnError } = await supabase.functions.invoke(
-        'generate-haccp-docx',
-        { body: docxParams }
-      );
-
-      if (fnError) throw new Error(fnError.message || 'Errore Edge Function generate-haccp-docx');
-      if (!fnData?.docx_base64) throw new Error(fnData?.error || 'Risposta vuota dalla Edge Function');
-
-      // Decodifica base64 → Uint8Array
-      const binaryStr = atob(fnData.docx_base64);
-      const bytes     = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-      const docxBuffer = bytes.buffer;
-
-      // 2. Upload .docx in Storage
+      // 2. Upload .docx manuale in Storage
       const path = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.docx`;
       const { error: upErr } = await supabase.storage
         .from('haccp-documents')
@@ -1314,16 +1315,47 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
       const { data: signData } = await supabase.storage
         .from('haccp-documents')
         .createSignedUrl(path, 60 * 60 * 24 * 365);
+      if (!signData?.signedUrl) throw new Error('Impossibile generare URL download.');
 
-      if (!signData?.signedUrl) throw new Error('Impossibile generare URL di download.');
+      // 3. Genera modulistica (Autoc 1, 2A, 2B, 7) e upload
+      let modulisticaUrl = null;
+      try {
+        const { generaModulisticaHaccp } = await import('../services/haccpManualeService');
+        const modBuffer = await generaModulisticaHaccp({
+          nomestruttura:               facility.name,
+          modello:                     profilo.modello_ristorazione || 'cucina_interna',
+          apparecchiature_frigorifere: profilo.apparecchiature_frigorifere || '',
+          op_distributore_acqua:       sa.op_distributore_acqua       || false,
+          op_distributore_acqua_note:  sa.op_distributore_acqua_note  || '',
+          op_macchinetta_caffe:        sa.op_macchinetta_caffe        || false,
+          op_macchinetta_caffe_note:   sa.op_macchinetta_caffe_note   || '',
+          op_cena_abbattuta:           sa.op_cena_abbattuta           || false,
+        });
+        const modPath = `${facility.id}/manuali/modulistica_rev${numRev}_${oggi}.docx`;
+        const { error: modErr } = await supabase.storage
+          .from('haccp-documents')
+          .upload(modPath, modBuffer, {
+            contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            upsert: true,
+          });
+        if (!modErr) {
+          const { data: modSign } = await supabase.storage
+            .from('haccp-documents')
+            .createSignedUrl(modPath, 60 * 60 * 24 * 365);
+          modulisticaUrl = modSign?.signedUrl || null;
+        }
+      } catch (modEx) {
+        console.warn('Modulistica non generata:', modEx.message);
+      }
 
-      // 3. Inserisce record in haccp_manuali
+      // 4. Inserisce record in haccp_manuali
       const { error: dbErr } = await supabase.from('haccp_manuali').insert([{
         struttura_id:            facility.id,
         numero_revisione:        numRev,
         data_emissione:          oggi,
         data_scadenza_revisione: scadenza,
         file_url_manuale:        signData.signedUrl,
+        file_url_modulistica:    modulisticaUrl,
         note_revisione:          revNote || null,
         logo_variante:           logoVariante,
         richiesta_pending:       false,
@@ -1335,7 +1367,7 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
       setShowGenerated(false);
       setGeneratedText('');
       setRevNote('');
-      alert(`Manuale Rev. ${numRev} salvato correttamente come documento Word.`);
+      alert(`Manuale Rev. ${numRev} salvato correttamente.${modulisticaUrl ? ' Modulistica allegata.' : ''}`);
     } catch (err) {
       alert('Errore salvataggio: ' + err.message);
     } finally {
