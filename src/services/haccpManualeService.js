@@ -131,7 +131,6 @@ function parseTabellaMd(lineeTabella) {
     i === numCols - 1 ? CONTENT_W - colW * (numCols - 1) : colW
   );
 
-  const isHeader = (r) => lineeTabella[1]?.match(/^\|[\s|:-]+\|$/) && righe.indexOf(r) === 0;
 
   return new Table({
     width: { size: CONTENT_W, type: WidthType.DXA },
@@ -227,7 +226,10 @@ function parseMarkdown(rawText) {
     if (!t) { result.push(new Paragraph({ children: [run('')] })); i++; continue; }
 
     // Diagramma di flusso — riga con → e step in MAIUSCOLO
-    if ((t.includes('→') || t.includes('↓')) && t === t.toUpperCase().replace(/[→↓\s\-–—().,]/g,'').length > 3 || t.match(/^[A-ZÀÈÌÒÙ\s]+→/)) {
+    const hasFreccia = t.includes('→') || t.includes('↓');
+    const isMaiuscolo = t.replace(/[→↓\s\-–—().,]/g, '').length > 3;
+    const isFlowLine = t.match(/^[A-ZÀÈÌÒÙ\s]+→/) !== null;
+    if ((hasFreccia && isMaiuscolo) || isFlowLine) {
       const diag = parseDiagramma(t);
       if (diag) { result.push(...spacer(1)); result.push(...diag); result.push(...spacer(1)); i++; continue; }
     }
@@ -454,7 +456,6 @@ export async function generaModulisticaHaccp({
 }) {
   const isCucinaInterna = modello === 'cucina_interna';
   const isAppalto       = modello === 'appalto_fresco_caldo';
-  const isDist          = modello === 'distribuzione_veicolata';
 
   // ── Parse apparecchiature ─────────────────────────────────
   const righe = apparecchiature_frigorifere.split('\n').map(r => r.trim()).filter(Boolean);
