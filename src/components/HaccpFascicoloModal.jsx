@@ -74,6 +74,37 @@ const SEZIONI_OPT = [
 
 const SEZIONI_BASE_DEFAULT = [...SEZIONI_FISSE, 'team'];
 
+// ── Parser apparecchiature frigorifere ───────────────────────
+// Input: testo libero "F1 – Frigorifero cucina\nC1 – Congelatore\nFR1 – Reparto"
+// Output: { frigoCucina: [{codice, desc}], congelatori: [...], frigoReparti: [...] }
+export function parseApparecchiature(testo = '') {
+  const righe = testo.split('\n').map(r => r.trim()).filter(Boolean);
+  const frigoCucina  = [];
+  const congelatori  = [];
+  const frigoReparti = [];
+
+  for (const riga of righe) {
+    const [codiceRaw, ...descParts] = riga.split(/[–\-]/);
+    const codice = codiceRaw.trim().toUpperCase();
+    const desc   = descParts.join('–').trim() || codice;
+
+    if (/^CR\d*/i.test(codice)) {
+      frigoReparti.push({ codice, desc, tipo: 'congelatore_reparto' });
+    } else if (/^FR\d*/i.test(codice) || /^FD$/i.test(codice)) {
+      frigoReparti.push({ codice, desc, tipo: 'frigorifero_reparto' });
+    } else if (/^C\d+/i.test(codice)) {
+      congelatori.push({ codice, desc });
+    } else if (/^F\d+/i.test(codice)) {
+      frigoCucina.push({ codice, desc });
+    } else {
+      // Fallback — tratta come frigorifero cucina
+      frigoCucina.push({ codice, desc });
+    }
+  }
+
+  return { frigoCucina, congelatori, frigoReparti };
+}
+
 // ── Componente principale ─────────────────────────────────────
 export default function HaccpFascicoloModal({ facility, onClose }) {
   const [activeTab, setActiveTab] = useState('profilo');
@@ -1101,6 +1132,15 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       ? p.apparecchiature_frigorifere.split('\n').filter(Boolean).join('\n')
       : 'da definire';
 
+    // Parsing strutturato per il piano temperature
+    const app = parseApparecchiature(p.apparecchiature_frigorifere || '');
+    const riepilogoApp = [
+      app.frigoCucina.length  ? `Frigoriferi cucina (scheda unica con ${app.frigoCucina.length} colonne): ${app.frigoCucina.map(f => f.codice + ' ' + f.desc).join(', ')}` : '',
+      app.congelatori.length  ? `Congelatori cucina (scheda unica con ${app.congelatori.length} colonne): ${app.congelatori.map(f => f.codice + ' ' + f.desc).join(', ')}` : '',
+      app.frigoReparti.filter(f => f.tipo === 'frigorifero_reparto').length ? `Frigoriferi reparto (scheda separata per ognuno): ${app.frigoReparti.filter(f => f.tipo === 'frigorifero_reparto').map(f => f.codice + ' ' + f.desc).join(', ')}` : '',
+      app.frigoReparti.filter(f => f.tipo === 'congelatore_reparto').length ? `Congelatori reparto (scheda separata per ognuno): ${app.frigoReparti.filter(f => f.tipo === 'congelatore_reparto').map(f => f.codice + ' ' + f.desc).join(', ')}` : '',
+    ].filter(Boolean).join('\n');
+
     return `Sei un esperto di sicurezza alimentare e normativa HACCP italiana. Genera un Manuale HACCP completo e professionale in italiano per la struttura socio-sanitaria indicata di seguito.
 
 Il documento deve essere formattato come un manuale aziendale reale, con intestazioni, numerazione sezioni, tabelle dove opportuno, e linguaggio tecnico-normativo corretto.
@@ -1129,8 +1169,13 @@ Rev. corrente: ${sa.rev_corrente || '1'}  Data: ${sa.data_revisione || new Date(
 ${sa.op_nuclei_note || 'Non specificato'}
 Orari distribuzione: ${sa.op_orari_distribuzione || 'Non specificati'}
 
-━━ APPARECCHIATURE FRIGORIFERE (usare nel piano monitoraggio temperature) ━━
-${righeFreigo}
+━━ APPARECCHIATURE FRIGORIFERE ━━
+${riepilogoApp || righeFreigo}
+
+Nel piano di monitoraggio temperature del manuale:
+- Le apparecchiature F1, F2... vanno in un'unica scheda Autoc 2A cucina con una colonna per ognuna
+- Le apparecchiature C1, C2... vanno in un'unica scheda Autoc 2B con una colonna per ognuna  
+- Le apparecchiature FR1, FR2..., FD, CR1... hanno ciascuna una scheda separata (la scheda resta sull'apparecchio)
 
 ━━ DISTRIBUTORI AUTOMATICI ━━
 ${sa.op_macchinetta_caffe ? `Macchinette caffè/bevande: ${sa.op_macchinetta_caffe_note || 'presenti'}` : 'Nessuna macchinetta caffè'}
@@ -1217,8 +1262,11 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
     if (!generatedText) return;
     setSaving(true);
     try {
-      const sa       = profilo?.sezioni_attive || {};
-      const numRev   = (manuali.length > 0 ? (parseInt(manuali[0].numero_revisione) || 0) + 1 : parseInt(sa.rev_corrente) || 1);
+      const sa     = profilo?.sezioni_attive || {};
+      // Rev: se è il primo manuale usa rev_corrente dal profilo, altrimenti incrementa
+      const numRev = manuali.filter(m => !m.richiesta_pending).length > 0
+        ? (parseInt(manuali.find(m => !m.richiesta_pending)?.numero_revisione || '0') || 0) + 1
+        : parseInt(sa.rev_corrente) || 1;
       const oggi     = new Date().toISOString().split('T')[0];
       const scadenza = new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0];
 
@@ -1244,27 +1292,23 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
         { body: docxParams, responseType: 'arrayBuffer' }
       );
 
-      let fileUrl = null;
-      if (!fnError && fnData) {
-        // 2. Upload .docx in Storage
-        const path = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.docx`;
-        const { error: upErr } = await supabase.storage
-          .from('haccp-documents')
-          .upload(path, fnData, { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', upsert: true });
-        if (!upErr) {
-          const { data: signData } = await supabase.storage
-            .from('haccp-documents')
-            .createSignedUrl(path, 60 * 60 * 24 * 365);
-          fileUrl = signData?.signedUrl || null;
-        }
-      } else {
-        // Fallback: salva testo come .txt se Edge Function non disponibile
-        const blob = new Blob([generatedText], { type: 'text/plain' });
-        const path = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.txt`;
-        await supabase.storage.from('haccp-documents').upload(path, blob, { upsert: true });
-        const { data: signData } = await supabase.storage.from('haccp-documents').createSignedUrl(path, 60 * 60 * 24 * 365);
-        fileUrl = signData?.signedUrl || null;
-      }
+      if (fnError || !fnData) throw new Error(fnError?.message || 'Errore generazione .docx — riprova.');
+
+      // 2. Upload .docx in Storage
+      const path = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.docx`;
+      const { error: upErr } = await supabase.storage
+        .from('haccp-documents')
+        .upload(path, fnData, {
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          upsert: true,
+        });
+      if (upErr) throw upErr;
+
+      const { data: signData } = await supabase.storage
+        .from('haccp-documents')
+        .createSignedUrl(path, 60 * 60 * 24 * 365);
+
+      if (!signData?.signedUrl) throw new Error('Impossibile generare URL di download.');
 
       // 3. Inserisce record in haccp_manuali
       const { error: dbErr } = await supabase.from('haccp_manuali').insert([{
@@ -1272,7 +1316,7 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
         numero_revisione:        numRev,
         data_emissione:          oggi,
         data_scadenza_revisione: scadenza,
-        file_url_manuale:        fileUrl,
+        file_url_manuale:        signData.signedUrl,
         note_revisione:          revNote || null,
         logo_variante:           logoVariante,
         richiesta_pending:       false,
@@ -1284,7 +1328,7 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
       setShowGenerated(false);
       setGeneratedText('');
       setRevNote('');
-      alert(`Manuale Rev. ${numRev} salvato correttamente.`);
+      alert(`Manuale Rev. ${numRev} salvato correttamente come documento Word.`);
     } catch (err) {
       alert('Errore salvataggio: ' + err.message);
     } finally {
@@ -1301,37 +1345,66 @@ ${sa.op_riabilitazione  ? '- Coinvolgimento pazienti in attività cucina: proced
           Manuale corrente
         </h3>
         {ultimo ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-black text-slate-800">Revisione {ultimo.numero_revisione}</p>
-                <p className="text-sm text-slate-500 mt-0.5">Emesso il {ultimo.data_emissione}</p>
-                {ultimo.data_scadenza_revisione && (
-                  <p className={`text-xs font-bold mt-1 ${
-                    new Date(ultimo.data_scadenza_revisione) < new Date()
-                      ? 'text-red-600' : 'text-slate-400'
-                  }`}>
-                    Scadenza revisione: {ultimo.data_scadenza_revisione}
-                  </p>
-                )}
+          <div className={`bg-white border rounded-xl p-5 space-y-3 ${ultimo.richiesta_pending ? 'border-amber-200 bg-amber-50' : 'border-slate-200'}`}>
+            {ultimo.richiesta_pending ? (
+              <div className="flex items-center gap-3">
+                <AlertTriangle size={16} className="text-amber-500 shrink-0" />
+                <div>
+                  <p className="font-black text-amber-700">Richiesta manuale in attesa</p>
+                  <p className="text-xs text-amber-600 mt-0.5">Inviata il {ultimo.data_emissione} — in attesa di generazione da superadmin.</p>
+                </div>
               </div>
-              <div className="flex gap-2">
-                {ultimo.file_url_manuale && (
-                  <a href={ultimo.file_url_manuale} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 text-xs font-black text-indigo-600 border border-indigo-200 hover:bg-indigo-50 px-3 py-1.5 rounded-xl transition-colors">
-                    <ExternalLink size={12} /> Manuale
-                  </a>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-black text-slate-800">Revisione {ultimo.numero_revisione}</p>
+                      {/* Badge formato file */}
+                      {ultimo.file_url_manuale && (
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          ultimo.file_url_manuale.includes('.docx')
+                            ? 'bg-indigo-100 text-indigo-600'
+                            : 'bg-slate-100 text-slate-400'
+                        }`}>
+                          {ultimo.file_url_manuale.includes('.docx') ? 'WORD' : 'TXT'}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-500 mt-0.5">Emesso il {ultimo.data_emissione}</p>
+                    {ultimo.data_scadenza_revisione && (
+                      <p className={`text-xs font-bold mt-1 ${
+                        new Date(ultimo.data_scadenza_revisione) < new Date()
+                          ? 'text-red-600' : 'text-slate-400'
+                      }`}>
+                        Scadenza revisione: {ultimo.data_scadenza_revisione}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {ultimo.file_url_manuale && (
+                      <a href={ultimo.file_url_manuale} target="_blank" rel="noreferrer"
+                        className={`flex items-center gap-1.5 text-xs font-black border px-3 py-1.5 rounded-xl transition-colors ${
+                          ultimo.file_url_manuale.includes('.docx')
+                            ? 'text-indigo-600 border-indigo-200 hover:bg-indigo-50'
+                            : 'text-slate-500 border-slate-200 hover:bg-slate-50'
+                        }`}>
+                        <ExternalLink size={12} />
+                        {ultimo.file_url_manuale.includes('.docx') ? '📄 Scarica Word' : 'Apri TXT'}
+                      </a>
+                    )}
+                    {ultimo.file_url_modulistica && (
+                      <a href={ultimo.file_url_modulistica} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1.5 text-xs font-black text-amber-600 border border-amber-200 hover:bg-amber-50 px-3 py-1.5 rounded-xl transition-colors">
+                        <ExternalLink size={12} /> Modulistica
+                      </a>
+                    )}
+                  </div>
+                </div>
+                {ultimo.note_revisione && (
+                  <p className="text-xs text-slate-400 italic border-t border-slate-100 pt-2">{ultimo.note_revisione}</p>
                 )}
-                {ultimo.file_url_modulistica && (
-                  <a href={ultimo.file_url_modulistica} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 text-xs font-black text-amber-600 border border-amber-200 hover:bg-amber-50 px-3 py-1.5 rounded-xl transition-colors">
-                    <ExternalLink size={12} /> Modulistica
-                  </a>
-                )}
-              </div>
-            </div>
-            {ultimo.note_revisione && (
-              <p className="text-xs text-slate-400 italic border-t border-slate-100 pt-2">{ultimo.note_revisione}</p>
+              </>
             )}
           </div>
         ) : (
@@ -1872,22 +1945,44 @@ function NoteOperativeSection({ form, set, modello }) {
       {/* ── APPARECCHIATURE FRIGORIFERE ── */}
       <div className="space-y-3">
         <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Apparecchiature frigorifere</p>
+
+        {/* Box istruzioni denominazione */}
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 space-y-1.5">
+          <p className="text-xs font-black text-amber-700">Regole di denominazione — necessarie per generare le schede di monitoraggio corrette</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-1">
+            {[
+              { prefisso: 'F1, F2…', desc: 'Frigorifero cucina (colonna su scheda unica 2A cucina)' },
+              { prefisso: 'C1, C2…', desc: 'Congelatore cucina (colonna su scheda unica 2B)' },
+              { prefisso: 'FR1, FR2…', desc: 'Frigorifero reparto (scheda 2A separata per ognuno)' },
+              { prefisso: 'FD', desc: 'Frigorifero disfagici (scheda 2A separata)' },
+              { prefisso: 'CR1, CR2…', desc: 'Congelatore reparto (scheda 2B separata per ognuno)' },
+            ].map(r => (
+              <div key={r.prefisso} className="flex items-start gap-2">
+                <span className="text-xs font-black text-amber-600 shrink-0 w-16">{r.prefisso}</span>
+                <span className="text-xs text-amber-700">{r.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div>
-          <label className={LBL}>Elenco apparecchiature (una per riga — usate nel piano monitoraggio temperature)</label>
+          <label className={LBL}>Elenco apparecchiature (una per riga)</label>
           <textarea
             value={form.apparecchiature_frigorifere}
             onChange={set('apparecchiature_frigorifere')}
-            rows={4}
+            rows={5}
             className={INP}
             placeholder={
               isCucinaInterna
-                ? 'F1 – Frigorifero cucina (zona preparazione)\nFD – Frigorifero disfagici\nFR1 – Frigorifero reparto nucleo A\nFR2 – Frigorifero reparto nucleo B'
+                ? 'F1 – Frigorifero cucina carni e latticini\nF2 – Frigorifero cucina frutta e verdura\nC1 – Congelatore cucina\nFR1 – Frigorifero reparto nucleo A\nFR2 – Frigorifero reparto nucleo B\nFD – Frigorifero disfagici'
                 : isAppalto
                 ? 'F1 – Frigorifero cucina (gestito dal fornitore)\nFR1 – Frigorifero cucinetta nucleo A\nFR2 – Frigorifero cucinetta nucleo B'
                 : 'FR1 – Frigorifero nucleo A\nFR2 – Frigorifero nucleo B\nFD – Frigorifero locale disfagici'
             }
           />
-          <p className="text-[10px] text-slate-400 mt-1">Formato: Codice – Descrizione. Ogni riga = una apparecchiatura monitorata nel piano temperature.</p>
+          <p className="text-[10px] text-slate-400 mt-1.5">
+            Formato: <strong>Codice – Descrizione</strong> · Una riga per apparecchiatura · Il codice determina quale scheda viene generata
+          </p>
         </div>
       </div>
 
