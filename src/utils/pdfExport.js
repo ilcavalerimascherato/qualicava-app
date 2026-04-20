@@ -129,7 +129,7 @@ export async function exportPDF({
   elementId,
   sections,
   filename,
-  logoSrc = 'intestazione.jpg',
+  logoSrc = 'intestazione.jpeg',
   onDone,
 }) {
   // Normalizza: supporta sia elementId singolo che array sections

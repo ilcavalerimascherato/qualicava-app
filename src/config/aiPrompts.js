@@ -373,10 +373,15 @@ ${opCarrelloTermico ? '- Carrello termico: scomparti caldo/freddo, pulizia, sani
 ${opRiabilitazione ? '- Attività terapeutiche cucina: attività consentite/vietate, supervisione, igiene, separazione' : ''}
 ${sezioni.includes('microbio') ? '- Analisi microbiologiche: superfici e mani operatori (non campionamento routinario alimenti)' : ''}
 ${sezioni.includes('formazione') ? '- Piano formazione (tabella: argomento, destinatari, frequenza triennale, ore)' : ''}
-${sezioni.includes('manutenzione') ? '- Manutenzione attrezzature e taratura annuale strumenti' : ''}
+- Manutenzione attrezzature e taratura annuale strumenti di misura (obbligo Reg. CE 852/2004 — sempre inclusa)
 ${sezioni.includes('documentazione') ? '- Documentazione: elenco moduli, conservazione. Registro allergie: periodo utilizzo (GDPR).' : ''}`;
     },
   },
+
+  // ── 7. KPI → Periodo (Trend) ────────────────────────────────
+  kpiPeriodo: {
+    required: ['scopeName', 'periodoStart', 'periodoEnd', 'kpiTrendPayload'],
+    build: ({ scopeName, periodoStart, periodoEnd, kpiTrendPayload }) => `
 Sei il Senior Quality Manager del Gruppo.
 Scrivi una Relazione di Analisi Trend KPI per il BOARD DIREZIONALE.
 Perimetro: ${scopeName}. Periodo analizzato: ${periodoStart} — ${periodoEnd}.

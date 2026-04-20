@@ -757,6 +757,7 @@ function UtentiTab({ facilities, isSuperAdmin }) {
   const [editingId, setEditingId]     = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [search, setSearch]           = useState('');
+  const [filterFacility, setFilterFacility] = useState('');
   const [saving, setSaving]           = useState(false);
   const [inviting, setInviting]       = useState(false);
   const [inviteResult, setInviteResult] = useState(null);
@@ -792,11 +793,16 @@ function UtentiTab({ facilities, isSuperAdmin }) {
 
   useEffect(() => { loadUtenti(); }, []);
 
-  const filtered = utenti.filter(u =>
-    !search ||
-    u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-    u.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = utenti.filter(u => {
+    const matchSearch = !search ||
+      u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      u.email?.toLowerCase().includes(search.toLowerCase());
+
+    const matchFacility = !filterFacility ||
+      u.user_facility_access?.some(a => String(a.facility_id) === filterFacility);
+
+    return matchSearch && matchFacility;
+  });
 
   const inviteUser = async (form) => {
     setInviting(true);
@@ -859,10 +865,19 @@ function UtentiTab({ facilities, isSuperAdmin }) {
         </div>
       )}
 
-      <div className="relative">
-        <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
-        <input type="text" placeholder="Cerca per nome o email..." value={search} onChange={e => setSearch(e.target.value)}
-          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:border-indigo-400" />
+      <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-48">
+          <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+          <input type="text" placeholder="Cerca per nome o email..." value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:border-indigo-400" />
+        </div>
+        <select value={filterFacility} onChange={e => setFilterFacility(e.target.value)}
+          className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-400 min-w-48">
+          <option value="">Tutte le strutture</option>
+          {[...facilities].sort((a,b) => a.name.localeCompare(b.name)).map(f => (
+            <option key={f.id} value={String(f.id)}>{f.name}</option>
+          ))}
+        </select>
       </div>
 
       {loading ? (
