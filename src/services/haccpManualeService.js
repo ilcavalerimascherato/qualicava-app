@@ -702,7 +702,6 @@ export async function generaModulisticaHaccp({
     const cUltimo = W - cVoce - cGiorno * 30;
     const colWidths = [cVoce, ...Array.from({length:30}, ()=>cGiorno), cUltimo];
 
-    const giorni = Array.from({length:31},(_,i)=>String(i+1));
 
     const altRiga = landscape
       ? Math.max(Math.floor((5800 - 900) / (VOCI.length + 2)), 300)

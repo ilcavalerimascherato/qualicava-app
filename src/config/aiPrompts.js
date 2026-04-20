@@ -379,31 +379,6 @@ ${sezioni.includes('documentazione') ? '- Documentazione: elenco moduli, conserv
   },
 
   // ── 7. KPI → Periodo (Trend) ────────────────────────────────
-  kpiPeriodo: {
-    required: ['scopeName', 'periodoStart', 'periodoEnd', 'kpiTrendPayload'],
-    build: ({ scopeName, periodoStart, periodoEnd, kpiTrendPayload }) => `
-Sei il Senior Quality Manager del Gruppo.
-Scrivi una Relazione di Analisi Trend KPI per il BOARD DIREZIONALE.
-Perimetro: ${scopeName}. Periodo analizzato: ${periodoStart} — ${periodoEnd}.
-
-DATI TREND KPI (andamento mensile e variazione per ogni indicatore):
-${kpiTrendPayload}
-
-REGOLE TASSATIVE:
-- Parti DIRETTAMENTE con "1. SINTESI DEL PERIODO". Nessuna intestazione.
-- Focalizzati sui TREND nel tempo, non sui valori assoluti del singolo mese.
-- Evidenzia miglioramenti significativi e peggioramenti preoccupanti.
-- Tono: strategico, orientato alle decisioni di medio-lungo periodo.
-- Massimo 500 parole totali.
-
-Usa ESATTAMENTE questi titoli in maiuscolo:
-1. SINTESI DEL PERIODO
-2. TREND POSITIVI
-3. TREND NEGATIVI O INSTABILI
-4. RACCOMANDAZIONI STRATEGICHE
-5. TEMPI STIMATI RAGGIUNGIMENTO OBIETTIVI
-`.trim(),
-  },
 };
 
 // ── FACTORY UNIFICATA ─────────────────────────────────────────

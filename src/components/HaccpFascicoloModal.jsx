@@ -324,7 +324,6 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_cena_abbattuta:       form.op_cena_abbattuta,
         op_cena_abbattuta_note:  form.op_cena_abbattuta_note,
         op_carrello_termico:     form.op_carrello_termico,
-        op_cena_abbattuta_note:  form.op_cena_abbattuta_note,
         op_srtr:                 form.op_srtr,
         op_monouso_infetti:      form.op_monouso_infetti,
         op_cucinette_nuclei:     form.op_cucinette_nuclei,
