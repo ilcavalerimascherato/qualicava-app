@@ -709,7 +709,7 @@ export async function generaModulisticaHaccp({
       : Math.max(Math.floor((8600 - 900) / (VOCI.length + 2)), 320);
 
     return new Table({
-      width:{size:W,type:WidthType.DXA}, columnWidths,
+      width:{size:W,type:WidthType.DXA}, columnWidths: colWidths,
       rows:[
         // Header giorni
         new TableRow({children:[
