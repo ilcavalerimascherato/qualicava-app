@@ -66,7 +66,7 @@ export default function App() {
   const filteredFacilities = useMemo(() => {
     return processedData.list.filter(f => {
       if (!showSuspended && f.is_suspended) { return false; }
-      if (!f.name.toLowerCase().includes(searchQuery.toLowerCase())) { return false; }
+      const q = searchQuery.toLowerCase(); if (!f.name.toLowerCase().includes(q) && !(f.address || '').toLowerCase().includes(q)) { return false; }
       if (filterUdo !== 'all' && String(f.udo_id) !== String(filterUdo)) { return false; }
       if (filterStatus === 'completed' && !f.isGreen)  { return false; }
       if (filterStatus === 'progress'  && !f.isYellow) { return false; }
