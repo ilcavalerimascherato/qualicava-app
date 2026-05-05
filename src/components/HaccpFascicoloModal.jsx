@@ -1233,12 +1233,17 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
     if (!generatedText) return;
     setSaving(true);
     try {
-      const sa     = profilo?.sezioni_attive || {};
-      const numRev = manuali.filter(m => !m.richiesta_pending).length > 0
-        ? (parseInt(manuali.find(m => !m.richiesta_pending)?.numero_revisione || '0') || 0) + 1
-        : parseInt(sa.rev_corrente) || 1;
-      const oggi     = new Date().toISOString().split('T')[0];
-      const scadenza = new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0];
+      const sa      = profilo?.sezioni_attive || {};
+      // numRev ufficiale da profilo — NON dal conteggio manuali
+      const numRev  = String(sa.rev_corrente || profilo?.numero_revisione || '1');
+      // versioneInterna: quanti salvataggi già fatti per questa rev
+      const versioneInterna = manuali.filter(
+        m => !m.richiesta_pending && String(m.numero_revisione) === numRev
+      ).length;
+      const oggi    = new Date().toISOString().split('T')[0];
+      // Scadenza a 3 anni
+      const scadenza = new Date(new Date().setFullYear(new Date().getFullYear() + 3)).toISOString().split('T')[0];
+      const revStorico = sa.rev_storico || [];
 
       // 1. Genera .docx nel browser (nessuna Edge Function)
       const { generaManualeHaccp } = await import('../services/haccpManualeService');
@@ -1250,12 +1255,14 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         lr:            profilo.lr_attuale      || '—',
         rHaccp:        profilo.r_haccp         || '—',
         teamHaccp:     sa.team_haccp           || [],
-        numRev:        String(numRev),
-        dataRev:       new Date().toLocaleDateString('it-IT'),
-        redattore:     sa.redattore            || 'Ufficio Qualità OVER',
-        noteRevisione: revNote                 || 'Prima emissione',
-        testoManuale:  generatedText,
-        logoVariante:  logoVariante,
+        numRev:          numRev,
+        versioneInterna: versioneInterna,
+        dataRev:         new Date().toLocaleDateString('it-IT'),
+        redattore:       sa.redattore            || 'Ufficio Qualità OVER',
+        noteRevisione:   revNote                 || 'Prima emissione',
+        revStorico:      revStorico,
+        testoManuale:    generatedText,
+        logoVariante:    logoVariante,
       });
 
       // 2. Upload .docx manuale in Storage
@@ -1309,6 +1316,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       const { error: dbErr } = await supabase.from('haccp_manuali').insert([{
         struttura_id:            facility.id,
         numero_revisione:        numRev,
+        versione_interna:        versioneInterna,
         data_emissione:          oggi,
         data_scadenza_revisione: scadenza,
         file_url_manuale:        signData.signedUrl,
@@ -1324,7 +1332,8 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       setShowGenerated(false);
       setGeneratedText('');
       setRevNote('');
-      alert(`Manuale Rev. ${numRev} salvato correttamente.${modulisticaUrl ? ' Modulistica allegata.' : ''}`);
+      const revLabel = versioneInterna > 0 ? `${numRev}_${versioneInterna}` : numRev;
+      alert(`Manuale Rev. ${revLabel} salvato correttamente.${modulisticaUrl ? ' Modulistica allegata.' : ''}`);
     } catch (err) {
       alert('Errore salvataggio: ' + err.message);
     } finally {
@@ -1355,7 +1364,11 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-black text-slate-800">Revisione {ultimo.numero_revisione}</p>
+                      <p className="font-black text-slate-800">
+                      Rev. {(ultimo.versione_interna ?? 0) > 0
+                        ? `${ultimo.numero_revisione}_${ultimo.versione_interna}`
+                        : ultimo.numero_revisione}
+                    </p>
                       {/* Badge formato file */}
                       {ultimo.file_url_manuale && (
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
