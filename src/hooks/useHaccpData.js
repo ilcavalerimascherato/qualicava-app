@@ -79,7 +79,8 @@ export function useHaccpFascicolo(facilityId) {
         .from('haccp_manuali')
         .select('*')
         .eq('struttura_id', facilityId)
-        .order('numero_revisione', { ascending: false });
+        .order('numero_revisione', { ascending: false })
+        .order('versione_interna', { ascending: false });
       if (error) throw error;
       return data ?? [];
     },

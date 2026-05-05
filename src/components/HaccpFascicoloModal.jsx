@@ -1211,33 +1211,42 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
     if (!generatedText) return;
     setSaving(true);
     try {
-      const sa     = profilo?.sezioni_attive || {};
-      const numRev = manuali.filter(m => !m.richiesta_pending).length > 0
-        ? (parseInt(manuali.find(m => !m.richiesta_pending)?.numero_revisione || '0') || 0) + 1
-        : parseInt(sa.rev_corrente) || 1;
-      const oggi     = new Date().toISOString().split('T')[0];
-      const scadenza = new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString().split('T')[0];
+      const sa      = profilo?.sezioni_attive || {};
+      // numRev ufficiale: da profilo (campo rev_corrente), NON dal conteggio dei manuali
+      const numRev  = String(sa.rev_corrente || profilo?.numero_revisione || '1');
+      // versioneInterna: quante volte è già stato salvato questo numRev
+      const versioneInterna = manuali.filter(
+        m => !m.richiesta_pending && String(m.numero_revisione) === numRev
+      ).length; // 0 = prima volta (Rev.2), 1 = Rev.2_1, ecc.
+      const oggi    = new Date().toISOString().split('T')[0];
+      // Scadenza a 3 anni
+      const scadenza = new Date(new Date().setFullYear(new Date().getFullYear() + 3)).toISOString().split('T')[0];
+      // Storico revisioni precedenti per il registro
+      const revStorico = (sa.rev_storico || []);  // [{rev:'0', data:'05/11/2025', note:'...'}, ...]
 
       // 1. Genera .docx nel browser (nessuna Edge Function)
       const { generaManualeHaccp } = await import('../services/haccpManualeService');
       const docxBuffer = await generaManualeHaccp({
-        nomestruttura: facility.name,
-        osa:           facility.name,
-        pivaOsa:       sa.piva_osa            || '—',
-        modello:       profilo.modello_ristorazione || 'cucina_interna',
-        lr:            profilo.lr_attuale      || '—',
-        rHaccp:        profilo.r_haccp         || '—',
-        teamHaccp:     sa.team_haccp           || [],
-        numRev:        String(numRev),
-        dataRev:       new Date().toLocaleDateString('it-IT'),
-        redattore:     sa.redattore            || 'Ufficio Qualità OVER',
-        noteRevisione: revNote                 || 'Prima emissione',
-        testoManuale:  generatedText,
-        logoVariante:  logoVariante,
+        nomestruttura:   facility.name,
+        osa:             facility.name,
+        pivaOsa:         sa.piva_osa            || '—',
+        modello:         profilo.modello_ristorazione || 'cucina_interna',
+        lr:              profilo.lr_attuale      || '—',
+        rHaccp:          profilo.r_haccp         || '—',
+        teamHaccp:       sa.team_haccp           || [],
+        numRev:          numRev,
+        versioneInterna: versioneInterna,
+        dataRev:         new Date().toLocaleDateString('it-IT'),
+        redattore:       sa.redattore            || 'Ufficio Qualità OVER',
+        noteRevisione:   revNote                 || 'Prima emissione',
+        revStorico:      revStorico,
+        testoManuale:    generatedText,
+        logoVariante:    logoVariante,
       });
 
       // 2. Upload .docx manuale in Storage
-      const path = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.docx`;
+      const revLabel = versioneInterna > 0 ? `${numRev}_${versioneInterna}` : numRev;
+      const path = `${facility.id}/manuali/manuale_rev${revLabel}_${oggi}.docx`;
       const { error: upErr } = await supabase.storage
         .from('haccp-documents')
         .upload(path, docxBuffer, {
@@ -1266,7 +1275,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
           op_cena_abbattuta:           sa.op_cena_abbattuta           || false,
           op_carrello_termico:         sa.op_carrello_termico         || false,
         });
-        const modPath = `${facility.id}/manuali/modulistica_rev${numRev}_${oggi}.docx`;
+        const modPath = `${facility.id}/manuali/modulistica_rev${revLabel}_${oggi}.docx`;
         const { error: modErr } = await supabase.storage
           .from('haccp-documents')
           .upload(modPath, modBuffer, {
@@ -1286,7 +1295,8 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       // 4. Inserisce record in haccp_manuali
       const { error: dbErr } = await supabase.from('haccp_manuali').insert([{
         struttura_id:            facility.id,
-        numero_revisione:        numRev,
+        numero_revisione:        numRev,          // revisione ufficiale (da profilo)
+        versione_interna:        versioneInterna, // contatore salvataggi per questa rev
         data_emissione:          oggi,
         data_scadenza_revisione: scadenza,
         file_url_manuale:        signData.signedUrl,
@@ -1302,7 +1312,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       setShowGenerated(false);
       setGeneratedText('');
       setRevNote('');
-      alert(`Manuale Rev. ${numRev} salvato correttamente.${modulisticaUrl ? ' Modulistica allegata.' : ''}`);
+      alert(`Manuale Rev. ${revLabel} salvato correttamente.${modulisticaUrl ? ' Modulistica allegata.' : ''}`);
     } catch (err) {
       alert('Errore salvataggio: ' + err.message);
     } finally {
@@ -1333,7 +1343,11 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-black text-slate-800">Revisione {ultimo.numero_revisione}</p>
+                      <p className="font-black text-slate-800">
+                      Rev. {ultimo.versione_interna > 0
+                        ? `${ultimo.numero_revisione}_${ultimo.versione_interna}`
+                        : ultimo.numero_revisione}
+                    </p>
                       {/* Badge formato file */}
                       {ultimo.file_url_manuale && (
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
@@ -1370,7 +1384,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
                     {ultimo.file_url_modulistica && (
                       <a href={ultimo.file_url_modulistica} target="_blank" rel="noreferrer"
                         className="flex items-center gap-1.5 text-xs font-black text-amber-600 border border-amber-200 hover:bg-amber-50 px-3 py-1.5 rounded-xl transition-colors">
-                        <ExternalLink size={12} /> Modulistica
+                        <ExternalLink size={12} /> 📋 Scarica Modulistica
                       </a>
                     )}
                   </div>

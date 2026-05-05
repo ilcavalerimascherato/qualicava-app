@@ -86,7 +86,7 @@ function bulletItem(t) {
   return new Paragraph({
     spacing: { before: 0, after: 80, line: 280 },
     indent:  { left: 360, hanging: 240 },
-    children: [run('• ', { color: VERDE, bold: true }), run(t, { color: GRIGIO_TESTO })],
+    children: [run('• ', { color: VERDE, bold: true }), ...parseInline(t)],
   });
 }
 
@@ -112,34 +112,52 @@ function parseInline(text) {
 
 // ── Parser tabella markdown → Table docx ─────────────────────
 function parseTabellaMd(lineeTabella) {
-  // Filtra riga separatore |---|---| e righe vuote
-  const righe = lineeTabella
-    .filter(r => r.trim() && !r.match(/^\|[\s|:-]+\|$/));
-
+  const hasHeader = lineeTabella[1]?.match(/^\|[\s|:-]+\|$/);
+  const righe = lineeTabella.filter(r => r.trim() && !r.match(/^\|[\s|:-]+\|$/));
   if (righe.length === 0) return null;
 
-  // Estrai celle da ogni riga
   const parsedRows = righe.map(r =>
-    r.trim().replace(/^\||\|$/g, '').split('|').map(c =>
-      c.trim().replace(/^\*\*|\*\*$/g, '') // rimuovi bold markdown
-    )
+    r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim())
   );
 
-  const numCols  = Math.max(...parsedRows.map(r => r.length));
-  const colW     = Math.floor(CONTENT_W / numCols);
+  const numCols   = Math.max(...parsedRows.map(r => r.length));
+  // Distribuzione colonne: prima colonna leggermente più larga
+  const c0 = Math.round(CONTENT_W * 0.22);
+  const cR = Math.floor((CONTENT_W - c0) / (numCols - 1 || 1));
   const colWidths = Array.from({ length: numCols }, (_, i) =>
-    i === numCols - 1 ? CONTENT_W - colW * (numCols - 1) : colW
+    i === 0 ? c0 : (i === numCols - 1 ? CONTENT_W - c0 - cR * (numCols - 2) : cR)
   );
 
+  function styledCell(text, w, isHead) {
+    const cleanText = text.replace(/\*\*/g, '');
+    if (isHead) {
+      return new TableCell({
+        width: { size: w, type: WidthType.DXA },
+        borders: { top: B(VERDE), bottom: B(VERDE), left: B(VERDE), right: B(VERDE) },
+        shading: { fill: VERDE, type: ShadingType.CLEAR },
+        margins: { top: 80, bottom: 80, left: 120, right: 100 },
+        children: [new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [new TextRun({ text: cleanText, font: 'Arial', size: 18, bold: true, color: 'FFFFFF' })],
+        })],
+      });
+    }
+    return new TableCell({
+      width: { size: w, type: WidthType.DXA },
+      borders: { top: { style: BorderStyle.SINGLE, size: 2, color: 'DDDDDD' }, bottom: { style: BorderStyle.SINGLE, size: 2, color: 'DDDDDD' }, left: { style: BorderStyle.SINGLE, size: 2, color: 'DDDDDD' }, right: { style: BorderStyle.SINGLE, size: 2, color: 'DDDDDD' } },
+      shading: { fill: 'FFFFFF', type: ShadingType.CLEAR },
+      margins: { top: 60, bottom: 60, left: 120, right: 100 },
+      children: [new Paragraph({ children: parseInline(cleanText) })],
+    });
+  }
 
   return new Table({
     width: { size: CONTENT_W, type: WidthType.DXA },
     columnWidths: colWidths,
     rows: parsedRows.map((cols, ri) => new TableRow({
+      tableHeader: ri === 0 && hasHeader,
       children: cols.map((c, ci) =>
-        ri === 0 && lineeTabella[1]?.match(/^\|[\s|:-]+\|$/)
-          ? hCell(c, colWidths[ci] || colW)
-          : cell(c, colWidths[ci] || colW)
+        styledCell(c, colWidths[ci] || cR, ri === 0 && hasHeader)
       ),
     })),
   });
@@ -552,6 +570,139 @@ function diagrammaSanificazione() {
     ...spacer(1),
   ];
 }
+// ── Sezione 8: Diagrammi disfagici ───────────────────────────
+
+function diagrammaRicezioneDisfagici() {
+  const BLUE   = { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' };
+  const AMBER  = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const RED    = { fill: 'FCEBEB', borderColor: 'A32D2D', textColor: 'A32D2D' };
+  const TEAL   = { fill: 'E1F5EE', borderColor: '0F6E56', textColor: '0F6E56' };
+  const GRAY   = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+  return [
+    h2('8.2.1 Flusso ricezione pasti disfagici'),
+    ...spacer(1),
+    flowBox('Consegna teglioni disfagici da Sodexo SpA', 'Insieme ai pasti standard · Teglioni separati e identificati', BLUE),
+    arrowDown(),
+    flowBox('Controllo ricevimento', 'T° ≤4°C · Integrità confezionamento · Leggibilità etichetta · Verifica IDDSI level', TEAL),
+    arrowDown('Conforme?'),
+    flowRow([
+      { label: 'Non conforme → RIFIUTO', sub: 'Contattare Sodexo · Modulo NC Disfagia', ...RED },
+      { label: 'Conforme → Stoccaggio FD', sub: 'Piano interrato · ≤4°C · Contenitore "DISFAGICI – NUCLEO AS"', ...BLUE },
+    ]),
+    arrowDown(),
+    flowBox('Gestione FIFO', 'Teglioni preparati prima = utilizzati prima · Etichetta IDDSI level visibile', GRAY),
+    ...spacer(1),
+  ];
+}
+
+function diagrammaRiattivazioneD() {
+  const CORAL  = { fill: 'FAECE7', borderColor: '993C1D', textColor: '993C1D' };
+  const AMBER  = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const GREEN  = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
+  const PURPLE = { fill: 'EEEDFE', borderColor: '534AB7', textColor: '534AB7' };
+  const RED    = { fill: 'FCEBEB', borderColor: 'A32D2D', textColor: 'A32D2D' };
+  return [
+    h2('8.3.1 Flusso riattivazione pasti disfagici'),
+    ...spacer(1),
+    flowBox('Prelievo teglione da FD', 'Verifica etichetta: IDDSI level · Scadenza · Allergeni · T° ≤4°C', PURPLE),
+    arrowDown('~30 min prima cena'),
+    flowRow([
+      { label: 'Forno 160-180°C', sub: '20-25 min · T° cuore ≥75°C', ...CORAL },
+      { label: 'Microonde 70%', sub: '10-15 min · Mescola ogni 3 min · T° cuore ≥75°C', ...CORAL },
+    ]),
+    arrowRowDouble(),
+    flowBox('Verifica temperatura al cuore ≥75°C (CCP2)', 'Sonda sterile nel centro massa alimento', AMBER),
+    arrowDown('Se <75°C → riscaldamento supplementare'),
+    flowBox('Trasferimento in gastronorm monoporzionata', 'Una gastronorm per ospite · Etichetta: nome, IDDSI, allergeni, T°, ora', PURPLE),
+    arrowDown(),
+    flowBox('Mantenimento T° ≥65°C nello scaldavivande', 'Max 30 min prima distribuzione', CORAL),
+    arrowDown(),
+    flowBox('Registrazione modulo riattivazione pasti', 'Teglione ID · IDDSI level · T° misurata · Ora · Firma operatore', GREEN),
+    ...spacer(1),
+  ];
+}
+
+function diagrammaDistribuzioneDisfagici() {
+  const GREEN  = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
+  const RED    = { fill: 'FCEBEB', borderColor: 'A32D2D', textColor: 'A32D2D' };
+  const GRAY   = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+  const PURPLE = { fill: 'EEEDFE', borderColor: '534AB7', textColor: '534AB7' };
+  return [
+    h2('8.4.1 Flusso distribuzione e somministrazione disfagici'),
+    ...spacer(1),
+    flowBox('Operatore ASA/OSS preleva gastronorm', 'Verifica: nominativo = ospite · IDDSI = prescrizione · T° ≥55°C', PURPLE),
+    arrowDown(),
+    flowBox('Consegna diretta in camera — posizione seduta ≥30°', 'Mai in area comune · Ospite semiseduto · Supervisione nei primi minuti', GREEN),
+    arrowDown('Anomalie durante somministrazione?'),
+    flowRow([
+      { label: 'Anomalia → BLOCCA', sub: 'Chiama infermiere/medico · Modulo NC Disfagia · Conserva campione 24h', ...RED },
+      { label: 'Regolare → Fine pasto', sub: 'Max 30 min · Scarta residui · Raccolta gastronorm', ...GREEN },
+    ]),
+    arrowDown(),
+    flowBox('Raccolta gastronorm e lavaggio separato', 'Registrazione distribuzione · Firma operatore', GRAY),
+    ...spacer(1),
+  ];
+}
+
+function diagrammaModificaIDDSI() {
+  const AMBER  = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const GREEN  = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
+  const BLUE   = { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' };
+  const GRAY   = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+  return [
+    h2('8.5.2 Flusso modifica IDDSI level'),
+    ...spacer(1),
+    flowBox('Medico varia IDDSI level', 'Modulo scritto "Cambio Prescrizione Dietetica"', AMBER),
+    arrowDown(),
+    flowRow([
+      { label: 'Email a Sodexo SpA entro 24h', sub: 'Nuovo IDDSI level · Data decorrenza', ...BLUE },
+      { label: 'Aggiornamento cartella dietetica', sub: 'Cucinetta nucleo AS · Firma medico', ...AMBER },
+    ]),
+    arrowRowDouble(),
+    flowBox('Comunicazione ai turni ASA/OSS', 'Passaggio informazioni turni · Firma presa visione', GREEN),
+    arrowDown(),
+    flowBox('Registrazione registro allegati dietetici', 'Data variazione · Vecchio e nuovo IDDSI · Firma R-HACCP', GRAY),
+    ...spacer(1),
+  ];
+}
+
+// ── Sezione 9: Diagramma isolamento infettivo completo ────────
+
+function diagrammaIsolamentoCompleto() {
+  const RED    = { fill: 'FCEBEB', borderColor: 'A32D2D', textColor: 'A32D2D' };
+  const AMBER  = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const GREEN  = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
+  const GRAY   = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+  const BLUE   = { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' };
+  return [
+    h2('9.1 Flusso operativo isolamento infettivo'),
+    ...spacer(1),
+    flowBox('Notifica isolamento da Infermiere/Medico', 'Modulo "Avviso Isolamento Infettivo" · Cucinetta + bacheca + email team HACCP', RED),
+    arrowDown(),
+    flowRow([
+      { label: 'Magazzino: ordine monouso', sub: 'Scorta ≥5 giorni · Vassoi, piatti, posate, contenitori biohazard', ...AMBER },
+      { label: 'ASA/OSS: indossamento DPI', sub: 'Guanti nitrile nuovi per ogni pasto · Mascherina · Grembiule monouso', ...RED },
+    ]),
+    arrowDown(),
+    flowBox('Porzionamento pasto ULTIMO (dopo altri ospiti)', 'Vassoio monouso · Stoviglie monouso · Coperchio sigillo', AMBER),
+    arrowDown(),
+    flowBox('Identificazione vassoio "ISOLAMENTO INFETTIVO"', 'Nome ospite · Stanza · Ora preparazione', RED),
+    arrowDown(),
+    flowBox('Consegna in stanza isolamento', 'Cambio guanti prima ingresso · Nessun contatto con stoviglie riutilizzabili', RED),
+    arrowDown(),
+    flowBox('Raccolta vassoio (stesso operatore, DPI)', 'Sacchetto separato "BIOHAZARD ISOLAMENTO" · Mai con rifiuti ordinari', RED),
+    arrowDown(),
+    flowRow([
+      { label: 'Smaltimento rifiuti speciali (RM)', sub: 'Ditta autorizzata · Conferimento giornaliero · Registrazione', ...AMBER },
+      { label: 'Sanificazione stanza', sub: 'Cloro 0,5% · Contatto 10 min · Asciugatura · Cambio DPI', ...GRAY },
+    ]),
+    arrowDown(),
+    flowBox('Registrazione e verifica R-HACCP', 'Modulo isolamento completato · Firma · Archiviazione', GREEN),
+    ...spacer(1),
+  ];
+}
+
+
 function tabellaCCP() {
   const W  = CONTENT_W;
   const c0 = Math.round(W * 0.13); // Fase
@@ -751,7 +902,12 @@ function parseMarkdown(rawText) {
         children: parseInline(t),
       }));
     }
-    else { result.push(txt(t)); }
+    else {
+      result.push(new Paragraph({
+        spacing: { before: 40, after: 100, line: 300 },
+        children: parseInline(t),
+      }));
+    }
 
     i++;
   }
@@ -771,17 +927,49 @@ function tabellaDati(righe) {
   });
 }
 
-function tabellaRevisioni(numRev, dataRev, redattore, noteRev, lr) {
+function tabellaRevisioni(numRev, dataRev, redattore, noteRev, lr, revStorico = []) {
   const cR = 580, cD = 1200, cRed = 1900, cApp = 1600;
   const cDesc = CONTENT_W - cR - cD - cRed - cApp;
   const cols  = [cR, cD, cRed, cDesc, cApp];
+
+  // Riga storica precedente (passata come array [{rev,data,note}])
+  const storicoRows = revStorico.map(s => new TableRow({
+    height: { value: 480, rule: 'exact' },
+    children: [
+      cell(String(s.rev), cR, { align: AlignmentType.CENTER }),
+      cell(s.data || '—', cD),
+      cell(redattore, cRed),
+      cell(s.note || '—', cDesc),
+      cell(lr || '—', cApp),
+    ],
+  }));
+
+  // Riga revisione corrente
+  const corrRow = new TableRow({
+    height: { value: 480, rule: 'exact' },
+    children: [
+      cell(String(numRev), cR, { align: AlignmentType.CENTER }),
+      cell(dataRev, cD),
+      cell(redattore, cRed),
+      cell(noteRev || 'Prima emissione', cDesc),
+      cell(lr || '—', cApp),
+    ],
+  });
+
+  // Righe vuote finali (almeno 2)
+  const vuoteN = Math.max(2, 5 - storicoRows.length - 1);
+  const vuoteRows = Array.from({ length: vuoteN }, () =>
+    new TableRow({ height: { value: 480, rule: 'exact' }, children: cols.map(w => cell('', w)) })
+  );
+
   return new Table({
     width: { size: CONTENT_W, type: WidthType.DXA },
     columnWidths: cols,
     rows: [
       new TableRow({ children: [hCell('Rev.', cR), hCell('Data', cD), hCell('Redatto da', cRed), hCell('Descrizione variazioni', cDesc), hCell('Approvato da', cApp)] }),
-      new TableRow({ height: { value: 480, rule: 'exact' }, children: [cell(numRev, cR, { align: AlignmentType.CENTER }), cell(dataRev, cD), cell(redattore, cRed), cell(noteRev || 'Prima emissione', cDesc), cell(lr || '—', cApp)] }),
-      ...Array.from({ length: 4 }, () => new TableRow({ height: { value: 480, rule: 'exact' }, children: cols.map(w => cell('', w)) })),
+      ...storicoRows,
+      corrRow,
+      ...vuoteRows,
     ],
   });
 }
@@ -800,6 +988,8 @@ export async function generaManualeHaccp(params) {
     dataRev        = new Date().toLocaleDateString('it-IT'),
     redattore      = 'Ufficio Qualità OVER',
     noteRevisione  = 'Prima emissione',
+    revStorico     = [],   // [{rev:'0', data:'05/11/2025', note:'...'}, ...]
+    versioneInterna = 0,   // contatore salvataggi per stessa revisione ufficiale
     testoManuale   = '',
     logoVariante   = 'A',
   } = params;
@@ -860,7 +1050,7 @@ export async function generaManualeHaccp(params) {
       ['Legale Rappresentante',   lr],
       ['Responsabile HACCP',      rHaccp],
       ...teamRighe,
-      ['N° Revisione',            numRev],
+      ['N° Revisione',            versioneInterna > 0 ? numRev + '_' + versioneInterna : numRev],
       ['Data emissione',          dataRev],
       ['Prossima revisione',      (() => {
         try {
@@ -881,7 +1071,7 @@ export async function generaManualeHaccp(params) {
 
     // ── PAG 2: Registro revisioni ───────────────────────────────
     paragrafo(run('REGISTRO DELLE REVISIONI', { size: 24, bold: true, color: VERDE }), { borderBottom: true, borderSize: 6, after: 160 }),
-    tabellaRevisioni(numRev, dataRev, redattore, noteRevisione, lr),
+    tabellaRevisioni(numRev, dataRev, redattore, noteRevisione, lr, revStorico),
     new Paragraph({ children: [new PageBreak()] }),
 
     // ── PAG 3: Indice generale ──────────────────────────────────
@@ -949,23 +1139,24 @@ export async function generaManualeHaccp(params) {
   // Separa il testo manuale in sezioni per iniettare i diagrammi fissi
   // al posto del testo ASCII generato dall'AI per le sezioni 5 e 6
   const righe = testoManuale.split('\n');
-  const blocchi = { pre5: [], sez6: [], post6: [] };
+  const blocchi = { pre5: [], sez6: [], sez7: [], sez8: [], sez9: [], post9: [] };
+  // Intercetta qualunque h1 che apre le sezioni 5-9
+  const isSez  = (t, n) => new RegExp('^#\\s+(sezione\\s*' + n + '|' + n + '[.\\s])', 'i').test(t);
   let zona = 'pre5';
-  let inSez6 = false;
   for (const riga of righe) {
     const t = riga.trim();
-    if (t.match(/^#\s+.*[Ss][Ee][Zz][Ii][Oo][Nn][Ee]\s*5/) || t.match(/^#\s+5[.\s].*[Dd]iagramm/i)) {
-      zona = 'sez5'; continue;
-    }
-    if (t.match(/^#\s+.*[Ss][Ee][Zz][Ii][Oo][Nn][Ee]\s*6/) || t.match(/^#\s+6[.\s].*[Pp]ericol/i)) {
-      zona = 'sez6'; inSez6 = true; continue;
-    }
-    if (inSez6 && t.match(/^#\s+[^6\s]/) && !t.match(/^#\s+6/)) {
-      zona = 'post6'; inSez6 = false;
-    }
+    if (isSez(t, 5)) { zona = 'sez5'; continue; }
+    if (isSez(t, 6)) { zona = 'sez6'; continue; }
+    if (isSez(t, 7)) { zona = 'sez7'; continue; }
+    if (isSez(t, 8)) { zona = 'sez8'; continue; }
+    if (isSez(t, 9)) { zona = 'sez9'; continue; }
+    if (zona === 'sez9' && /^#\s+(sezione\s*1[0-9]|1[0-9][.\s])/i.test(t)) { zona = 'post9'; }
     if (zona === 'pre5')  blocchi.pre5.push(riga);
     if (zona === 'sez6')  blocchi.sez6.push(riga);
-    if (zona === 'post6') blocchi.post6.push(riga);
+    if (zona === 'sez7')  blocchi.sez7.push(riga);
+    if (zona === 'sez8')  blocchi.sez8.push(riga);
+    if (zona === 'sez9')  blocchi.sez9.push(riga);
+    if (zona === 'post9') blocchi.post9.push(riga);
   }
 
   const corpo = [
@@ -1005,11 +1196,41 @@ export async function generaManualeHaccp(params) {
     ...spacer(1),
     tabellaCCP(),
     ...spacer(1),
-    // Testo AI dalla sezione 6 (6.3 in poi)
+    // Testo AI dalla sezione 6 (6.3, 6.4, 6.5 CCP…)
     ...parseMarkdown(blocchi.sez6.join('\n')),
 
-    // Testo sezioni 7, 8 e seguenti
-    ...parseMarkdown(blocchi.post6.join('\n')),
+    // ── SEZIONE 7 — testo AI ────────────────────────────────
+    new Paragraph({ children: [new PageBreak()] }),
+    h1('SEZIONE 7: GESTIONE DELLA CELIACHIA E ALLERGENI', false),
+    ...parseMarkdown(blocchi.sez7.join('\n')),
+
+    // ── SEZIONE 8 — testo AI + diagrammi nativi ─────────────
+    new Paragraph({ children: [new PageBreak()] }),
+    h1('SEZIONE 8: GESTIONE OSPITI DISFAGICI', false),
+    ...parseMarkdown(
+      blocchi.sez8.join('\n')
+        .split('\n')
+        .filter(l => !l.trim().startsWith('8.2.1') && !l.trim().startsWith('8.3.1') && !l.trim().startsWith('8.4.1') && !l.trim().startsWith('8.5.2'))
+        .join('\n')
+    ),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaRicezioneDisfagici(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaRiattivazioneD(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaDistribuzioneDisfagici(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaModificaIDDSI(),
+
+    // ── SEZIONE 9 — testo AI + diagramma isolamento ─────────
+    new Paragraph({ children: [new PageBreak()] }),
+    h1('SEZIONE 9: GESTIONE ISOLAMENTO INFETTIVO', false),
+    ...parseMarkdown(blocchi.sez9.join('\n')),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaIsolamentoCompleto(),
+
+    // Eventuali sezioni successive
+    ...parseMarkdown(blocchi.post9.join('\n')),
   ];
 
   // ── DOCUMENTO ───────────────────────────────────────────────
@@ -1953,4 +2174,24 @@ export async function generaModulisticaHaccp({
 
   const blob = await Packer.toBlob(doc);
   return await blob.arrayBuffer();
+}
+// ── Esporta manuale + modulistica in un'unica chiamata ────────
+// Restituisce { manuale: ArrayBuffer, modulistica: ArrayBuffer }
+export async function generaManualeCompleto(params) {
+  const [manuale, modulistica] = await Promise.all([
+    generaManualeHaccp(params),
+    generaModulisticaHaccp({
+      nomestruttura:               params.nomestruttura,
+      modello:                     params.modello || 'distribuzione_veicolata',
+      apparecchiature_frigorifere: params.apparecchiatureFrigorifere || '',
+      op_macchinetta_caffe:        params.opMacchinettaCaffe || false,
+      op_disfagici:                params.opDisfagici || false,
+      op_cena_abbattuta:           params.opCenaAbbattuta || false,
+      op_srtr:                     params.opSrtr || false,
+      op_monouso_infetti:          params.opMonousoInfetti || false,
+      op_riabilitazione:           params.opRiabilitazione || false,
+      logoVariante:                params.logoVariante || 'A',
+    }),
+  ]);
+  return { manuale, modulistica };
 }
