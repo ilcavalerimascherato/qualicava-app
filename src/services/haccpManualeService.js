@@ -145,55 +145,548 @@ function parseTabellaMd(lineeTabella) {
   });
 }
 
-// ── Diagramma di flusso — box con frecce ─────────────────────
-function parseDiagramma(testo) {
-  // Riconosce righe tipo: "RICEZIONE MERCI → VERIFICA TEMPERATURA → STOCCAGGIO"
-  // o step separati da →, ↓, su righe consecutive
-  const steps = testo
-    .split(/→|↓|\n/)
-    .map(s => s.trim())
-    .filter(Boolean);
+// ── Helper bordi celle invisibili ────────────────────────────
+const NOBORDER = {
+  top:    { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  left:   { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  right:  { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+};
 
-  if (steps.length === 0) return null;
+// ── Cella vuota invisibile ────────────────────────────────────
+function emptyCell(w) {
+  return new TableCell({
+    width: { size: w, type: WidthType.DXA },
+    borders: NOBORDER,
+    children: [new Paragraph({ children: [] })],
+  });
+}
 
+// ── Box singolo centrato (per diagrammi flusso) ───────────────
+// fill: colore sfondo, borderColor: colore bordo, textColor: colore testo
+// label: testo principale, sub: testo secondario (opzionale)
+function flowBox(label, sub, { fill = VERDE_LIGHT, borderColor = VERDE, textColor = VERDE, bold = true, widthPct = 0.65 } = {}) {
   const W   = CONTENT_W;
-  const bW  = Math.min(Math.floor(W * 0.7), 5500);  // larghezza box
-  const pad = Math.floor((W - bW) / 2);              // margine sx per centrare
+  const bW  = Math.round(W * widthPct);
+  const pad = Math.floor((W - bW) / 2);
+  const rem = W - bW - pad;
+  const children = [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: sub ? 80 : 120, after: sub ? 40 : 120 },
+      children: [new TextRun({ text: label, font: 'Arial', size: 20, bold, color: textColor })],
+    }),
+    ...(sub ? [new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 100 },
+      children: [new TextRun({ text: sub, font: 'Arial', size: 17, bold: false, color: textColor, italic: true })],
+    })] : []),
+  ];
+  return new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [pad, bW, rem],
+    rows: [new TableRow({
+      children: [
+        emptyCell(pad),
+        new TableCell({
+          width: { size: bW, type: WidthType.DXA },
+          borders: { top: B(borderColor), bottom: B(borderColor), left: B(borderColor), right: B(borderColor) },
+          shading: { fill, type: ShadingType.CLEAR },
+          margins: { top: 60, bottom: 60, left: 200, right: 200 },
+          children,
+        }),
+        emptyCell(rem),
+      ],
+    })],
+  });
+}
 
-  const elements = [];
-  steps.forEach((step, idx) => {
-    // Box step
-    elements.push(new Table({
-      width: { size: W, type: WidthType.DXA },
-      columnWidths: [pad, bW, W - pad - bW],
+// ── Freccia verticale centrata ────────────────────────────────
+function arrowDown(label = '') {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 30, after: 30 },
+    children: [
+      ...(label ? [new TextRun({ text: label + '  ', font: 'Arial', size: 17, color: '888888', italic: true })] : []),
+      new TextRun({ text: '▼', font: 'Arial', size: 22, color: VERDE, bold: true }),
+    ],
+  });
+}
+
+// ── Riga biforcazione (2 colonne) ────────────────────────────
+// items: [{ label, sub, fill, borderColor, textColor }]
+function flowRow(items) {
+  const W   = CONTENT_W;
+  const gap = 200;
+  const bW  = Math.floor((W - gap * (items.length - 1)) / items.length);
+  const cols = [];
+  items.forEach((item, i) => {
+    const children = [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 80, after: item.sub ? 40 : 80 },
+        children: [new TextRun({ text: item.label, font: 'Arial', size: 19, bold: true, color: item.textColor || VERDE })],
+      }),
+      ...(item.sub ? [new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 80 },
+        children: [new TextRun({ text: item.sub, font: 'Arial', size: 16, color: item.textColor || VERDE, italic: true })],
+      })] : []),
+    ];
+    cols.push(new TableCell({
+      width: { size: bW, type: WidthType.DXA },
+      borders: { top: B(item.borderColor || VERDE), bottom: B(item.borderColor || VERDE), left: B(item.borderColor || VERDE), right: B(item.borderColor || VERDE) },
+      shading: { fill: item.fill || VERDE_LIGHT, type: ShadingType.CLEAR },
+      margins: { top: 60, bottom: 60, left: 160, right: 160 },
+      children,
+    }));
+    if (i < items.length - 1) cols.push(emptyCell(gap));
+  });
+  return new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: items.map((_, i) => i < items.length - 1 ? [bW, gap] : [bW]).flat(),
+    rows: [new TableRow({ children: cols })],
+  });
+}
+
+// ── Frecce multiple affiancate ────────────────────────────────
+function arrowRowDouble() {
+  const W  = CONTENT_W;
+  const cW = Math.floor(W / 2);
+  return new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [cW, W - cW],
+    rows: [new TableRow({
+      children: [cW, W - cW].map(w => new TableCell({
+        width: { size: w, type: WidthType.DXA },
+        borders: NOBORDER,
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 30, after: 30 }, children: [new TextRun({ text: '▼', font: 'Arial', size: 22, color: VERDE, bold: true })] })],
+      })),
+    })],
+  });
+}
+
+// ── Sezione 5: Diagrammi di flusso fissi ─────────────────────
+
+// 5.1 Flusso generale veicolato
+function diagrammaFlussoGenerale() {
+  const TEAL   = { fill: 'E1F5EE', borderColor: '0F6E56', textColor: '0F6E56' };
+  const AMBER  = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const BLUE   = { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' };
+  const CORAL  = { fill: 'FAECE7', borderColor: '993C1D', textColor: '993C1D' };
+  const GRAY   = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+
+  return [
+    h2('5.1 Diagramma Generale del Flusso Alimentare'),
+    ...spacer(1),
+    // Box esterno tratteggiato (centro cottura)
+    new Table({
+      width: { size: CONTENT_W, type: WidthType.DXA },
+      columnWidths: [CONTENT_W],
+      rows: [new TableRow({
+        children: [new TableCell({
+          width: { size: CONTENT_W, type: WidthType.DXA },
+          borders: {
+            top:    { style: BorderStyle.DASHED, size: 6, color: 'AAAAAA' },
+            bottom: { style: BorderStyle.DASHED, size: 6, color: 'AAAAAA' },
+            left:   { style: BorderStyle.DASHED, size: 6, color: 'AAAAAA' },
+            right:  { style: BorderStyle.DASHED, size: 6, color: 'AAAAAA' },
+          },
+          shading: { fill: 'F8F8F8', type: ShadingType.CLEAR },
+          margins: { top: 80, bottom: 80, left: 200, right: 200 },
+          children: [
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Centro cottura esterno (Sodexo SpA)', font: 'Arial', size: 20, bold: true, color: '888888' })] }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Non gestito da struttura · SCIA esterna · Reg. CE 852/2004', font: 'Arial', size: 17, italic: true, color: 'AAAAAA' })] }),
+          ],
+        })],
+      })],
+    }),
+    arrowDown('Contenitori isotermici'),
+    flowBox('Ricevimento pasti (CCP1)', 'Verifica T° · Integrità imballaggi · Controllo allergeni · Registrazione', TEAL),
+    arrowDown(),
+    // Etichette biforcazione
+    new Table({
+      width: { size: CONTENT_W, type: WidthType.DXA },
+      columnWidths: [Math.floor(CONTENT_W / 2), Math.ceil(CONTENT_W / 2)],
       rows: [new TableRow({
         children: [
-          new TableCell({ width:{size:pad,type:WidthType.DXA}, borders:{top:{style:BorderStyle.NONE,size:0,color:'FFFFFF'},bottom:{style:BorderStyle.NONE,size:0,color:'FFFFFF'},left:{style:BorderStyle.NONE,size:0,color:'FFFFFF'},right:{style:BorderStyle.NONE,size:0,color:'FFFFFF'}}, children:[new Paragraph({children:[]})] }),
-          new TableCell({
-            width: { size:bW, type:WidthType.DXA },
-            borders: { top:B(VERDE), bottom:B(VERDE), left:B(VERDE), right:B(VERDE) },
-            shading: { fill: step.includes('CCP') ? 'FFF3CD' : VERDE_LIGHT, type: ShadingType.CLEAR },
-            margins: { top:100, bottom:100, left:200, right:200 },
-            children: [new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: step, font:'Arial', size:20, bold:true, color: step.includes('CCP') ? '856404' : VERDE })],
-            })],
-          }),
-          new TableCell({ width:{size:W-pad-bW,type:WidthType.DXA}, borders:{top:{style:BorderStyle.NONE,size:0,color:'FFFFFF'},bottom:{style:BorderStyle.NONE,size:0,color:'FFFFFF'},left:{style:BorderStyle.NONE,size:0,color:'FFFFFF'},right:{style:BorderStyle.NONE,size:0,color:'FFFFFF'}}, children:[new Paragraph({children:[]})] }),
+          new TableCell({ width: { size: Math.floor(CONTENT_W / 2), type: WidthType.DXA }, borders: NOBORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Pranzo — caldo ≥65°C', font: 'Arial', size: 17, italic: true, color: '888888' })] })] }),
+          new TableCell({ width: { size: Math.ceil(CONTENT_W / 2), type: WidthType.DXA }, borders: NOBORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Cena — abbattuto ≤4°C', font: 'Arial', size: 17, italic: true, color: '888888' })] })] }),
         ],
       })],
-    }));
-    // Freccia tra step (non dopo l'ultimo)
-    if (idx < steps.length - 1) {
-      elements.push(new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before:40, after:40 },
-        children: [new TextRun({ text: '▼', font:'Arial', size:24, color:VERDE, bold:true })],
-      }));
-    }
-  });
-  return elements;
+    }),
+    flowRow([
+      { label: 'Stoccaggio breve', sub: 'Scaldavivande · ≥60°C · max 15 min', ...AMBER },
+      { label: 'Stoccaggio frigorifero', sub: 'FR1-4 / FD · ≤4°C · fino a cena', ...BLUE },
+    ]),
+    arrowRowDouble(),
+    flowBox('Riattivazione (CCP2)', 'Forno/microonde · ≥75°C al cuore · gastronorm separata per disfagici', CORAL),
+    arrowDown(),
+    flowBox('Porzionamento', 'Gastronorm · Etichetta nominale e tipologia dieta', GRAY),
+    arrowDown(),
+    flowBox('Distribuzione carrello termico', '≥65°C / ≤10°C · trasporto ≤20 min', TEAL),
+    arrowDown(),
+    flowBox('Somministrazione', 'Verifica nominativo · Doppio controllo dieta', { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' }),
+    arrowDown(),
+    flowBox('Raccolta vassoi e rifiuti', 'Umido in gastronorm → bidone a pedale cucinetta', GRAY),
+    arrowDown(),
+    flowBox('Lavaggio e sanificazione', 'Stoviglie ≥60°C · Locali: settimanale', GRAY),
+    ...spacer(1),
+  ];
 }
+
+// 5.2 Diagramma CCP1 Ricevimento
+function diagrammaCCP1() {
+  const TEAL  = { fill: 'E1F5EE', borderColor: '0F6E56', textColor: '0F6E56' };
+  const RED   = { fill: 'FCEBEB', borderColor: 'A32D2D', textColor: 'A32D2D' };
+  const AMBER = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const BLUE  = { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' };
+
+  return [
+    h2('5.2 Diagramma Dettagliato: Ricevimento e Controllo (CCP1)'),
+    ...spacer(1),
+    flowBox('Arrivo contenitore da Sodexo SpA', null, { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' }),
+    arrowDown(),
+    flowBox('Ispezione visiva contenitore', 'Integrità · Assenza danni · Etichetta leggibile · Coperchio integro', TEAL),
+    arrowDown('Non conforme?'),
+    flowRow([
+      { label: 'Non conforme → RIFIUTO', sub: 'Documentare · Contattare Sodexo · Modulo anomalia', ...RED },
+      { label: 'Conforme → Misurazione T°', sub: 'Sonda nel punto più caldo · Lettura digitale (2 punti)', ...TEAL },
+    ]),
+    arrowDown(),
+    flowRow([
+      { label: 'Pranzo caldo ≥65°C', sub: 'OK → Stoccaggio scaldavivande ≤15 min', ...AMBER },
+      { label: 'Cena abbattuto ≤4°C', sub: 'OK → Stoccaggio frigo FR1-4 o FD', ...BLUE },
+    ]),
+    new Table({
+      width: { size: CONTENT_W, type: WidthType.DXA },
+      columnWidths: [Math.floor(CONTENT_W / 2), Math.ceil(CONTENT_W / 2)],
+      rows: [new TableRow({
+        children: [
+          new TableCell({ width: { size: Math.floor(CONTENT_W / 2), type: WidthType.DXA }, borders: NOBORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 20, after: 20 }, children: [new TextRun({ text: 'Se <65°C → RIFIUTO + Modulo NC', font: 'Arial', size: 16, italic: true, color: 'A32D2D' })] })] }),
+          new TableCell({ width: { size: Math.ceil(CONTENT_W / 2), type: WidthType.DXA }, borders: NOBORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 20, after: 20 }, children: [new TextRun({ text: 'Se >4°C → RIFIUTO + Modulo NC', font: 'Arial', size: 16, italic: true, color: 'A32D2D' })] })] }),
+        ],
+      })],
+    }),
+    ...spacer(1),
+  ];
+}
+
+// 5.3 Diagramma CCP2 Riattivazione
+function diagrammaCCP2() {
+  const CORAL = { fill: 'FAECE7', borderColor: '993C1D', textColor: '993C1D' };
+  const GREEN = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
+  const RED   = { fill: 'FCEBEB', borderColor: 'A32D2D', textColor: 'A32D2D' };
+  const AMBER = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+
+  return [
+    h2('5.3 Diagramma Dettagliato: Riattivazione Pasti Abbattuti (CCP2)'),
+    ...spacer(1),
+    flowBox('Pasto abbattuto prelevato da FR1-4 o FD', 'Temperatura ≤4°C verificata', { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' }),
+    arrowDown(),
+    flowBox('Identificazione dieta', 'Etichetta ospite · Tipologia (celiaco, disfagico…) · Data ricezione', AMBER),
+    arrowDown(),
+    flowBox('Piazzamento in gastronorm', 'Cibo in recipiente aperto o coperchiato · Identificazione mantenuta', CORAL),
+    arrowDown('Modalità riattivazione'),
+    flowRow([
+      { label: 'Forno (Nuclei B, D)', sub: '180°C · 20-30 minuti', ...CORAL },
+      { label: 'Microonde (Nuclei AS, C)', sub: 'Potenza 100% · 3-5 minuti', ...CORAL },
+    ]),
+    arrowRowDouble(),
+    flowBox('Verifica temperatura ≥75°C al cuore', 'Sonda nel punto più caldo (centro gastronorm)', AMBER),
+    arrowDown(),
+    flowRow([
+      { label: 'SÌ ≥75°C → Idoneo', sub: 'Servizio entro 30 min · ≥65°C in carrello', ...GREEN },
+      { label: 'NO <75°C → Riscaldamento supplementare', sub: 'Reiterare · Se ancora NC → smaltire · Modulo CCP2', ...RED },
+    ]),
+    arrowDown(),
+    flowBox('Servizio e distribuzione ospite', 'Trasporto ≤20 min · Registrazione Modulo CCP2 (T° e ora)', GREEN),
+    ...spacer(1),
+  ];
+}
+
+// 5.4 Diagramma pasti disfagici
+function diagrammaDisfagici() {
+  const BLUE   = { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' };
+  const PURPLE = { fill: 'EEEDFE', borderColor: '534AB7', textColor: '534AB7' };
+  const CORAL  = { fill: 'FAECE7', borderColor: '993C1D', textColor: '993C1D' };
+  const AMBER  = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const GREEN  = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
+  const GRAY   = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+
+  return [
+    h2('5.4 Diagramma Dettagliato: Pasti Disfagici (Nucleo AS)'),
+    ...spacer(1),
+    flowBox('Ricevimento pasto disfagico abbattuto Sodexo', 'Frigorifero FD · Piano interrato · ≤4°C (Nucleo AS)', BLUE),
+    arrowDown(),
+    flowBox('Identificazione nominativa ospite', 'Nome · Data ricezione · Consistenza IDDSI (L2/L3/L4) · Scadenza', PURPLE),
+    arrowDown(),
+    flowBox('Stoccaggio FD', 'Ripiani dedicati · ≤4°C · Separazione da altri alimenti', BLUE),
+    arrowDown(),
+    flowBox('Riattivazione (CCP2) — cucinetta nucleo AS', 'Microonde · Gastronorm dedicata e identificata · Contestuale ai pasti Sodexo', CORAL),
+    arrowDown(),
+    flowBox('Verifica temperatura ≥75°C al cuore (CCP2)', 'Sonda · Se <75°C → riscaldamento supplementare', AMBER),
+    arrowDown(),
+    flowBox('Somministrazione — doppio controllo', 'Verifica nominativo ospite · Solo operatore OSA autorizzato', GREEN),
+    arrowDown(),
+    flowBox('Registrazione distribuzione', 'Nome · Data/ora · Consistenza IDDSI erogata · Firma operatore', GRAY),
+    ...spacer(1),
+  ];
+}
+
+// 5.5 Diagramma isolamento infettivo
+function diagrammaIsolamento() {
+  const RED   = { fill: 'FCEBEB', borderColor: 'A32D2D', textColor: 'A32D2D' };
+  const AMBER = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const GRAY  = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+
+  return [
+    h2('5.5 Diagramma Dettagliato: Isolamento Infettivo'),
+    ...spacer(1),
+    flowBox('Ospite in isolamento infettivo', 'R-HACCP informa OSA: tipo isolamento e durata', RED),
+    arrowDown(),
+    flowBox('Preparazione vassoio monouso', 'Piatto, bicchiere, posate monouso biodegradabili · Etichetta ospite', AMBER),
+    arrowDown(),
+    flowBox('Distribuzione con DPI', 'Guanti monouso · Mascherina FFP2/N95 · Cambio DPI per ospite', RED),
+    arrowDown(),
+    flowBox('Raccolta vassoio (stesso operatore, DPI)', 'Inserimento in sacchetto separato etichettato "BIOHAZARD ISOLAMENTO"', RED),
+    arrowDown(),
+    flowBox('Smaltimento rifiuti speciali (RM)', 'Conferimento giornaliero a ditta autorizzata · Registrazione modulo tracciamento', AMBER),
+    arrowDown(),
+    flowBox('Sanificazione locale', 'Detergente + disinfettante · Cloro 0,5% o equiv. · Contatto 10 min · Asciugatura', GRAY),
+    ...spacer(1),
+  ];
+}
+
+// 5.4 Flusso colazioni e merende
+function diagrammaColazioni() {
+  const AMBER = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const GRAY  = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+  const GREEN = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
+  return [
+    h2('5.4 Flusso Colazioni e Merende'),
+    ...spacer(1),
+    flowBox('Prodotti da magazzino derrate e frigoriferi di nucleo', null, AMBER),
+    arrowDown(),
+    flowBox('Controllo visivo scadenze e integrità confezioni', null, GRAY),
+    arrowDown(),
+    flowBox('Preparazione in cucinetta', 'Igiene mani + DPI · Piano lavoro pulito', GRAY),
+    arrowDown(),
+    flowBox('Distribuzione ospiti', 'Erogatore bevande calde · Prodotti confezionati · Separazione diete speciali', GREEN),
+    arrowDown(),
+    flowBox('Raccolta stoviglie e lavaggio', null, GRAY),
+    ...spacer(1),
+  ];
+}
+
+// 5.5 Flusso celiaci e allergeni
+function diagrammaCeliaci() {
+  const TEAL  = { fill: 'E1F5EE', borderColor: '0F6E56', textColor: '0F6E56' };
+  const AMBER = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const GREEN = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
+  const GRAY  = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+  return [
+    h2('5.5 Flusso Gestione Celiaci e Allergeni'),
+    ...spacer(1),
+    flowBox('Ricevimento pasto Gluten-Free da Sodexo SpA', 'Contenitore con etichetta "GLUTEN-FREE" + nominativo ospite', TEAL),
+    arrowDown(),
+    flowBox('Verifica e stoccaggio separato', 'Frigorifero di nucleo · Ripiano superiore · Separato da altri pasti', TEAL),
+    arrowDown(),
+    flowBox('Riattivazione (se abbattuto)', 'Gastronorm dedicata "GF" · ≥75°C al cuore · Scaldavivande separato', AMBER),
+    arrowDown(),
+    flowBox('Porzionamento su stoviglie dedicate "GF"', 'Piano lavoro sanificato con alcol 70° · Utensili esclusivi GF', AMBER),
+    arrowDown(),
+    flowBox('Somministrazione PER PRIMO (prima degli altri ospiti)', 'Previene contaminazione da briciole e cross-contaminazione', GREEN),
+    arrowDown(),
+    flowBox('Raccolta e lavaggio separato stoviglie GF', 'Cesto dedicato · Ciclo lavastoviglie separato · Armadio "STOVIGLIE GF"', GRAY),
+    ...spacer(1),
+  ];
+}
+
+// 5.6 Flusso sanificazione stoviglie
+function diagrammaStoviglie() {
+  const BLUE = { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' };
+  const GRAY = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+  const GREEN = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
+  return [
+    h2('5.6 Flusso Pulizia e Sanificazione Stoviglie'),
+    ...spacer(1),
+    flowBox('Raccolta vassoi sporchi dalla distribuzione', 'Smistamento per tipo dieta · Celiaci separati', GRAY),
+    arrowDown(),
+    flowBox('Risciacquo sotto acqua corrente fredda', null, BLUE),
+    arrowDown(),
+    flowBox('Prelavaggio manuale', 'Detergente + spazzola', BLUE),
+    arrowDown(),
+    flowBox('Lavaggio', 'Lavastoviglie 70-80°C ciclo 45 min · Oppure manuale acqua calda + disinfettante', BLUE),
+    arrowDown(),
+    flowBox('Risciacquo con acqua calda + asciugatura', 'Rack dedicato o aria calda', BLUE),
+    arrowDown(),
+    flowBox('Stoccaggio in armadi chiusi', 'Stoviglie GF in armadio dedicato etichettato', GREEN),
+    ...spacer(1),
+  ];
+}
+
+// 5.7 Flusso sanificazione locali
+function diagrammaSanificazione() {
+  const TEAL  = { fill: 'E1F5EE', borderColor: '0F6E56', textColor: '0F6E56' };
+  const AMBER = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
+  const GRAY  = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
+  return [
+    h2('5.7 Flusso Sanificazione Locali'),
+    ...spacer(1),
+    flowRow([
+      { label: 'Cucinette nucleo — giornaliera', sub: 'Superfici · Scaldavivande · Erogatore · Pavimento', ...TEAL },
+      { label: 'Locale piano interrato — settimanale', sub: 'Superfici · Frigo FD · Pavimento', ...AMBER },
+      { label: 'Magazzino derrate — mensile', sub: 'Scaffali · Verifica zanzariera · Parassiti', ...GRAY },
+    ]),
+    arrowDown(),
+    flowBox('Rimozione rifiuti e residui alimentari', null, GRAY),
+    arrowDown(),
+    flowBox('Pulizia superfici con detergente neutro + acqua', 'Piano lavoro · Attrezzature · Frigoriferi', TEAL),
+    arrowDown(),
+    flowBox('Disinfezione con spray disinfettante autorizzato', 'Contatto minimo 10 min · Risciacquo se necessario', AMBER),
+    arrowDown(),
+    flowBox('Pulizia pavimento con mop + disinfettante', 'Senso porta → interno · Cambio acqua ogni locale', GRAY),
+    arrowDown(),
+    flowBox('Verifica visiva e registrazione su modulo sanificazione', null, { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' }),
+    ...spacer(1),
+  ];
+}
+function tabellaCCP() {
+  const W  = CONTENT_W;
+  const c0 = Math.round(W * 0.13); // Fase
+  const c1 = Math.round(W * 0.20); // Pericolo
+  const c2 = Math.round(W * 0.05); // Tipo
+  const c3 = Math.round(W * 0.21); // Misure preventive
+  const c4 = Math.round(W * 0.21); // Monitoraggio
+  const c5 = W - c0 - c1 - c2 - c3 - c4; // Esito
+
+  const header = new TableRow({
+    tableHeader: true,
+    children: [
+      hCell('Fase', c0),
+      hCell('Pericolo identificato', c1),
+      hCell('Tipo', c2),
+      hCell('Misure preventive', c3),
+      hCell('Monitoraggio', c4),
+      hCell('Esito', c5),
+    ],
+  });
+
+  const FILL_CCP  = 'E1F5EE'; // teal chiaro
+  const FILL_PCC  = 'FAEEDA'; // amber chiaro
+  const FILL_B    = 'FCEBEB'; // rosso chiaro
+  const FILL_C    = 'E6F1FB'; // blu chiaro
+  const FILL_F    = 'F1EFE8'; // grigio chiaro
+  const FILL_FASE = 'F0F4F0'; // grigio-verde sezione
+
+  const COL_CCP  = '0F6E56';
+  const COL_PCC  = '854F0B';
+  const COL_B    = 'A32D2D';
+  const COL_C    = '185FA5';
+  const COL_F    = '5F5E5A';
+
+  function badgeCell(text, fillColor, textColor, w) {
+    return new TableCell({
+      width: { size: w, type: WidthType.DXA },
+      borders: BS('DDDDDD'),
+      shading: { fill: fillColor, type: ShadingType.CLEAR },
+      margins: { top: 60, bottom: 60, left: 100, right: 100 },
+      verticalAlign: VerticalAlign.CENTER,
+      children: [new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text, font: 'Arial', size: 17, bold: true, color: textColor })],
+      })],
+    });
+  }
+
+  function dataCell(text, w, opts = {}) {
+    return new TableCell({
+      width: { size: w, type: WidthType.DXA },
+      borders: BS('DDDDDD'),
+      shading: { fill: opts.fill || 'FFFFFF', type: ShadingType.CLEAR },
+      margins: { top: 60, bottom: 60, left: 120, right: 100 },
+      verticalAlign: VerticalAlign.CENTER,
+      children: [new Paragraph({
+        children: [new TextRun({ text: String(text || ''), font: 'Arial', size: 17, color: opts.color || GRIGIO_TESTO, bold: opts.bold || false })],
+      })],
+    });
+  }
+
+  function faseRow(label) {
+    return new TableRow({
+      children: [new TableCell({
+        columnSpan: 6,
+        width: { size: W, type: WidthType.DXA },
+        borders: { top: B('AAAAAA'), bottom: B('AAAAAA'), left: B('AAAAAA'), right: B('AAAAAA') },
+        shading: { fill: FILL_FASE, type: ShadingType.CLEAR },
+        margins: { top: 60, bottom: 60, left: 160, right: 160 },
+        children: [new Paragraph({
+          children: [new TextRun({ text: label.toUpperCase(), font: 'Arial', size: 17, bold: true, color: VERDE })],
+        })],
+      })],
+    });
+  }
+
+  function row(fase, pericolo, tipo, misure, monitoraggio, esito) {
+    const tipoFill  = tipo === 'B' ? FILL_B : tipo === 'C' ? FILL_C : FILL_F;
+    const tipoColor = tipo === 'B' ? COL_B  : tipo === 'C' ? COL_C  : COL_F;
+    const esitoCcp  = esito.startsWith('CCP');
+    const esitoFill = esitoCcp ? FILL_CCP : FILL_PCC;
+    const esitoCol  = esitoCcp ? COL_CCP  : COL_PCC;
+    return new TableRow({
+      children: [
+        dataCell(fase, c0),
+        dataCell(pericolo, c1),
+        badgeCell(tipo, tipoFill, tipoColor, c2),
+        dataCell(misure, c3),
+        dataCell(monitoraggio, c4),
+        badgeCell(esito, esitoFill, esitoCol, c5),
+      ],
+    });
+  }
+
+  const rows = [
+    header,
+    faseRow('Ricevimento pasti caldi (pranzo)'),
+    row('Ricevimento caldo', 'Temperatura inadeguata <65°C', 'B', 'Fornitura min ≥65°C; ispezione visiva contenitore', 'Misurazione T° (2 punti); Modulo CCP1', 'CCP1'),
+    row('', 'Allergeni non dichiarati', 'C', 'SCIA Sodexo con dichiarazione allergeni; verifica etichetta', 'Controllo etichetta 100% pasti celiaci; registrazione', 'PCC'),
+    row('', 'Contaminazione biologica contenitore', 'B', 'Fornitore certificato; ispezione contenitore', 'Ispezione visiva; segnalazione anomalie', 'PCC'),
+    row('', 'Danni/perdite contenitori', 'F', 'Controllo integrità imballaggio; reso merce danneggiata', 'Ispezione visiva 100%; modulo anomalia', 'PCC'),
+    faseRow('Ricevimento pasti abbattuti (cena)'),
+    row('Ricevimento abbattuto', 'Temperatura inadeguata >4°C', 'B', 'Fornitura max ≤4°C; verifica T° al ricevimento', 'Misurazione T° (2 punti); Modulo CCP1', 'CCP1'),
+    row('', 'Rottura catena freddo', 'B', 'Ispezione confezione; trasporto ≤40 min', 'Controllo visivo sigilli; orario ricezione', 'PCC'),
+    faseRow('Stoccaggio'),
+    row('Stoccaggio caldo', 'Abbassamento T° <60°C', 'B', 'Manutenzione scaldavivande; max 15 min', 'Verifica T° scaldavivande ogni mattina', 'PCC'),
+    row('Stoccaggio freddo', 'Innalzamento T° >4°C', 'B', 'Taratura termometro annuale; manutenzione semestrale', 'Lettura 2×/giorno (8:00, 18:00); Modulo Frigo', 'PCC'),
+    row('', 'Cross-contaminazione celiaci/disfagici', 'C', 'Ripiani dedicati; etichette; sanificazione settimanale', 'Ispezione visiva settimanale ripiani', 'PCC'),
+    faseRow('Riattivazione pasti abbattuti'),
+    row('Riattivazione', 'T° insufficiente <75°C al cuore', 'B', 'Forni calibrati; istruzioni per tipo gastronorm', 'Sonda al cuore 100% riattivazioni; Modulo CCP2', 'CCP2'),
+    row('', 'Tempo riscaldamento >30 min', 'B', 'Procedure scritte; coordinamento con distribuzione', 'Registrazione ora fine cottura / inizio distribuzione', 'PCC'),
+    row('', 'Riattivazione multipla (>1)', 'B', 'Max 1 riattivazione; istruzioni operative', 'Registrazione n° riattivazioni; smaltimento se >1', 'PCC'),
+    faseRow('Porzionamento'),
+    row('Porzionamento', 'Identificazione errata dieta/ospite', 'C', 'Etichette chiare; identificazione nominativa gastronorm', 'Verifica etichetta 100%; registrazione distribuzione', 'PCC'),
+    row('', 'Contaminazione crociata allergeni', 'C', 'Utensili dedicati celiaci; lavaggio mani tra alimenti', 'Ispezione aree porzionamento; formazione operatori', 'PCC'),
+    faseRow('Distribuzione e somministrazione'),
+    row('Distribuzione', 'T° non mantenuta: caldo <65°C', 'B', 'Carrello isolamento efficiente; trasporto max 20 min', 'T° al caricamento/scaricamento; Modulo Carrello', 'PCC'),
+    row('', 'T° non mantenuta: freddo >10°C', 'B', 'Manutenzione semestrale; controllo T° prima uso', 'Misurazione scomparto freddo; registrazione', 'PCC'),
+    row('Somministrazione', 'Pasto allergizzante a ospite celiaco', 'C', 'Verifica nominativo + tipologia dieta; doppio controllo', 'Registrazione con firma operatore', 'PCC'),
+    row('Isolamento', 'Trasmissione patogeno infettivo', 'B', 'DPI obbligatori (guanti, FFP2); vassoio monouso', 'Verifica DPI; registrazione distribuzioni isolamento', 'PCC'),
+    faseRow('Raccolta vassoi e lavaggio'),
+    row('Raccolta vassoi', 'Contaminazione operatore da rifiuti', 'B', 'DPI (guanti, grembiule); lavaggio mani immediato', 'Controllo uso DPI; formazione continua', 'PCC'),
+    row('Isolamento', 'Rifiuti speciali non separati', 'B', 'Sacchetti separati "BIOHAZARD"; smaltimento giornaliero', 'Ispezione sacchetti; registrazione smaltimento', 'PCC'),
+  ];
+
+  return new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [c0, c1, c2, c3, c4, c5],
+    rows,
+  });
+}
+
+// ── parseDiagramma: rimossa — ora i diagrammi sono fissi ─────
+// Il parser markdown continua a funzionare ma salta le righe con →/↓
+// che prima generavano i diagrammi testuali brutti.
 
 // ── Parser markdown → elementi docx ──────────────────────────
 function parseMarkdown(rawText) {
@@ -225,14 +718,13 @@ function parseMarkdown(rawText) {
 
     if (!t) { result.push(new Paragraph({ children: [run('')] })); i++; continue; }
 
-    // Diagramma di flusso — riga con → e step in MAIUSCOLO
-    const hasFreccia = t.includes('→') || t.includes('↓');
-    const isMaiuscolo = t.replace(/[→↓\s\-–—().,]/g, '').length > 3;
-    const isFlowLine = t.match(/^[A-ZÀÈÌÒÙ\s]+→/) !== null;
-    if ((hasFreccia && isMaiuscolo) || isFlowLine) {
-      const diag = parseDiagramma(t);
-      if (diag) { result.push(...spacer(1)); result.push(...diag); result.push(...spacer(1)); i++; continue; }
-    }
+    // Righe con frecce ASCII (→ ↓) o box testuali (┌ └ │) — saltate:
+    // i diagrammi di flusso sono ora generati come elementi fissi nativi docx
+    const hasFreccia  = t.includes('→') || t.includes('↓');
+    const hasBoxChars = t.includes('┌') || t.includes('└') || t.includes('│') || t.includes('├') || t.includes('┘') || t.includes('┐');
+    if (hasFreccia || hasBoxChars) { i++; continue; }
+    // Blocchi ``` (delimitatori codice usati per i vecchi diagrammi ASCII) — saltati
+    if (t === '```') { i++; continue; }
 
     // Titoli — rimuovi eventuale numerazione tipo "13." davanti
     if (t.startsWith('# ')) {
@@ -300,7 +792,7 @@ export async function generaManualeHaccp(params) {
     nomestruttura  = '[STRUTTURA]',
     osa            = '[OSA]',
     pivaOsa        = '—',
-    modello        = 'Cucina interna',
+    modello        = 'distribuzione_veicolata',
     lr             = '—',
     rHaccp         = '—',
     teamHaccp      = [],
@@ -370,48 +862,154 @@ export async function generaManualeHaccp(params) {
       ...teamRighe,
       ['N° Revisione',            numRev],
       ['Data emissione',          dataRev],
+      ['Prossima revisione',      (() => {
+        try {
+          const parts = dataRev.split('/');
+          if (parts.length === 3) {
+            return parts[0] + '/' + parts[1] + '/' + (parseInt(parts[2]) + 3);
+          }
+          const d = new Date(dataRev);
+          d.setFullYear(d.getFullYear() + 3);
+          return d.toLocaleDateString('it-IT');
+        } catch { return '—'; }
+      })()],
       ['Redatto da',              redattore],
     ]),
     ...spacer(1),
     paragrafo(run('I dati personali raccolti verranno trattati ai sensi del Reg. UE 679/2016 (GDPR).', { size: 16, italic: true, color: '999999' })),
     new Paragraph({ children: [new PageBreak()] }),
 
-    // ── PAG 2: Indice generale ──────────────────────────────────
-    paragrafo(run('INDICE DEL MANUALE', { size: 28, bold: true, color: VERDE }), { borderBottom: true, borderSize: 8, after: 200 }),
+    // ── PAG 2: Registro revisioni ───────────────────────────────
+    paragrafo(run('REGISTRO DELLE REVISIONI', { size: 24, bold: true, color: VERDE }), { borderBottom: true, borderSize: 6, after: 160 }),
+    tabellaRevisioni(numRev, dataRev, redattore, noteRevisione, lr),
+    new Paragraph({ children: [new PageBreak()] }),
+
+    // ── PAG 3: Indice generale ──────────────────────────────────
+    paragrafo(run('INDICE DEL MANUALE', { size: 28, bold: true, color: VERDE }), { borderBottom: true, borderSize: 8, after: 240 }),
     ...(() => {
-      // Estrae h1 e h2 dal testo per costruire indice
       const voci = [];
-      let numSez = 0;
+      let numH1 = 0;
+      let numH2 = 0;
       for (const line of testoManuale.split('\n')) {
         const t = line.trim();
-        if (t.startsWith('# ')) {
-          numSez++;
-          voci.push({ livello: 1, titolo: t.replace(/^#\s+/, ''), num: String(numSez) });
+        if (t.startsWith('### ')) {
+          voci.push({ livello: 3, titolo: t.replace(/^###\s+/, '') });
         } else if (t.startsWith('## ')) {
-          voci.push({ livello: 2, titolo: t.replace(/^##\s+/, ''), num: '' });
+          numH2++;
+          voci.push({ livello: 2, titolo: t.replace(/^##\s+/, ''), sub: numH2 });
+        } else if (t.startsWith('# ')) {
+          numH1++;
+          numH2 = 0;
+          voci.push({ livello: 1, titolo: t.replace(/^#\s+/, ''), num: numH1 });
         }
       }
-      return voci.map(v => new Paragraph({
-        spacing: { before: v.livello === 1 ? 140 : 60, after: v.livello === 1 ? 60 : 40 },
-        indent: v.livello === 2 ? { left: 360 } : undefined,
-        tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
-        children: [
-          new TextRun({ text: v.num ? v.num + '.  ' : '      ', font: 'Arial', size: v.livello === 1 ? 22 : 20, bold: v.livello === 1, color: v.livello === 1 ? VERDE : GRIGIO_TESTO }),
-          new TextRun({ text: v.titolo, font: 'Arial', size: v.livello === 1 ? 22 : 20, bold: v.livello === 1, color: v.livello === 1 ? NERO : GRIGIO_TESTO }),
-        ],
-      }));
+      // Aggiunge anche le sezioni fisse (5 e 6) all'indice
+      const risultati = [];
+      for (const v of voci) {
+        if (v.livello === 1) {
+          // Riga h1: numero verde bold grande + titolo + puntini + PAGE
+          risultati.push(new Paragraph({
+            spacing: { before: 200, after: 60, line: 280 },
+            tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
+            children: [
+              new TextRun({ text: String(v.num) + '.  ', font: 'Arial', size: 22, bold: true, color: VERDE }),
+              new TextRun({ text: v.titolo.replace(/^\d+[\.\s]+/, ''), font: 'Arial', size: 22, bold: true, color: NERO }),
+              new TextRun({ text: '\t', font: 'Arial', size: 20 }),
+            ],
+          }));
+        } else if (v.livello === 2) {
+          risultati.push(new Paragraph({
+            spacing: { before: 40, after: 30, line: 260 },
+            indent: { left: 320 },
+            tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
+            children: [
+              new TextRun({ text: '— ', font: 'Arial', size: 19, color: VERDE }),
+              new TextRun({ text: v.titolo.replace(/^\d+[\.\s]+/, ''), font: 'Arial', size: 19, color: GRIGIO_TESTO }),
+              new TextRun({ text: '\t', font: 'Arial', size: 18 }),
+            ],
+          }));
+        } else if (v.livello === 3) {
+          risultati.push(new Paragraph({
+            spacing: { before: 20, after: 20, line: 240 },
+            indent: { left: 600 },
+            children: [
+              new TextRun({ text: '· ', font: 'Arial', size: 17, color: '999999' }),
+              new TextRun({ text: v.titolo.replace(/^\d+[\.\s]+/, ''), font: 'Arial', size: 17, color: '999999' }),
+            ],
+          }));
+        }
+      }
+      return risultati;
     })(),
 
     new Paragraph({ children: [new PageBreak()] }),
   ];
 
   // ── CORPO ───────────────────────────────────────────────────
+  // Separa il testo manuale in sezioni per iniettare i diagrammi fissi
+  // al posto del testo ASCII generato dall'AI per le sezioni 5 e 6
+  const righe = testoManuale.split('\n');
+  const blocchi = { pre5: [], sez6: [], post6: [] };
+  let zona = 'pre5';
+  let inSez6 = false;
+  for (const riga of righe) {
+    const t = riga.trim();
+    if (t.match(/^#\s+.*[Ss][Ee][Zz][Ii][Oo][Nn][Ee]\s*5/) || t.match(/^#\s+5[\.\s].*[Dd]iagramm/i)) {
+      zona = 'sez5'; continue;
+    }
+    if (t.match(/^#\s+.*[Ss][Ee][Zz][Ii][Oo][Nn][Ee]\s*6/) || t.match(/^#\s+6[\.\s].*[Pp]ericol/i)) {
+      zona = 'sez6'; inSez6 = true; continue;
+    }
+    if (inSez6 && t.match(/^#\s+[^6\s]/) && !t.match(/^#\s+6/)) {
+      zona = 'post6'; inSez6 = false;
+    }
+    if (zona === 'pre5')  blocchi.pre5.push(riga);
+    if (zona === 'sez6')  blocchi.sez6.push(riga);
+    if (zona === 'post6') blocchi.post6.push(riga);
+  }
+
   const corpo = [
-    ...parseMarkdown(testoManuale),
-    // Registro revisioni in fondo al corpo
+    // Testo prima della sezione 5
+    ...parseMarkdown(blocchi.pre5.join('\n')),
+
+    // ── SEZIONE 5: Diagrammi fissi ───────────────────────────
     new Paragraph({ children: [new PageBreak()] }),
-    paragrafo(run('REGISTRO DELLE REVISIONI', { size: 24, bold: true, color: VERDE }), { borderBottom: true, borderSize: 6, after: 160 }),
-    tabellaRevisioni(numRev, dataRev, redattore, noteRevisione, lr),
+    h1('SEZIONE 5: DIAGRAMMI DI FLUSSO', false),
+    txt('I seguenti diagrammi illustrano i flussi operativi di competenza dell\'OSA per ciascuna tipologia di processo. I punti CCP sono evidenziati in colore.'),
+    ...spacer(1),
+    ...diagrammaFlussoGenerale(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaCCP1(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaCCP2(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaColazioni(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaCeliaci(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaDisfagici(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaIsolamento(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaStoviglie(),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...diagrammaSanificazione(),
+
+    // ── SEZIONE 6: Tabella CCP + testo AI ───────────────────
+    new Paragraph({ children: [new PageBreak()] }),
+    h1('SEZIONE 6: ANALISI PERICOLI E PUNTI CRITICI DI CONTROLLO (CCP)', false),
+    h2('6.1 Metodologia di Valutazione Pericoli'),
+    txt('Per ciascuna fase identificata nel diagramma di flusso, è stata effettuata una valutazione qualitativa del rischio secondo la formula: Rischio = Probabilità × Severità. Probabilità: Alta (A), Media (M), Bassa (B). Severità: Critica (C), Alta (A), Media (M). CCP se Control Critical Point, PCC se misura preventiva senza limite critico formale.'),
+    ...spacer(1),
+    h2('6.2 Matrice di Analisi Pericoli per Fase di Competenza OSA'),
+    ...spacer(1),
+    tabellaCCP(),
+    ...spacer(1),
+    // Testo AI dalla sezione 6 (6.3 in poi)
+    ...parseMarkdown(blocchi.sez6.join('\n')),
+
+    // Testo sezioni 7, 8 e seguenti
+    ...parseMarkdown(blocchi.post6.join('\n')),
   ];
 
   // ── DOCUMENTO ───────────────────────────────────────────────

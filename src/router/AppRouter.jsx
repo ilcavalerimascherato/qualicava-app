@@ -17,6 +17,7 @@ const AdminApp         = lazy(() => import('../App'));
 const DirectorApp      = lazy(() => import('../views/DirectorApp'));
 const DirectorFacility = lazy(() => import('../views/DirectorFacility'));
 const MasterDashboard  = lazy(() => import('../views/MasterDashboard'));
+const DocumentiPage    = lazy(() => import('../views/DocumentiPage'));
 const Login            = lazy(() => import('../Login'));
 
 function Splash({ msg = 'Caricamento...' }) {
@@ -118,6 +119,10 @@ export default function AppRouter() {
               <Route path="/admin"  element={<AdminApp />} />
               <Route path="/master" element={<MasterDashboard />} />
             </Route>
+
+            {/* Documenti: accessibile a tutti i ruoli autenticati
+                (DocumentiPage gestisce internamente la vista per ruolo) */}
+            <Route path="/documenti" element={<DocumentiPage />} />
 
             {/* Vista direttore — lista strutture */}
             <Route path="/director" element={<DirectorApp />} />

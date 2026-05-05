@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
   Settings, LogOut, ShieldCheck, ChefHat,
-  Search, Grid2X2, Grid3X3, LayoutGrid, FileSignature, BarChart2, PawPrint
+  Search, Grid2X2, Grid3X3, LayoutGrid, FileSignature, BarChart2, PawPrint, FileText
 } from 'lucide-react';
 
 import { useAuth }                                           from './contexts/AuthContext';
@@ -12,6 +12,7 @@ import { useModals }                                         from './contexts/Mo
 import { useDashboardData, useInvalidate }                   from './hooks/useDashboardData';
 import { useHaccpSemafori }                                  from './hooks/useHaccpData';
 import { facilityService, questionnaireService, udoService } from './services/supabaseService';
+import { getDocumentiInScadenza }                            from './services/documentiService';
 import { enrichFacilitiesData, calculateDashboardStats }     from './utils/statusCalculator';
 
 import Login              from './Login';
@@ -28,7 +29,8 @@ import KpiChartsModal     from './components/KpiChartsModal';
 import KpiHubModal        from './components/KpiHubModal';
 import KpiLaserModal      from './components/KpiLaserModal';
 import KpiXrayModal           from './components/KpiXrayModal';
-import QualityDashboardModal from './components/QualityDashboardModal';
+import QualityDashboardModal  from './components/QualityDashboardModal';
+import NotificheDropdown      from './components/NotificheDropdown';
 
 export default function App() {
   const { session, loading: authLoading, isAdmin, profile, signOut } = useAuth();
@@ -44,6 +46,7 @@ export default function App() {
   const [searchQuery, setSearchQuery]           = useState('');
   const [selectedFacility, setSelectedFacility] = useState(null);
   const [dataTarget, setDataTarget]             = useState(null);
+  const [docScadenze, setDocScadenze]           = useState({ docs: [], scaduti: 0 });
 
   const { loading: dataLoading, data, errors } = useDashboardData(year);
   const { semafori: haccpSemafori }            = useHaccpSemafori();
@@ -51,6 +54,11 @@ export default function App() {
   useEffect(() => {
     errors.forEach(msg => toast.error(`Errore dati: ${msg}`, { id: msg }));
   }, [errors]);
+
+  useEffect(() => {
+    if (!['superadmin', 'admin'].includes(profile?.role)) return;
+    getDocumentiInScadenza(90).then(setDocScadenze).catch(() => {});
+  }, [profile?.role]);
 
   const processedData = useMemo(() => {
     const enriched = enrichFacilitiesData(data.facilities, data.surveys, data.kpiRecords, year, data.udos);
@@ -194,6 +202,13 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => navigate('/documenti')}
+              className="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
+            >
+              <FileText size={14} /> Documenti
+            </button>
+
+            <button
               onClick={() => open('globalReport')}
               className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
             >
@@ -232,6 +247,8 @@ export default function App() {
                 <Settings size={20} />
               </button>
             )}
+
+            <NotificheDropdown />
 
             {/* Nome utente loggato */}
             {profile?.full_name && (
@@ -314,6 +331,33 @@ export default function App() {
             </span>
             <span className="text-3xl font-black text-white">{processedData.totalBeds}</span>
           </div>
+
+          {/* DocuMASTER scadenze — solo superadmin/admin */}
+          {['superadmin', 'admin'].includes(profile?.role) && (
+            <button
+              onClick={() => navigate('/documenti')}
+              className="flex flex-col items-start gap-1 bg-slate-800 border border-slate-700 px-3 py-2.5 rounded-2xl ml-2 hover:bg-slate-700 transition-colors"
+              title="DocuMASTER — Scadenze"
+            >
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DocuMASTER</span>
+              {docScadenze.scaduti === 0 && docScadenze.docs.length === 0 ? (
+                <span className="text-[10px] font-black text-emerald-400 whitespace-nowrap">Tutti aggiornati ✓</span>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  {docScadenze.scaduti > 0 && (
+                    <span className="bg-rose-500/25 text-rose-400 text-[10px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                      {docScadenze.scaduti} scaduti
+                    </span>
+                  )}
+                  {(docScadenze.docs.length - docScadenze.scaduti) > 0 && (
+                    <span className="bg-amber-500/25 text-amber-400 text-[10px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                      {docScadenze.docs.length - docScadenze.scaduti} in scad.
+                    </span>
+                  )}
+                </div>
+              )}
+            </button>
+          )}
 
           {/* Checkbox sospese — seconda riga dopo posti letto */}
           <label className="flex items-center gap-2 bg-slate-800 border border-slate-700 px-4 py-3 rounded-2xl ml-2 cursor-pointer hover:bg-slate-700 transition-colors">

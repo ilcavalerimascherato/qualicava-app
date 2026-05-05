@@ -16,7 +16,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
   PawPrint, LogOut, ArrowLeft, Activity, BarChart3, Database,
-  ChefHat,
+  ChefHat, FileText,
   AlertTriangle, TrendingUp,
   Plus, Save, Loader2, X
 } from 'lucide-react';
@@ -26,6 +26,7 @@ import { useModals }                         from '../contexts/ModalContext';
 import { useDirectorData, useDirectorInvalidate } from '../hooks/useDirectorData';
 import { useDashboardData, useInvalidate }   from '../hooks/useDashboardData';
 import { enrichFacilitiesData }              from '../utils/statusCalculator';
+import { createUserDirect }                  from '../utils/createUserDirect';
 import { supabase }                          from '../supabaseClient';
 import { detectAnomalies }                   from '../utils/kpiAnomalyEngine';
 import NcFormModal                           from '../components/NcFormModal';
@@ -49,7 +50,7 @@ const TABS = [
   { id: 'analysis',         label: 'Analisi Survey', Icon: BarChart3     },
   { id: 'non_conformities', label: 'Non Conformità', Icon: AlertTriangle },
   { id: 'benchmark',        label: 'Benchmark',      Icon: TrendingUp    },
-  { id: 'haccp',            label: 'HACCP',          Icon: ChefHat       },
+  { id: 'haccp',            label: 'Documenti',      Icon: ChefHat       },
 ];
 
 // FIX v3: hook wrapper — sceglie la sorgente dati in base al ruolo.
@@ -86,9 +87,10 @@ export default function DirectorFacility() {
   const navigate                      = useNavigate();
   const { profile, isAdmin, signOut, can } = useAuth();
   const { modals, open, close }       = useModals();
-  const [activeTab, setActiveTab]     = useState('overview');
-  const [ncEditId, setNcEditId]       = useState(null);
-  const [dataTarget, setDataTarget]   = useState(null);
+  const [activeTab, setActiveTab]         = useState('overview');
+  const [ncEditId, setNcEditId]           = useState(null);
+  const [dataTarget, setDataTarget]       = useState(null);
+  const [documentiTabStatus, setDocumentiTabStatus] = useState(null);
   const year = new Date().getFullYear();
 
   // FIX v3: admin → useDashboardData (accesso globale)
@@ -203,13 +205,18 @@ export default function DirectorFacility() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                 activeTab === id
                   ? 'bg-indigo-600 text-white shadow'
                   : 'text-slate-500 hover:bg-slate-100'
               }`}
             >
               <Icon size={13} /> {label}
+              {id === 'haccp' && documentiTabStatus && (
+                <span className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
+                  documentiTabStatus === 'red' ? 'bg-red-500' : 'bg-amber-400'
+                }`} />
+              )}
             </button>
           ))}
         </nav>
@@ -251,7 +258,7 @@ export default function DirectorFacility() {
           <BenchmarkTab facility={facility} kpiRecords={data.kpiRecords} year={year} />
         )}
         {activeTab === 'haccp' && (
-          <HaccpTab facility={facility} />
+          <HaccpTab facility={facility} onStatusChange={setDocumentiTabStatus} />
         )}
       </main>
 
@@ -364,35 +371,53 @@ function OrgStatoPill({ email, userProfiles }) {
 }
 
 function InvitoPanel({ figura, email, facilityId, companyId, onClose, onSuccess }) {
-  const [status, setStatus] = useState(null); // null | 'sending' | 'sent' | 'error'
-  const [msg, setMsg]       = useState('');
+  // null | 'sending' | 'credentials' | 'error'
+  const [status,      setStatus]      = useState(null);
+  const [msg,         setMsg]         = useState('');
+  const [credentials, setCredentials] = useState(null); // { email, password }
+  const [copied,      setCopied]      = useState(false);
 
   const handleInvita = async () => {
     setStatus('sending');
     try {
-      const { data, error } = await supabase.functions.invoke('invite-user', {
-        body: {
-          email,
-          fullName:    figura,
-          role:        'director',
-          companyId:   companyId || null,
-          facilityIds: [facilityId],
-        },
+      // Crea utente direttamente tramite supabase.auth.signUp (senza Edge Function)
+      const result = await createUserDirect({
+        email,
+        role:       'director',
+        facilityId: facilityId || null,
+        companyId:  companyId  || null,
       });
-      if (error || data?.error) throw new Error(error?.message || data?.error);
-      setStatus('sent');
-      setMsg(data.message || `Invito inviato a ${email}`);
-      setTimeout(() => { onClose(); if (onSuccess) onSuccess(); }, 2500);
+      setCredentials({ email: result.email, password: result.password });
+      setStatus('credentials');
+      if (onSuccess) onSuccess();
+
+      // (Fallback commentato — Edge Function 'invite-user' non più in uso)
+      // const { data, error } = await supabase.functions.invoke('invite-user', {
+      //   body: { email, fullName: figura, role: 'director', companyId, facilityIds: [facilityId] },
+      // });
+      // if (error || data?.error) throw new Error(error?.message || data?.error);
     } catch (err) {
       setStatus('error');
       setMsg(err.message);
     }
   };
 
+  const handleCopia = async () => {
+    if (!credentials) return;
+    const testo = `Email: ${credentials.email}\nPassword temporanea: ${credentials.password}`;
+    try {
+      await navigator.clipboard.writeText(testo);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback silenzioso
+    }
+  };
+
   return (
     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-2">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-black text-amber-700 uppercase tracking-widest">Invita {figura}</p>
+        <p className="text-xs font-black text-amber-700 uppercase tracking-widest">Crea account — {figura}</p>
         <button onClick={onClose} className="text-amber-400 hover:text-amber-700"><X size={14} /></button>
       </div>
 
@@ -400,20 +425,46 @@ function InvitoPanel({ figura, email, facilityId, companyId, onClose, onSuccess 
         <>
           <p className="text-xs text-slate-600 mb-3">
             Verrà creato un account per <span className="font-bold">{email}</span> con ruolo Direttore.
-            Riceverà un'email per impostare la password.
+            Le credenziali temporanee verranno mostrate qui.
           </p>
-          <button onClick={handleInvita}
-            className="flex items-center gap-2 bg-emerald-600 text-white text-xs font-black px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors">
-            ✉ Invia invito
+          <button
+            onClick={handleInvita}
+            className="flex items-center gap-2 bg-emerald-600 text-white text-xs font-black px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            ✉ Crea account
           </button>
         </>
       )}
+
       {status === 'sending' && (
         <p className="text-xs font-bold text-amber-700 animate-pulse">Creazione account in corso...</p>
       )}
-      {status === 'sent' && (
-        <p className="text-xs font-bold text-emerald-700">✓ {msg}</p>
+
+      {status === 'credentials' && credentials && (
+        <div className="space-y-3">
+          <p className="text-xs font-bold text-emerald-700">✓ Account creato con successo</p>
+          <div className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider w-20 shrink-0">Email</span>
+              <span className="text-xs font-bold text-slate-700 font-mono">{credentials.email}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider w-20 shrink-0">Password</span>
+              <span className="text-xs font-bold text-slate-700 font-mono">{credentials.password}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopia}
+              className="flex items-center gap-1.5 bg-slate-700 text-white text-xs font-black px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              {copied ? '✓ Copiato!' : '⎘ Copia credenziali'}
+            </button>
+            <p className="text-[10px] text-slate-400">Condividi le credenziali in modo sicuro con il direttore</p>
+          </div>
+        </div>
       )}
+
       {status === 'error' && (
         <div>
           <p className="text-xs font-bold text-red-700 mb-2">✗ {msg}</p>
@@ -1184,9 +1235,63 @@ function SurveyAnalysisTab({ facility, surveys }) {
   );
 }
 
-// ── Tab HACCP ─────────────────────────────────────────────────
-function HaccpTab({ facility }) {
-  const [showModal, setShowModal] = useState(false);
+// ── Tab HACCP/Documenti ────────────────────────────────────────
+function HaccpTab({ facility, onStatusChange }) {
+  const navigate = useNavigate();
+  const [showModal, setShowModal]     = useState(false);
+  const [haccpStatus, setHaccpStatus] = useState(null);
+  const [haccpLoading, setHaccpLoading] = useState(true);
+  const [docStatus, setDocStatus]     = useState(null);
+
+  useEffect(() => {
+    if (!facility?.haccp_obbligatorio) { setHaccpLoading(false); return; }
+    supabase
+      .from('haccp_scadenzario')
+      .select('*')
+      .eq('facility_id', facility.id)
+      .single()
+      .then(({ data }) => { setHaccpStatus(data || null); setHaccpLoading(false); });
+  }, [facility?.id, facility?.haccp_obbligatorio]);
+
+  useEffect(() => {
+    if (!facility?.id) return;
+    supabase
+      .from('doc_istanze')
+      .select('id, stato, doc_master(data_scadenza, titolo, categoria)')
+      .eq('facility_id', facility.id)
+      .neq('stato', 'sostituito')
+      .then(({ data: docData }) => {
+        if (!docData) return;
+        const today = new Date();
+        setDocStatus({
+          totale:      docData.length,
+          daAggiornare: docData.filter(d => d.stato === 'aggiornare').length,
+          scaduti:     docData.filter(d =>
+            d.doc_master?.data_scadenza &&
+            new Date(d.doc_master.data_scadenza) < today
+          ).length,
+          disponibili: docData.filter(d => d.stato === 'disponibile').length,
+        });
+      });
+  }, [facility?.id]);
+
+  useEffect(() => {
+    if (!onStatusChange) return;
+    const haccpRed = haccpStatus && (
+      !haccpStatus.manuale_ok ||
+      haccpStatus.analisi_status === 'rosso' ||
+      haccpStatus.formazione_status === 'rosso'
+    );
+    const haccpAmber = !haccpRed && haccpStatus && (
+      haccpStatus.analisi_status === 'amber' ||
+      haccpStatus.formazione_status === 'amber'
+    );
+    const docRed   = (docStatus?.scaduti ?? 0) > 0;
+    const docAmber = !docRed && (docStatus?.daAggiornare ?? 0) > 0;
+    if (haccpRed || docRed) onStatusChange('red');
+    else if (haccpAmber || docAmber) onStatusChange('amber');
+    else onStatusChange(null);
+  }, [haccpStatus, docStatus, onStatusChange]);
 
   if (!facility?.haccp_obbligatorio) {
     return (
@@ -1198,26 +1303,137 @@ function HaccpTab({ facility }) {
     );
   }
 
+  const haccpRed = haccpStatus && (
+    !haccpStatus.manuale_ok ||
+    haccpStatus.analisi_status === 'rosso' ||
+    haccpStatus.formazione_status === 'rosso'
+  );
+  const haccpAmber = !haccpRed && haccpStatus && (
+    haccpStatus.analisi_status === 'amber' ||
+    haccpStatus.formazione_status === 'amber'
+  );
+
+  const docBadgeLevel = (docStatus?.scaduti ?? 0) > 0 ? 'red'
+    : (docStatus?.daAggiornare ?? 0) > 0 ? 'amber'
+    : (docStatus?.totale ?? 0) > 0 ? 'green'
+    : null;
+
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
-        <div className="flex items-center gap-5">
-          <div className="bg-amber-50 p-4 rounded-2xl">
-            <ChefHat size={32} className="text-amber-500" />
+    <div className="space-y-4">
+
+      {/* BOX 1 — HACCP */}
+      <div className="relative pt-3">
+        {haccpStatus && haccpRed && (
+          <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+            ⚠ Attenzione
+          </span>
+        )}
+        {haccpStatus && !haccpRed && haccpAmber && (
+          <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+            ⚠ Verificare
+          </span>
+        )}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="bg-amber-50 p-4 rounded-2xl">
+              <ChefHat size={32} className="text-amber-500" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-800">Fascicolo HACCP</h2>
+              <p className="text-sm text-slate-500 mt-0.5">
+                Profilo, SCIA, manuale, analisi microbiologiche e formazione.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-black text-slate-800">Fascicolo HACCP</h2>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Profilo, SCIA, manuale, analisi microbiologiche e formazione.
-            </p>
+          <div className="flex items-center gap-4 flex-wrap justify-end">
+            {haccpLoading ? (
+              <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            ) : haccpStatus ? (
+              <div className="flex gap-2 flex-wrap">
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                  haccpStatus.manuale_ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                }`}>Manuale</span>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                  haccpStatus.analisi_status === 'verde' ? 'bg-emerald-100 text-emerald-700' :
+                  haccpStatus.analisi_status === 'amber' ? 'bg-amber-100 text-amber-700' :
+                  'bg-red-100 text-red-700'
+                }`}>Analisi</span>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                  haccpStatus.formazione_status === 'verde' ? 'bg-emerald-100 text-emerald-700' :
+                  haccpStatus.formazione_status === 'amber' ? 'bg-amber-100 text-amber-700' :
+                  'bg-red-100 text-red-700'
+                }`}>Formazione</span>
+              </div>
+            ) : (
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-400">
+                Profilo non configurato
+              </span>
+            )}
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-wider shadow transition-all whitespace-nowrap"
+            >
+              <ChefHat size={16} /> Apri fascicolo
+            </button>
           </div>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-wider shadow transition-all"
-        >
-          <ChefHat size={16} /> Apri fascicolo
-        </button>
+      </div>
+
+      {/* BOX 2 — Documenti */}
+      <div className="relative pt-3">
+        {docBadgeLevel === 'red' && (
+          <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+            ⚠ Documenti scaduti
+          </span>
+        )}
+        {docBadgeLevel === 'amber' && (
+          <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+            ↑ Aggiornamenti disponibili
+          </span>
+        )}
+        {docBadgeLevel === 'green' && (
+          <span className="absolute top-0 left-4 bg-emerald-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+            ✓ Tutto aggiornato
+          </span>
+        )}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="bg-blue-50 p-4 rounded-2xl">
+              <FileText size={32} className="text-blue-500" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-800">Documenti di struttura</h2>
+              <p className="text-sm text-slate-500 mt-0.5">
+                Protocolli, procedure e documenti operativi.
+              </p>
+              {docStatus && docStatus.totale > 0 ? (
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+                    {docStatus.totale} disponibili
+                  </span>
+                  {docStatus.daAggiornare > 0 && (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                      {docStatus.daAggiornare} da aggiornare
+                    </span>
+                  )}
+                  {docStatus.scaduti > 0 && (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">
+                      {docStatus.scaduti} scaduti
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 mt-2">Nessun documento distribuito</p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/documenti')}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-wider shadow transition-all whitespace-nowrap"
+          >
+            Vai ai documenti
+          </button>
+        </div>
       </div>
 
       {showModal && (
