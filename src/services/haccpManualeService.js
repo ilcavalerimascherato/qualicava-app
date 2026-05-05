@@ -913,7 +913,7 @@ export async function generaManualeHaccp(params) {
             tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
             children: [
               new TextRun({ text: String(v.num) + '.  ', font: 'Arial', size: 22, bold: true, color: VERDE }),
-              new TextRun({ text: v.titolo.replace(/^\d+[\.\s]+/, ''), font: 'Arial', size: 22, bold: true, color: NERO }),
+              new TextRun({ text: v.titolo.replace(/^\d+[.\s]+/, ''), font: 'Arial', size: 22, bold: true, color: NERO }),
               new TextRun({ text: '\t', font: 'Arial', size: 20 }),
             ],
           }));
@@ -924,7 +924,7 @@ export async function generaManualeHaccp(params) {
             tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
             children: [
               new TextRun({ text: '— ', font: 'Arial', size: 19, color: VERDE }),
-              new TextRun({ text: v.titolo.replace(/^\d+[\.\s]+/, ''), font: 'Arial', size: 19, color: GRIGIO_TESTO }),
+              new TextRun({ text: v.titolo.replace(/^\d+[.\s]+/, ''), font: 'Arial', size: 19, color: GRIGIO_TESTO }),
               new TextRun({ text: '\t', font: 'Arial', size: 18 }),
             ],
           }));
@@ -934,7 +934,7 @@ export async function generaManualeHaccp(params) {
             indent: { left: 600 },
             children: [
               new TextRun({ text: '· ', font: 'Arial', size: 17, color: '999999' }),
-              new TextRun({ text: v.titolo.replace(/^\d+[\.\s]+/, ''), font: 'Arial', size: 17, color: '999999' }),
+              new TextRun({ text: v.titolo.replace(/^\d+[.\s]+/, ''), font: 'Arial', size: 17, color: '999999' }),
             ],
           }));
         }
@@ -954,10 +954,10 @@ export async function generaManualeHaccp(params) {
   let inSez6 = false;
   for (const riga of righe) {
     const t = riga.trim();
-    if (t.match(/^#\s+.*[Ss][Ee][Zz][Ii][Oo][Nn][Ee]\s*5/) || t.match(/^#\s+5[\.\s].*[Dd]iagramm/i)) {
+    if (t.match(/^#\s+.*[Ss][Ee][Zz][Ii][Oo][Nn][Ee]\s*5/) || t.match(/^#\s+5[.\s].*[Dd]iagramm/i)) {
       zona = 'sez5'; continue;
     }
-    if (t.match(/^#\s+.*[Ss][Ee][Zz][Ii][Oo][Nn][Ee]\s*6/) || t.match(/^#\s+6[\.\s].*[Pp]ericol/i)) {
+    if (t.match(/^#\s+.*[Ss][Ee][Zz][Ii][Oo][Nn][Ee]\s*6/) || t.match(/^#\s+6[.\s].*[Pp]ericol/i)) {
       zona = 'sez6'; inSez6 = true; continue;
     }
     if (inSez6 && t.match(/^#\s+[^6\s]/) && !t.match(/^#\s+6/)) {

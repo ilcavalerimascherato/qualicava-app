@@ -4,7 +4,7 @@ import {
   FileText, Download, Loader2, FolderOpen, AlertTriangle,
   CheckCircle2, Clock, Star, Pill, Shield, Apple, Droplets,
   FolderPlus, Plus, Pencil, Send, Archive, X,
-  Stethoscope, BookOpen, HardHat, Utensils, BarChart2, ClipboardCheck,
+  Stethoscope, BookOpen, HardHat, BarChart2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
@@ -14,7 +14,7 @@ import {
   logAccesso,
   getDocStruttura,
   inviaAQualita,
-  setDocStrutturaObsoleto,
+  setDocStrutturaObsoleto
 } from '../services/documentiService';
 import DocStrutturaProprioModal from '../components/DocStrutturaProprioModal';
 
@@ -32,7 +32,7 @@ const CAT_STYLE = {
   PCA: { bg: 'bg-blue-50',    icon: Stethoscope,    iconColor: 'text-blue-600',    badge: 'bg-blue-100 text-blue-700'    },
   CDS: { bg: 'bg-violet-50',  icon: BookOpen,       iconColor: 'text-violet-600',  badge: 'bg-violet-100 text-violet-700'},
   SSL: { bg: 'bg-amber-50',   icon: HardHat,        iconColor: 'text-amber-600',   badge: 'bg-amber-100 text-amber-700'  },
-  RDD: { bg: 'bg-cyan-50',    icon: BarChart2,      iconColor: 'text-cyan-600',    badge: 'bg-cyan-100 text-cyan-700'    },
+  RDD: { bg: 'bg-cyan-50',    icon: BarChart2,      iconColor: 'text-cyan-600',    badge: 'bg-cyan-100 text-cyan-700'    }
 };
 const CAT_DEFAULT = { bg: 'bg-slate-50', icon: FileText, iconColor: 'text-slate-400', badge: 'bg-slate-100 text-slate-600' };
 
@@ -41,7 +41,7 @@ const CAT_DEFAULT = { bg: 'bg-slate-50', icon: FileText, iconColor: 'text-slate-
 const STATO_STR_BADGE = {
   bozza:           { label: 'Bozza',                cls: 'bg-slate-100 text-slate-600'    },
   inviato_qualita: { label: 'In revisione Qualità', cls: 'bg-amber-100 text-amber-700'    },
-  approvato:       { label: 'Approvato',            cls: 'bg-emerald-100 text-emerald-700' },
+  approvato:       { label: 'Approvato',            cls: 'bg-emerald-100 text-emerald-700' }
 };
 
 function scadenzaBadge(dateStr) {
@@ -191,7 +191,7 @@ export default function DocMyDocumentiView() {
         setFacilityData({
           ...fac,
           ragione_sociale: fac.companies?.name ?? '',
-          udo_tipo:        fac.udos?.name       ?? '',
+          udo_tipo:        fac.udos?.name       ?? ''
         });
       }
     }).catch(e => setError(e.message))

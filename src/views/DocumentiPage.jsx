@@ -3,11 +3,10 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, Library, Send, Building2, Settings,
-  ChevronRight, Plus, FolderOpen, Shield, Pill,
-  Apple, Droplets, Star, AlertTriangle,
+  ChevronRight, Plus, FolderOpen, Shield,
   ArrowLeft, Eye, Loader2, Filter, RefreshCw,
-  Archive, Pencil, BookOpen, ClipboardList, X,
-  Stethoscope, HardHat, Utensils, BarChart2, ClipboardCheck,
+  Archive, Pencil, BookOpen, X,
+  Stethoscope, HardHat, Utensils, BarChart2, ClipboardCheck
 } from 'lucide-react';
 import { useAuth }             from '../contexts/AuthContext';
 import DocMasterModal          from '../components/DocMasterModal';
@@ -21,7 +20,7 @@ import {
   getDocMaster,
   setObsoleto,
   updateDocMaster,
-  getDocStrutturaInRevisione,
+  getDocStrutturaInRevisione
 } from '../services/documentiService';
 
 // ─── categorie ────────────────────────────────────────────────
@@ -32,7 +31,7 @@ const COLORI_CLASSI = {
   amber:   { bg: 'bg-amber-50',   iconBg: 'bg-amber-100',   iconColor: 'text-amber-600',   border: 'border-amber-200',   badge: 'bg-amber-100 text-amber-700'   },
   orange:  { bg: 'bg-orange-50',  iconBg: 'bg-orange-100',  iconColor: 'text-orange-600',  border: 'border-orange-200',  badge: 'bg-orange-100 text-orange-700' },
   cyan:    { bg: 'bg-cyan-50',    iconBg: 'bg-cyan-100',    iconColor: 'text-cyan-600',    border: 'border-cyan-200',    badge: 'bg-cyan-100 text-cyan-700'     },
-  emerald: { bg: 'bg-emerald-50', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700'},
+  emerald: { bg: 'bg-emerald-50', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700'}
 };
 
 const ICONE_MAPPA = { Stethoscope, BookOpen, HardHat, Utensils, BarChart2, ClipboardCheck, FileText };
@@ -52,7 +51,7 @@ const CATEGORIA_OBSOLETI = {
   description: 'Documenti archiviati e fuori uso',
   Icon: Archive,
   bg: 'bg-slate-100', iconBg: 'bg-slate-200', iconColor: 'text-slate-500',
-  border: 'border-slate-300', badge: 'bg-slate-200 text-slate-600',
+  border: 'border-slate-300', badge: 'bg-slate-200 text-slate-600'
 };
 
 const CAT_MAP = Object.fromEntries(
@@ -61,7 +60,7 @@ const CAT_MAP = Object.fromEntries(
     label:       c.nome,
     description: c.descrizione,
     Icon:        ICONE_MAPPA[c.icona] ?? FileText,
-    ...COLORI_CLASSI[c.colore],
+    ...COLORI_CLASSI[c.colore]
   }])
 );
 
