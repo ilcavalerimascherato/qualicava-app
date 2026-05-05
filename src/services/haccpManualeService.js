@@ -574,7 +574,6 @@ function diagrammaSanificazione() {
 
 function diagrammaRicezioneDisfagici() {
   const BLUE   = { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' };
-  const AMBER  = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
   const RED    = { fill: 'FCEBEB', borderColor: 'A32D2D', textColor: 'A32D2D' };
   const TEAL   = { fill: 'E1F5EE', borderColor: '0F6E56', textColor: '0F6E56' };
   const GRAY   = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
@@ -600,7 +599,6 @@ function diagrammaRiattivazioneD() {
   const AMBER  = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
   const GREEN  = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
   const PURPLE = { fill: 'EEEDFE', borderColor: '534AB7', textColor: '534AB7' };
-  const RED    = { fill: 'FCEBEB', borderColor: 'A32D2D', textColor: 'A32D2D' };
   return [
     h2('8.3.1 Flusso riattivazione pasti disfagici'),
     ...spacer(1),
@@ -673,7 +671,6 @@ function diagrammaIsolamentoCompleto() {
   const AMBER  = { fill: 'FAEEDA', borderColor: '854F0B', textColor: '854F0B' };
   const GREEN  = { fill: 'EAF3DE', borderColor: '3B6D11', textColor: '3B6D11' };
   const GRAY   = { fill: 'F1EFE8', borderColor: '5F5E5A', textColor: '5F5E5A' };
-  const BLUE   = { fill: 'E6F1FB', borderColor: '185FA5', textColor: '185FA5' };
   return [
     h2('9.1 Flusso operativo isolamento infettivo'),
     ...spacer(1),
