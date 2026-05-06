@@ -259,7 +259,6 @@ Usa ESATTAMENTE questi titoli in maiuscolo:
     }) => {
       const isCucinaInterna = modello === 'cucina_interna';
       const isAppalto       = modello === 'appalto_fresco_caldo';
-      const isEsterno       = isAppalto || modello === 'distribuzione_veicolata';
 
       const modelloLabel = {
         cucina_interna:          'CUCINA INTERNA – produzione diretta dei pasti da parte del personale OSA',
@@ -267,11 +266,6 @@ Usa ESATTAMENTE questi titoli in maiuscolo:
         distribuzione_veicolata: 'DISTRIBUZIONE VEICOLATA – pasti pronti da centro cottura esterno; nostro personale riceve, eventualmente riscalda, porziona e distribuisce. NON gestiamo fasi di produzione.',
       }[modello] || modello;
 
-      const personale = isCucinaInterna
-        ? 'Personale cucina (cuochi/aiuto cuochi), ASA/OSS addetti alla distribuzione e sporzionamento.'
-        : isAppalto
-        ? 'ASA/OSS addetti al ricevimento, sporzionamento e distribuzione. Il personale di cucina è del fornitore.'
-        : 'ASA/OSS addetti al ricevimento, eventuale riattivazione, sporzionamento e distribuzione. Non abbiamo personale di cucina.';
 
       const fasiCompetenza = isCucinaInterna
         ? 'Ricevimento derrate, stoccaggio, preparazione, cottura, raffreddamento, porzionamento, distribuzione, lavaggio stoviglie, sanificazione.'
@@ -284,97 +278,74 @@ IMPORTANTE: la cucina è del FORNITORE${fornitoreNome ? ' (' + fornitoreNome + '
       const teamRighe = teamHaccp.filter(m => m.ruolo)
         .map(m => `${m.ruolo}: ${m.nome || '(da nominare)'}`).join('\n');
 
-      const distribuzioneNote = opCarrelloTermico
-        ? 'CARRELLO TERMICO – scomparti caldo ≥65°C e freddo ≤10°C durante trasporto ai reparti.'
-        : isEsterno
-        ? 'SERVIZIO ESPRESSO – vassoi portati in sala/reparto subito dopo ricezione/riattivazione, senza carrello termico. Tempo max 20 min. Verifica T° al reparto.'
-        : 'SERVIZIO ESPRESSO – senza carrello termico. Distribuzione immediata post-cottura/ravvivo. Tempo max 15-20 min.';
 
-      return `Sei un esperto di sicurezza alimentare e normativa HACCP italiana. Genera un Manuale HACCP completo e professionale in italiano.
+      return `Sei un esperto di sicurezza alimentare e normativa HACCP italiana.
+Genera il contenuto testuale personalizzato per il Manuale HACCP di ${facilityName}.
 
-━━ DATI STRUTTURA ━━
+━━ CONTESTO STRUTTURA ━━
 Struttura / OSA: ${facilityName}
-P.IVA OSA: ${pivaOsa || '—'}
-Tipo struttura: ${udoName || 'struttura socio-sanitaria'}
+Tipo: ${udoName || 'struttura socio-sanitaria'}
 Regione: ${region || '—'} | Indirizzo: ${address || '—'}
 ${bedCount ? 'Posti letto: ' + bedCount : ''}
-
-━━ MODELLO RISTORAZIONE ━━
-${modelloLabel}
-${fornitoreNome ? 'Fornitore pasti: ' + fornitoreNome + (fornitorePiva ? ' – P.IVA ' + fornitorePiva : '') : ''}
-${isEsterno && fornitoreScia ? 'SCIA fornitore: ' + fornitoreScia : isEsterno ? 'La SCIA è del fornitore, non dell\'OSA.' : ''}
-
-━━ PERSONALE ━━
-${personale}
-Destinatari del manuale: ${isEsterno ? 'ASA/OSS e addetti alla distribuzione (NON cuochi del fornitore).' : 'personale cucina, ASA/OSS.'}
-
-━━ FASI DI COMPETENZA OSA ━━
-${fasiCompetenza}
-
-━━ RESPONSABILI ━━
-Legale Rappresentante (LR): ${lr}
-Responsabile HACCP (R-HACCP): ${rHaccp}
+Modello ristorazione: ${modelloLabel}
+${fornitoreNome ? 'Fornitore pasti: ' + fornitoreNome : ''}
+Legale Rappresentante: ${lr}
+Responsabile HACCP: ${rHaccp}
 ${teamRighe}
-Redatto da: ${redattore || 'Ufficio Qualità OVER'}
-Rev. precedente: ${revPrecedente || '0 – prima emissione'} | Rev. corrente: ${revCorrente || '1'} – ${dataRevisione || new Date().toLocaleDateString('it-IT')}
-
-━━ LOCALI DI COMPETENZA OSA ━━
-${nucleiNote || (isEsterno ? 'Cucina/dispensa in nostra gestione, area lavaggio, spogliatoio personale, sala da pranzo/refettori.' : 'Non specificato')}
-Orari distribuzione: ${orariDistribuzione || 'Non specificati'}
-
-━━ APPARECCHIATURE FRIGORIFERE IN NOSTRA GESTIONE ━━
-${apparecchiature || 'Da definire'}
-${isEsterno ? 'NOTA: i frigoriferi del centro cottura (F1, C1 ecc.) NON sono nostri e NON vanno monitorati.' : ''}
-
-━━ DISTRIBUTORI ━━
-${macchinettaColazioni ? 'Macchinetta colazioni (erogatore bevande calde): ' + (macchinettaNote || 'presente') : 'Nessuna macchinetta colazioni'}
-${distributoreAcqua ? 'Distributore acqua potabile: ' + (distributoreNote || 'presente') : 'Nessun distributore acqua'}
 
 ━━ SPECIFICITÀ OPERATIVE ━━
-Disfagici: ${opDisfagici ? 'SÌ – ' + (opDisfagiciNote || 'gestione dedicata') : 'NO'}
-${opCenaAbbattuta ? 'Riattivazione teglie abbattute (cena): SÌ – ' + (opCenaAbbatutaNote || 'riattivazione ≥75°C al cuore') : ''}
-Distribuzione: ${distribuzioneNote}
-${opCucinette ? 'Cucinette di nucleo: SÌ – ' + (opCucinetteNote || 'colazione e merenda') : ''}
-${(opSrtr || isUdoPsi) ? 'Struttura SRTR psichiatrica: SÌ' : ''}
-${opMonousoInfetti ? 'Pazienti in isolamento infettivo con vassoio monouso: SÌ' : ''}
-${opRiabilitazione ? 'Attività cucina terapeutica con pazienti: SÌ' : ''}
+${fasiCompetenza}
+Disfagici: ${opDisfagici ? 'SÌ – ' + (opDisfagiciNote || 'Nucleo AS, frigo FD dedicato piano interrato') : 'NO'}
+${opCenaAbbattuta ? 'Cena con teglie abbattute: SÌ – ' + (opCenaAbbatutaNote || 'riattivazione ≥75°C al cuore') : ''}
+${opMonousoInfetti ? 'Isolamento infettivo con vassoio monouso: SÌ' : ''}
 ${opCeliaciaNote ? 'Note celiachia/allergeni: ' + opCeliaciaNote : ''}
-${noteOperative ? 'Note operative: ' + noteOperative : ''}
+${nucleiNote ? 'Note nuclei/locali: ' + nucleiNote : ''}
+${orariDistribuzione ? 'Orari distribuzione: ' + orariDistribuzione : ''}
+${noteOperative ? 'Note operative aggiuntive: ' + noteOperative : ''}
 
 ━━ ISTRUZIONI TASSATIVE ━━
-COMPLETA tutte le sezioni. Non troncare il documento.
-- Reg. CE 852/2004, D.Lgs 27/2021, Reg. UE 2021/382, Reg. CE 178/2002, D.Lgs 18/2023
-- Usa sempre "vassoio" (mai "vascello")
-- Usa "macchinetta colazioni" o "erogatore bevande calde" (mai "macchinetta caffè")
-- Numera sezioni: 1., 1.1, 1.2, 2., 2.1 ecc.
-- Tabelle markdown (| col | col |) per CCP, pericoli, temperature, analisi
-- Diagrammi di flusso con → tra le fasi
-- NON includere nomi di persone nel corpo, solo ruoli
-- NON ripetere il registro revisioni nel corpo (è già in copertina)
-${isEsterno ? `- Campo applicazione: SOLO fasi OSA (non la cucina del fornitore)
-- Diagrammi: iniziano da RICEVIMENTO PASTI (non dalla produzione)
-- CCP principale: temperatura ricezione pasti (freddi ≤10°C), riattivazione ≥75°C
-- Registro allergie: conservare per periodo utilizzo (privacy GDPR)` : '- Inventario frigoriferi senza indicare capacità'}
+- Scrivi SOLO testo puro: NO markdown (no #, **, tabelle |, frecce →)
+- NO diagrammi di flusso (già generati automaticamente)
+- NO tabelle (già generate automaticamente)
+- NO titoli di sezione (già presenti nel documento)
+- Ogni paragrafo su riga separata
+- Bullet point con • (punto elenco) o numerati con 1. 2. 3.
+- Grassetto: NON usare ** — il testo è già formattato dal sistema
+- Lunghezza: 3-6 paragrafi per sezione, concisi e operativi
+- Tono: professionale, diretto, orientato all'operatore ASA/OSS
+- Riferimenti normativi: Reg. CE 852/2004, D.Lgs 27/2021, Reg. UE 2021/382
+- NON includere: copertina, indice, registro revisioni, sezioni 3-6, 8-12 (già generate)
+- USA "vassoio" (mai "vascello") e "macchinetta colazioni" (mai "macchinetta caffè")
 
-STRUTTURA SEZIONI (genera TUTTE in ordine):
-1. Introduzione – campo di applicazione: SOLO fasi di competenza OSA
-2. Normativa di riferimento (tabella)
-3. Cultura della sicurezza alimentare
-4. Descrizione struttura – locali e attrezzature DI NOSTRA COMPETENZA${bedCount ? ', ' + bedCount + ' posti letto' : ''}
-5. Diagrammi di flusso con →${isEsterno ? ' (da RICEVIMENTO PASTI)' : ''}
-6. Analisi pericoli e CCP (tabella per fase)
-7. Celiachia e gestione allergeni
-${sezioni.includes('team') ? `8. Gruppo HACCP – R-HACCP: verifiche PERIODICHE non quotidiane; taratura strumenti: annuale; punto 4 = supervisione` : ''}
-${opDisfagici ? '- Ospiti disfagici: frigo dedicato (FD), pasto nominale etichettato con consistenza IDDSI' : ''}
-${(opSrtr || isUdoPsi) ? '- SRTR psichiatrica: sicurezza posateria (conta cutlery), supervisione tavoli, gestione crisi, pasto in camera, rapporto operatori/ospiti a seconda criticità' : ''}
-${opMonousoInfetti ? '- Isolamento infettivo: vassoio monouso, smaltimento rifiuti speciali, DPI' : ''}
-${opCenaAbbattuta ? '- Riattivazione teglie abbattute: ricezione ≤4°C, riattivazione ≥75°C, max una riattivazione' : ''}
-${opCarrelloTermico ? '- Carrello termico: scomparti caldo/freddo, pulizia, sanificazione, registrazione T°' : isEsterno ? '- Servizio espresso: tempo max 20 min da fine riattivazione a servizio' : ''}
-${opRiabilitazione ? '- Attività terapeutiche cucina: attività consentite/vietate, supervisione, igiene, separazione' : ''}
-${sezioni.includes('microbio') ? '- Analisi microbiologiche: superfici e mani operatori (non campionamento routinario alimenti)' : ''}
-${sezioni.includes('formazione') ? '- Piano formazione (tabella: argomento, destinatari, frequenza triennale, ore)' : ''}
-- Manutenzione attrezzature e taratura annuale strumenti di misura (obbligo Reg. CE 852/2004 — sempre inclusa)
-${sezioni.includes('documentazione') ? '- Documentazione: elenco moduli, conservazione. Registro allergie: periodo utilizzo (GDPR).' : ''}`;
+━━ GENERA ESATTAMENTE QUESTE SEZIONI con i marcatori indicati ━━
+
+===SEZ_1===
+Scrivi 2-3 paragrafi che introducono il manuale specificando:
+- Il contesto operativo specifico di ${facilityName}
+- Il modello di ristorazione adottato (${modelloLabel})
+- Il fornitore esterno${fornitoreNome ? ' ' + fornitoreNome : ''} e il perimetro di competenza OSA
+- L'impegno della struttura verso la sicurezza alimentare
+
+===SEZ_1b===
+Scrivi il campo di applicazione specifico: elenca con bullet • le fasi di competenza OSA di ${facilityName} (ricevimento, stoccaggio, riattivazione se prevista, porzionamento, distribuzione, raccolta, lavaggio, sanificazione). Poi elenca cosa NON rientra nel campo (fasi del fornitore).
+
+===SEZ_1c===
+Elenca con bullet • le normative di riferimento applicabili: Reg. CE 852/2004, Reg. UE 2021/382, D.Lgs 27/2021, Reg. CE 178/2002, Reg. UE 1169/2011, D.Lgs 231/2001, Reg. CE 2073/2005, D.Lgs 31/2001 (acqua potabile). Per ciascuna una riga con titolo e breve oggetto.
+
+===SEZ_2===
+Scrivi 2-3 paragrafi che descrivono il programma prerequisiti specifico per ${facilityName}: come la struttura gestisce igiene del personale, pulizia e sanificazione, approvvigionamento idrico, controllo infestanti. Personalizza in base al modello ${modelloLabel}.
+
+===SEZ_4===
+Descrivi in 2-3 paragrafi il layout specifico della struttura${nucleiNote ? ' considerando: ' + nucleiNote : ''}: organizzazione per nuclei, cucinette, locali di supporto. Includi eventuali specificità operative rilevanti per l'HACCP (percorsi sporco/pulito, zone di stoccaggio).
+
+===SEZ_7===
+Scrivi contenuto operativo per la gestione celiachia e allergeni specifica di ${facilityName}:
+• Come comunicare le allergie al momento dell'ammissione
+• Come Sodexo SpA${fornitoreNome && fornitoreNome !== 'Sodexo SpA' ? ' / ' + fornitoreNome : ''} identifica i pasti celiaci
+• La regola del pasto celiaco servito per primo
+• Come prevenire contaminazione incrociata nelle cucinette${opCeliaciaNote ? ' — Nota specifica: ' + opCeliaciaNote : ''}
+
+`;
     },
   },
 

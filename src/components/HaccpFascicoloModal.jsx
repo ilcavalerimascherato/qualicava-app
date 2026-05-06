@@ -1489,7 +1489,6 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
             </button>
           </div>
         </section>
-      )}
 
       {/* Tasto richiedi — admin / sede / director */}
       {canRequest && !canGenerate && (
