@@ -492,23 +492,64 @@ function tabellaCCP() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SEZIONE 4 — Tabella apparecchiature
+// SEZIONE 4 — Parser e tabella apparecchiature da profilo
 // ═══════════════════════════════════════════════════════════════
 
-function tabellaApparecchiature(righe) {
-  const c0 = Math.round(CONTENT_W * 0.12);
-  const c1 = Math.round(CONTENT_W * 0.22);
-  const c2 = Math.round(CONTENT_W * 0.22);
-  const c3 = Math.round(CONTENT_W * 0.22);
+// Parsa il campo apparecchiature_frigorifere dal profilo
+// Formato: "FR1 – Frigorifero cucinetta nucleo AS" (una per riga)
+// Convenzione codici: F=frigo cucina, C=congelatore cucina,
+//   FR=frigo reparto, FD=frigo disfagici, CR=congelatore reparto
+function parseApparecchiature(raw) {
+  if (!raw || !raw.trim()) return [];
+  return raw.split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    .map(l => {
+      // Separa codice e descrizione su separatori – - :
+      const m = l.match(/^([A-Z][A-Z0-9]*)\s*[–\-:]\s*(.+)$/);
+      if (!m) return { id: '?', desc: l, tipo: 'Attrezzatura', parametro: '—', note: '' };
+      const id   = m[1].trim();
+      const desc = m[2].trim();
+      // Tipo e parametro dal codice
+      let tipo, parametro, note = '';
+      if (/^F\d*$/.test(id))       { tipo = 'Frigorifero cucina';    parametro = '≤4°C';  note = 'Scheda 2A unica'; }
+      else if (/^C\d*$/.test(id))  { tipo = 'Congelatore cucina';   parametro = '≤-18°C'; note = 'Scheda 2B unica'; }
+      else if (/^FR\d+$/.test(id)) { tipo = 'Frigorifero reparto';  parametro = '≤4°C';  note = 'Scheda 2A dedicata'; }
+      else if (/^FD$/.test(id))     { tipo = 'Frigo disfagici';      parametro = '≤4°C';  note = 'Scheda 2A dedicata'; }
+      else if (/^CR\d+$/.test(id)) { tipo = 'Congelatore reparto';  parametro = '≤-18°C'; note = 'Scheda 2B dedicata'; }
+      else if (/scaldavivande/i.test(desc)) { tipo = 'Scaldavivande'; parametro = '≥60°C'; note = ''; }
+      else if (/carrello/i.test(desc))      { tipo = 'Carrello termico'; parametro = '≥65°C / ≤10°C'; note = ''; }
+      else if (/forno/i.test(desc))         { tipo = 'Forno';          parametro = '≤250°C'; note = ''; }
+      else { tipo = 'Attrezzatura'; parametro = '—'; note = ''; }
+      return { id, desc, tipo, parametro, note };
+    });
+}
+
+function tabellaApparecchiature(rawApparecchiature) {
+  const righe = parseApparecchiature(rawApparecchiature);
+  const c0 = Math.round(CONTENT_W * 0.10);
+  const c1 = Math.round(CONTENT_W * 0.28);
+  const c2 = Math.round(CONTENT_W * 0.20);
+  const c3 = Math.round(CONTENT_W * 0.18);
   const c4 = CONTENT_W - c0 - c1 - c2 - c3;
+  
+  if (righe.length === 0) {
+    return p([r('Nessuna apparecchiatura frigorifica in gestione OSA.', { italic: true, color: '888888' })]);
+  }
+
   return new Table({
     width: { size: CONTENT_W, type: WidthType.DXA },
     columnWidths: [c0, c1, c2, c3, c4],
     rows: [
-      new TableRow({ tableHeader: true, children: [hCell('ID',c0), hCell('Ubicazione',c1), hCell('Tipo',c2), hCell('Parametro',c3), hCell('Note',c4)] }),
-      ...righe.map(r => new TableRow({ children: [
-        cell(r[0],c0,{bold:true,color:VERDE,fill:VERDE_LIGHT}),
-        cell(r[1],c1), cell(r[2],c2), cell(r[3],c3), cell(r[4]||'',c4),
+      new TableRow({ tableHeader: true, children: [
+        hCell('Cod.',c0), hCell('Descrizione',c1), hCell('Tipo',c2), hCell('T° controllo',c3), hCell('Monitoraggio',c4)
+      ]}),
+      ...righe.map(row => new TableRow({ children: [
+        cell(row.id,   c0, { bold: true, color: VERDE, fill: VERDE_LIGHT }),
+        cell(row.desc, c1),
+        cell(row.tipo, c2),
+        cell(row.parametro, c3, { align: AlignmentType.CENTER }),
+        cell(row.note, c4),
       ]})),
     ],
   });
@@ -759,7 +800,8 @@ function textToParagraphs(rawText) {
     if (!t) { result.push(spacer(1)[0]); continue; }
     if (/^[•-]\s+/.test(t))        { result.push(bullet(t.replace(/^[•-]\s+/, ''))); continue; }
     if (/^\d+[.)]\s+/.test(t))      { const m = t.match(/^(\d+)[.)]\s+(.*)/); result.push(numbered(m[1], m[2])); continue; }
-    if (/^#{1,3}\s/.test(t))        { continue; } // salta eventuali titoli markdown residui
+    if (/^#{1,3}\s/.test(t))        { continue; } // salta titoli markdown residui
+    if (/^===SEZ_/.test(t))           { break;    } // fermati al prossimo marcatore SEZ
     result.push(txt(t));
   }
   return result;
@@ -786,9 +828,15 @@ export async function generaManualeHaccp(params) {
     revStorico       = [],
     testoManuale     = '',   // testo AI puro, senza markdown strutturale
     logoVariante     = 'A',
-    // Dati sezioni specifiche (opzionali — se non passati usa testo generico)
-    orariServizio              = '',
-    layoutStruttura            = '',
+    // Dati dal profilo HACCP
+    apparecchiatureFrigorifere = '',  // haccp_profili.apparecchiature_frigorifere
+    orariServizio              = '',  // sa.op_orari_distribuzione
+    layoutStruttura            = '',  // sa.op_nuclei_note
+    opDisfagici                = false,
+    opDisfagiciNote            = '',
+    opCenaAbbattuta            = false,
+    opMonousoInfetti           = false,
+    opCeliaciaNote             = '',
   } = params;
 
   const logoCfg  = LOGOS[logoVariante] || LOGOS.A;
@@ -817,7 +865,7 @@ export async function generaManualeHaccp(params) {
         r(nomestruttura, { size: 18, color: GRIGIO_TESTO }),
         new TextRun({ text: '\t', size: 18 }),
         r('Rev. ', { size: 18, color: GRIGIO_TESTO }),
-        r(revLabel, { size: 18, color: VERDE, bold: true }),
+        r(numRev, { size: 18, color: VERDE, bold: true }),  // footer: solo rev ufficiale, no suffisso interno
         r('   Pagina ', { size: 18, color: GRIGIO_TESTO }),
         new SimpleField('PAGE',     r('', { size: 18 })),
         r(' di ', { size: 18, color: GRIGIO_TESTO }),
@@ -880,7 +928,7 @@ export async function generaManualeHaccp(params) {
   // ── Estrai blocchi testo AI per sezione ───────────────────────
   // Il testo AI è diviso da marcatori "===SEZ_N===" oppure usiamo fallback generico
   function extractSez(testo, n) {
-    const re = new RegExp(`===SEZ_${n}===([\\s\\S]*?)(?:===SEZ_\\d+===|$)`, 'i');
+    const re = new RegExp(`===SEZ_${n}===([\\s\\S]*?)(?:===SEZ_[\\w]+===|$)`, 'i');
     const m  = String(testo).match(re);
     return m ? m[1].trim() : '';
   }
@@ -991,49 +1039,24 @@ export async function generaManualeHaccp(params) {
     ]),
     ...spacer(1),
     h2('4.2 Layout Nuclei e Locali'),
-    ...textToParagraphs(layoutStruttura || extractSez(testoManuale, 4) || [
-      '• **Nucleo AS**: Piano terra · Cucinetta con FR1 · Scaldavivande · Frigorifero disfagici FD al piano interrato',
-      '• **Nucleo B**: Piano primo · Cucinetta con FR2 · Scaldavivande',
-      '• **Nucleo C**: Piano primo · Cucinetta con FR3 · Scaldavivande',
-      '• **Nucleo D**: Piano secondo · Cucinetta con FR4 · Scaldavivande',
-      '• **Locale preparazione piano interrato**: Frigorifero FD pasti disfagici Nucleo AS',
-      '• **Magazzino derrate secche**: Finestra con zanzariera · Scaffalature aperte e/o armadi chiusi · Monitoraggio T° giornaliero',
-      '• **Lavanderia stoviglie**: Lavastoviglie ciclo ≥80°C · Scaffali per asciugatura',
-    ].join('\n')),
+    ...textToParagraphs(layoutStruttura || 'Struttura organizzata in nuclei residenziali dotati di cucinetta attrezzata.'),
     h2('4.3 Apparecchiature in Gestione OSA'),
-    tabellaApparecchiature([
-      ['FR1', 'Cucinetta Nucleo AS',     'Frigorifero', '≤4°C',    'Pasti ospiti + riservato disfagici in emergenza'],
-      ['FR2', 'Cucinetta Nucleo B',      'Frigorifero', '≤4°C',    ''],
-      ['FR3', 'Cucinetta Nucleo C',      'Frigorifero', '≤4°C',    ''],
-      ['FR4', 'Cucinetta Nucleo D',      'Frigorifero', '≤4°C',    ''],
-      ['FD',  'Piano interrato',         'Frigorifero', '≤4°C',    'DEDICATO disfagici Nucleo AS'],
-      ['SC1-4','Cucinette nuclei',       'Scaldavivande','≥60°C',  'Uno per nucleo'],
-      ['CT',  'Cucinette nuclei',        'Carrello termico','Scomp. caldo ≥65°C / freddo ≤10°C', ''],
-      ['LV',  'Lavanderia stoviglie',    'Lavastoviglie','≥80°C',  'Ciclo completo 45 min'],
-    ]),
+    tabellaApparecchiature(apparecchiatureFrigorifere),
     ...spacer(1),
     h2('4.4 Orari di Servizio e Distribuzione'),
-    ...textToParagraphs(orariServizio || [
-      '• **Colazione**: 08:00 — Cucinette di nucleo',
-      '• **Pranzo**: 12:00 — Distribuzione pasti caldi da Sodexo SpA',
-      '• **Merenda**: 15:30 — Cucinette di nucleo',
-      '• **Cena**: 18:30 — Riattivazione teglie abbattute consegnate al mattino',
-    ].join('\n')),
+    ...textToParagraphs(orariServizio || 'Orari di distribuzione definiti dalla struttura.'),
     new Paragraph({ children: [new PageBreak()] }),
 
-    // ── SEZ 5: Diagrammi di flusso ───────────────────────────
+    // ── SEZ 5: Diagrammi di flusso (condizionali da profilo) ──
     h1('5. DIAGRAMMI DI FLUSSO'),
     txt('I seguenti diagrammi illustrano i flussi operativi di competenza dell\'OSA ' + nomestruttura + '. I CCP (Punti Critici di Controllo) sono evidenziati in verde acqua.'),
     ...spacer(1),
-    ...diagramma51(),
+    ...diagramma51(),                                          // sempre: flusso pasti caldi
+    ...(opCenaAbbattuta ? [new Paragraph({ children: [new PageBreak()] }), ...diagramma52()] : []),  // cena abbattuta
+    ...(opDisfagici     ? [new Paragraph({ children: [new PageBreak()] }), ...diagramma53()] : []),  // disfagici
     new Paragraph({ children: [new PageBreak()] }),
-    ...diagramma52(),
-    new Paragraph({ children: [new PageBreak()] }),
-    ...diagramma53(),
-    new Paragraph({ children: [new PageBreak()] }),
-    ...diagramma54(),
-    new Paragraph({ children: [new PageBreak()] }),
-    ...diagramma55(),
+    ...diagramma54(),                                          // celiaci: sempre
+    ...(opMonousoInfetti ? [new Paragraph({ children: [new PageBreak()] }), ...diagramma55()] : []), // isolamento
     new Paragraph({ children: [new PageBreak()] }),
 
     // ── SEZ 6: Analisi pericoli CCP ──────────────────────────
@@ -1051,9 +1074,7 @@ export async function generaManualeHaccp(params) {
 
     // ── SEZ 7: Celiachia e allergeni ─────────────────────────
     h1('7. GESTIONE CELIACHIA E ALLERGENI'),
-    ...textToParagraphs(extractSez(testoManuale, 7) || [
-      'La struttura applica il Reg. UE 1169/2011 garantendo tracciabilità degli alimenti celiaci/allergeni dal fornitore Sodexo SpA all\'ospite.',
-    ].join('\n')),
+    ...textToParagraphs(opCeliaciaNote || 'La struttura applica il Reg. UE 1169/2011 garantendo la tracciabilità degli alimenti per celiaci e allergici dal fornitore all\'ospite.'),
     h2('7.1 Normativa e Responsabilità'),
     ...textToParagraphs([
       '• **Tracciabilità** da fornitore a ospite per tutti gli alimenti con allergeni dichiarati',
@@ -1097,7 +1118,8 @@ export async function generaManualeHaccp(params) {
     ].join('\n')),
     new Paragraph({ children: [new PageBreak()] }),
 
-    // ── SEZ 8: Disfagici ─────────────────────────────────────
+    // ── SEZ 8: Disfagici (solo se op_disfagici) ──────────────
+    ...(opDisfagici ? [
     h1('8. GESTIONE OSPITI DISFAGICI'),
     h2('8.1 Classificazione IDDSI'),
     txt('La disfagia (difficoltà di deglutizione) richiede alimenti di consistenza modificata secondo la International Dysphagia Diet Standardization Initiative (IDDSI):'),
@@ -1125,13 +1147,7 @@ export async function generaManualeHaccp(params) {
     })(),
     ...spacer(1),
     h2('8.2 Ricezione e Stoccaggio Pasti Disfagici'),
-    ...textToParagraphs([
-      'I pasti disfagici abbattuti sono consegnati da Sodexo SpA in teglioni separati identificati con IDDSI level dichiarato.',
-      '',
-      'Controllo al ricevimento: T° ≤4°C · integrità confezionamento · leggibilità etichetta · verifica IDDSI level.',
-      '',
-      'Stoccaggio: frigorifero FD al piano interrato per il Nucleo AS, identificato "DISFAGICI – NUCLEO AS". Per gli altri nuclei il pasto disfagico viene conservato nel frigorifero della rispettiva cucinetta dopo abbattimento. Gestione FIFO.',
-    ].join('\n')),
+    ...textToParagraphs(opDisfagiciNote || 'I pasti disfagici abbattuti sono consegnati dal fornitore in contenitori separati identificati con il livello IDDSI. Stoccaggio in frigorifero dedicato FD a ≤4°C.'),
     h2('8.3 Riattivazione e Identificazione'),
     ...textToParagraphs([
       'Circa 30 min prima della cena (ore 18:00 per servizio 18:30):',
@@ -1157,7 +1173,10 @@ export async function generaManualeHaccp(params) {
     ].join('\n')),
     new Paragraph({ children: [new PageBreak()] }),
 
-    // ── SEZ 9: Isolamento infettivo ──────────────────────────
+    ] : []),  // fine §8 condizionale
+
+    // ── SEZ 9: Isolamento infettivo (solo se op_monouso_infetti) ─
+    ...(opMonousoInfetti ? [
     h1('9. GESTIONE ISOLAMENTO INFETTIVO'),
     h2('9.1 Protocollo e Notifica'),
     ...textToParagraphs([
@@ -1185,7 +1204,9 @@ export async function generaManualeHaccp(params) {
     ].join('\n')),
     new Paragraph({ children: [new PageBreak()] }),
 
-    // ── SEZ 10: Piano analisi microbiologiche ────────────────
+    ] : []),  // fine §9 condizionale
+
+    // ── SEZ 10: Piano analisi microbiologiche ────────────────────
     h1('10. PIANO ANALISI MICROBIOLOGICHE'),
     txt('Il piano di campionamento microbiologico è volto a verificare l\'efficacia delle misure di controllo e la conformità ai limiti stabiliti dal Reg. CE 2073/2005. I campionamenti sono eseguiti da laboratorio accreditato esterno su incarico del R-HACCP.'),
     ...spacer(1),
@@ -1244,293 +1265,439 @@ export async function generaModulisticaHaccp({
   op_macchinetta_caffe        = false,
   op_macchinetta_caffe_note   = '',
   op_cena_abbattuta           = false,
+  op_disfagici                = false,
+  op_monouso_infetti          = false,
+  op_srtr                     = false,
+  op_riabilitazione           = false,
+  logoVariante                = 'A',
 }) {
   const isCucinaInterna = modello === 'cucina_interna';
   const isAppalto       = modello === 'appalto_fresco_caldo';
+  const isVeicolata     = modello === 'distribuzione_veicolata';
 
-  // ── Parse apparecchiature ─────────────────────────────────
-  const righe = apparecchiature_frigorifere.split('\n').map(r => r.trim()).filter(Boolean);
-  const codice = r => r.split(/[–-]/)[0].trim().toUpperCase();
-  const desc   = r => { const p = r.split(/[–-]/); return p.slice(1).join('–').trim() || codice(r); };
+  // ── Parse apparecchiature dal profilo ───────────────────────
+  const righeApp = (apparecchiature_frigorifere || '').split('\n').map(r => r.trim()).filter(Boolean);
+  const getCodice = r => r.split(/[–\-:]/)[0].trim().toUpperCase();
+  const getDesc   = r => { const p = r.split(/[–\-:]/); return p.slice(1).join('–').trim() || getCodice(r); };
 
-  const frigoCucina  = righe.filter(r => /^F\d+/.test(codice(r)) && !/^FR/.test(codice(r)) && !/^FD$/.test(codice(r)));
-  const congelatori  = righe.filter(r => /^C\d+/.test(codice(r)) && !/^CR/.test(codice(r)));
-  const frigoReparti = righe.filter(r => /^FR/.test(codice(r)) || /^FD$/.test(codice(r)));
+  const frigoCucina  = righeApp.filter(r => /^F\d*$/.test(getCodice(r)));
+  const congelatori  = righeApp.filter(r => /^C\d*$/.test(getCodice(r)));
+  const frigoReparti = righeApp.filter(r => /^FR\d+$/.test(getCodice(r)) || /^FD$/.test(getCodice(r)));
+  const congelatoriR = righeApp.filter(r => /^CR\d+$/.test(getCodice(r)));
 
-  // ── Misure pagina A4 landscape margini ridotti ────────────
-  // Larghezza piena: 16838 - 560*2 = 15718 DXA
-  const W_L   = 15718;
-  const W_P   = 9638; // Portrait
-  const pLand = { size: { width: 16838, height: 11906 }, margin: { top: 560, right: 560, bottom: 560, left: 560 } };
-  const pPort = { size: { width: 11906, height: 16838 }, margin: { top: 560, right: 720, bottom: 560, left: 720 } };
+  // ── Dimensioni pagina ────────────────────────────────────────
+  const W_P  = 9638;   // Portrait content width  (A4: 11906 - 1134*2)
+  const W_L  = 15718;  // Landscape content width (A4: 16838 - 560*2)
+  const pPort  = { size: { width: 11906, height: 16838 }, margin: { top: 720, right: 720, bottom: 720, left: 720 } };
+  const pLand  = { size: { width: 16838, height: 11906 }, margin: { top: 560, right: 560, bottom: 560, left: 560 } };
 
-  // ── Helper bordi ──────────────────────────────────────────
-  const B  = (c='CCCCCC') => ({ style: BorderStyle.SINGLE, size: 1, color: c });
-  const BS = (c='CCCCCC') => ({ top:B(c), bottom:B(c), left:B(c), right:B(c) });
+  // ── Colori ───────────────────────────────────────────────────
+  const V     = '1D6F42';  // verde OVER
+  const VL    = 'E8F5EE';  // verde chiarissimo (righe alternate)
+  const VM    = 'C8E6D0';  // verde medio (bordi header)
+  const GR    = 'F4F4F4';  // grigio chiarissimo (note footer)
+  const W_    = 'FFFFFF';
+  const NR    = '1A1A1A';
+  const GS    = '666666';
 
-  // ── Helper cella ──────────────────────────────────────────
+  // ── Primitivi ────────────────────────────────────────────────
+  const BS  = (c = 'CCCCCC') => ({ style: BorderStyle.SINGLE, size: 1, color: c });
+  const BDS = (c = 'CCCCCC') => ({ top: BS(c), bottom: BS(c), left: BS(c), right: BS(c) });
+
   function cell(text, w, opts = {}) {
-    const { bold=false, size=18, color=NERO, fill='FFFFFF', align=AlignmentType.LEFT, colspan=1, italic=false, bc='CCCCCC', vspan=1 } = opts;
+    const {
+      bold = false, size = 18, color = NR, fill = W_,
+      align = AlignmentType.LEFT, colspan = 1, italic = false, bc = 'CCCCCC',
+      rowspan = 1, before = 60, after = 60,
+    } = opts;
     return new TableCell({
-      columnSpan: colspan,
-      rowSpan:    vspan,
-      width:      { size: w, type: WidthType.DXA },
-      borders:    BS(bc),
-      shading:    { fill, type: ShadingType.CLEAR },
-      margins:    { top: 60, bottom: 60, left: 100, right: 100 },
+      columnSpan: colspan, rowSpan: rowspan,
+      width: { size: w, type: WidthType.DXA },
+      borders: BDS(bc),
+      shading: { fill, type: ShadingType.CLEAR },
+      margins: { top: before, bottom: after, left: 100, right: 100 },
       verticalAlign: VerticalAlign.CENTER,
       children: [new Paragraph({
         alignment: align,
-        children:  [new TextRun({ text: String(text||''), bold, size, color, font:'Arial', italic })],
+        children: [new TextRun({ text: String(text || ''), bold, size, color, font: 'Arial', italic })],
       })],
     });
   }
 
-  const hC = (t,w,cs=1) => cell(t,w,{bold:true,size:17,color:'FFFFFF',fill:VERDE,align:AlignmentType.CENTER,colspan:cs,bc:VERDE});
-  const sC = (t,w,cs=1) => cell(t,w,{bold:true,size:16,color:VERDE,fill:VERDE_LIGHT,align:AlignmentType.CENTER,colspan:cs});
-  const eC = (w)         => cell('',w);
-  const sp = ()          => new Paragraph({ children:[new TextRun({text:'',size:16})] });
+  // Header cella verde scuro / testo bianco
+  const hC = (t, w, cs = 1) => cell(t, w, { fill: V, color: W_, bold: true, size: 17, align: AlignmentType.CENTER, bc: V, colspan: cs });
+  // Cella vuota
+  const eC = (w, fill = W_) => cell('', w, { fill, bc: 'DDDDDD' });
+  // Cella verde chiaro (alternata)
+  // Paragrafo semplice
+  const sp = (n = 1) => new Paragraph({ spacing: { after: n * 80 }, children: [new TextRun('')] });
 
-  // ── Intestazione scheda ────────────────────────────────────
-  function intestazione(autoc, titolo, W, landscape=false) {
-    const c1=Math.floor(W*0.28), c2=Math.floor(W*0.44), c3=W-c1-c2;
-    return new Table({
-      width:{size:W,type:WidthType.DXA}, columnWidths:[c1,c2,c3],
-      rows:[
-        new TableRow({children:[
-          cell('GRUPPO OVER',c1,{bold:true,size:20,color:VERDE}),
-          cell(nomestruttura,c2,{bold:true,size:18,align:AlignmentType.CENTER}),
-          cell(autoc,c3,{bold:true,size:20,color:'FFFFFF',fill:VERDE,align:AlignmentType.CENTER,bc:VERDE}),
-        ]}),
-        new TableRow({children:[
-          cell('HACCP – AUTOCONTROLLO',c1,{size:15,color:'555555',italic:true}),
-          cell(titolo,c2,{bold:true,size:22,color:VERDE,align:AlignmentType.CENTER}),
-          cell('Mese: ________  Anno: ____',c3,{size:15,align:AlignmentType.CENTER}),
-        ]}),
+  // ── INTESTAZIONE SCHEDA ──────────────────────────────────────
+  // Header professionale: logo + struttura + codice + titolo + campo mese
+  function intestazione(autoc, titolo, W, landscape = false) {
+    const logoData = (() => {
+      try {
+        const cfg = LOGOS[logoVariante] || LOGOS.A;
+        return { data: cfg.data(), type: cfg.type, w: cfg.w, h: cfg.h };
+      } catch { return null; }
+    })();
+
+    const cLogo = 1400;
+    const cCode = 900;
+    const cMese = 1600;
+    const cTit  = W - cLogo - cCode - cMese;
+
+    // Riga 1: logo | struttura + titolo | codice | mese
+    const riga1 = new TableRow({
+      children: [
+        // Logo
+        new TableCell({
+          width: { size: cLogo, type: WidthType.DXA },
+          borders: BDS(V),
+          shading: { fill: W_, type: ShadingType.CLEAR },
+          margins: { top: 40, bottom: 40, left: 80, right: 80 },
+          verticalAlign: VerticalAlign.CENTER,
+          rowSpan: 1,
+          children: [new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: logoData ? [new ImageRun({
+              data: logoData.data, type: logoData.type,
+              transformation: { width: Math.round(logoData.w * 0.55), height: Math.round(logoData.h * 0.55) },
+            })] : [new TextRun({ text: 'LOGO', font: 'Arial', size: 16, color: GS })],
+          })],
+        }),
+        // Struttura + titolo
+        new TableCell({
+          width: { size: cTit, type: WidthType.DXA },
+          borders: BDS(V),
+          shading: { fill: V, type: ShadingType.CLEAR },
+          margins: { top: 60, bottom: 60, left: 160, right: 120 },
+          verticalAlign: VerticalAlign.CENTER,
+          children: [
+            new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: nomestruttura.toUpperCase(), font: 'Arial', size: 17, bold: true, color: W_ })] }),
+            new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: titolo, font: 'Arial', size: landscape ? 22 : 24, bold: true, color: W_ })] }),
+          ],
+        }),
+        // Codice autoc
+        new TableCell({
+          width: { size: cCode, type: WidthType.DXA },
+          borders: BDS(V),
+          shading: { fill: VL, type: ShadingType.CLEAR },
+          margins: { top: 60, bottom: 60, left: 100, right: 100 },
+          verticalAlign: VerticalAlign.CENTER,
+          children: [
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: autoc.toUpperCase(), font: 'Arial', size: 28, bold: true, color: V })] }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Autocontrollo', font: 'Arial', size: 14, italic: true, color: GS })] }),
+          ],
+        }),
+        // Campo mese/anno
+        new TableCell({
+          width: { size: cMese, type: WidthType.DXA },
+          borders: BDS(V),
+          shading: { fill: W_, type: ShadingType.CLEAR },
+          margins: { top: 60, bottom: 60, left: 100, right: 100 },
+          verticalAlign: VerticalAlign.CENTER,
+          children: [
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Periodo', font: 'Arial', size: 15, italic: true, color: GS })] }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Da _____________ a _____________', font: 'Arial', size: 16, bold: true, color: NR })] }),
+          ],
+        }),
       ],
     });
-  }
-
-  // ── Tabella 31 righe giornaliere ───────────────────────────
-  // Calcola altezza riga per stare in una pagina
-  // Spazio utile landscape ~6000 DXA, portrait ~9000 DXA
-  // intestazione ~900 + legenda ~800 + note ~300 = ~2000
-  // Righe: (spazio - 2000 - header tabella 400) / 31
-  function tabella31(colWidths, W, landscape, extraCols = []) {
-    const spazioUtile  = landscape ? 6200 : 8800;
-    const spazioRighe  = spazioUtile - 2400;
-    const altezzaRiga  = Math.max(Math.floor(spazioRighe / 31), 280);
 
     return new Table({
       width: { size: W, type: WidthType.DXA },
-      columnWidths: colWidths,
-      rows: [
-        ...Array.from({length: 31}, (_, i) => new TableRow({
-          height: { value: altezzaRiga, rule: 'exact' },
-          children: [
-            cell(String(i+1), colWidths[0], {bold:true, align:AlignmentType.CENTER, size:16}),
-            ...colWidths.slice(1).map(w => eC(w)),
-          ],
-        })),
-      ],
+      columnWidths: [cLogo, cTit, cCode, cMese],
+      rows: [riga1],
     });
   }
 
-  // ══════════════════════════════════════════════════════════
-  // SCHEDE
-  // ══════════════════════════════════════════════════════════
-
-  // ── Autoc 1 — Ricevimento merci (Portrait) ────────────────
-  function scheda1() {
-    const W = W_P;
-    const cW = [Math.floor(W*0.54), Math.floor(W*0.115), Math.floor(W*0.115), Math.floor(W*0.115), W-Math.floor(W*0.54)-Math.floor(W*0.115)*3];
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 1','CONTROLLO RICEVIMENTO MERCI', W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Fornitore: ________________________________   N° Doc/Fattura: ___________________', bold:true, size:18, font:'Arial'})]}),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:[600,W-600],
-          rows:[
-            new TableRow({children:[hC('N°',600),hC('CRITERI DI VERIFICA',W-600)]}),
-            ...['Integrità confezioni e stato della merce','Leggibilità etichette e date di scadenza','Temperature di trasporto (rialzo tollerato +3°C)','Condizioni igieniche del mezzo di trasporto']
-              .map((t,i)=>new TableRow({children:[cell(String(i+1),600,{bold:true,align:AlignmentType.CENTER}),cell(t,W-600,{bold:true,size:17})]})),
-          ],
+  // ── NOTE FOOTER ──────────────────────────────────────────────
+  function noteFooter(testo, W) {
+    return new Table({
+      width: { size: W, type: WidthType.DXA },
+      columnWidths: [W],
+      rows: [new TableRow({ children: [
+        new TableCell({
+          width: { size: W, type: WidthType.DXA },
+          borders: { top: BS(VM), bottom: BS(VM), left: BS(VM), right: BS(VM) },
+          shading: { fill: GR, type: ShadingType.CLEAR },
+          margins: { top: 60, bottom: 60, left: 120, right: 120 },
+          children: [new Paragraph({
+            children: [new TextRun({ text: '📋 ' + testo, font: 'Arial', size: 14, italic: true, color: GS })],
+          })],
         }),
-        sp(),
-        new Table({ width:{size:W,type:WidthType.DXA}, columnWidths:[W], rows:[new TableRow({children:[cell('TUTTI I CONTROLLI CONFORMI?     ☐ SÌ     ☐ NO  (se NO: respingere la merce e compilare tabella sotto)',W,{bold:true,size:17,fill:'E8F5EE',align:AlignmentType.CENTER})]})] }),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:cW,
-          rows:[
-            new TableRow({children:[hC('PRODOTTO NON CONFORME',cW[0]),hC('NC 1',cW[1]),hC('NC 2',cW[2]),hC('NC 3',cW[3]),hC('NC 4',cW[4])]}),
-            ...Array.from({length:8},()=>new TableRow({height:{value:420,rule:'exact'},children:cW.map(w=>eC(w))})),
-          ],
-        }),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'DATA: ___________________   RILEVATORE: ___________________', bold:true, size:18, font:'Arial'})]}),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Riportare NC nel Registro Generale Non Conformità (Autoc 6).', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
+      ] })],
+    });
   }
 
-  // ── Autoc 2A cucina — Temperature frigoriferi (Landscape) ─
-  function scheda2ACucina() {
-    const W = W_L;
-    const nF = Math.max(frigoCucina.length, 1);
-    const cFixed = 700+700+1400+1600;
-    const tW = Math.max(Math.floor((W-cFixed)/nF), 500);
-    const tCols = Array.from({length:nF},(_,i)=> i===nF-1 ? W-cFixed-tW*(nF-1) : tW);
-    const colWidths = [700,700,...tCols,1400,1600];
-    const noteApp = frigoCucina.length
-      ? frigoCucina.map((r,i)=>`${i+1} = ${r}`).join(' | ')
-      : '1 = Frigorifero cucina';
-
-    // Riga 2: etichette apparecchi + unica cella firma per "incaricato al controllo"
-    const riga2Children = [
-      sC('',700), sC('',700),
-      ...tCols.map((w,i) => sC(String(i+1)+'\n'+frigoCucina[i]?.split(/[–-]/)[0]?.trim() || String(i+1), w)),
-      sC('',1400),
-      cell('Negli spazi a lato riportare la firma di chi ha effettuato il controllo', 1600, {size:14,italic:true,color:'555555'}),
-    ];
-
-    return {
-      properties: { page: pLand },
-      children: [
-        intestazione('Autoc 2A','TEMPERATURE APPARECCHIATURE FRIGORIFERE CUCINA', W, true),
-        sp(),
-        new Paragraph({children:[new TextRun({text:`LOCALE: Cucina — Codice apparecchiatura: ${noteApp}`, bold:true, size:19, color:VERDE, font:'Arial'})]}),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:colWidths,
-          rows:[
-            new TableRow({children:[hC('Data',700),hC('Ore',700),hC('Temperature rilevate (°C)',tW*nF,nF),hC('Guasto / Disattivato',1400),hC('Incaricato al controllo',1600)]}),
-            new TableRow({children:riga2Children}),
-            ...tabella31(colWidths, W, true).rows,
-          ],
-        }),
-        sp(),
-        legenda(W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Riportare eventuali non conformità nel Registro Generale di Non Conformità (Autoc 6) indicando l\'azione correttiva attuata.', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
+  // ── RIGA DATA / RILEVATORE / FIRMA ───────────────────────────
+  function rigaFirma(W) {
+    const c = Math.floor(W / 3);
+    return new Table({
+      width: { size: W, type: WidthType.DXA },
+      columnWidths: [c, c, W - c * 2],
+      rows: [new TableRow({ children: [
+        cell('Data: ___________________', c, { bold: true, size: 16, fill: VL, bc: VM }),
+        cell('Rilevatore: ____________________________', c, { bold: true, size: 16, fill: VL, bc: VM }),
+        cell('Firma: ____________________________', W - c * 2, { bold: true, size: 16, fill: VL, bc: VM }),
+      ] })],
+    });
   }
 
-  // ── Autoc 2A reparto — una scheda per FR/FD (Portrait) ────
-  function schede2AReparto() {
-    return frigoReparti.map(r => {
-      const W = W_P;
-      const colWidths = [700, 700, W-700-700-1400-1700, 1400, 1700];
-      return {
-        properties: { page: pPort },
+  // ── RIGHE MENSILI (31 righe con alternanza colore) ───────────
+  function righeGiornaliere(colWidths, W, landscape) {
+    const spazio    = landscape ? 5800 : 8000;
+    const altezza   = Math.max(Math.floor((spazio - 2000) / 31), 270);
+    return Array.from({ length: 31 }, (_, i) => {
+      const fill = i % 2 === 0 ? W_ : VL;
+      return new TableRow({
+        height: { value: altezza, rule: 'exact' },
         children: [
-          intestazione('Autoc 2A', `TEMPERATURA — ${codice(r)}: ${desc(r)}`, W),
-          sp(),
-          new Paragraph({children:[new TextRun({text:`LOCALE/REPARTO: ${desc(r)}`, bold:true, size:20, color:VERDE, font:'Arial'})]}),
-          sp(),
-          new Table({
-            width:{size:W,type:WidthType.DXA}, columnWidths:colWidths,
-            rows:[
-              new TableRow({children:[hC('Data',700),hC('Ore',700),hC('Temperatura rilevata (°C)',colWidths[2]),hC('Guasto / Disattivato',1400),hC('Incaricato al controllo',1700)]}),
-              new TableRow({children:[sC('',700),sC('',700),sC('',colWidths[2]),sC('',1400),cell('Negli spazi a lato riportare la firma di chi ha effettuato il controllo',1700,{size:14,italic:true,color:'555555'})]}),
-              ...tabella31(colWidths, W, false).rows,
+          cell(String(i + 1), colWidths[0], { bold: true, align: AlignmentType.CENTER, size: 16, fill, bc: 'DDDDDD' }),
+          ...colWidths.slice(1).map(w => eC(w, fill)),
+        ],
+      });
+    });
+  }
+
+  // ── COPERTINA MODULISTICA ────────────────────────────────────
+  function copertina() {
+    const W = W_P;
+    const logoData = (() => {
+      try { const cfg = LOGOS[logoVariante] || LOGOS.A; return { data: cfg.data(), type: cfg.type, w: cfg.w, h: cfg.h }; }
+      catch { return null; }
+    })();
+
+    const children = [
+      // Banda verde top
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [W],
+        rows: [new TableRow({ height: { value: 400, rule: 'exact' }, children: [
+          new TableCell({ width: { size: W, type: WidthType.DXA }, borders: BDS(V), shading: { fill: V, type: ShadingType.CLEAR }, children: [new Paragraph({ children: [] })] }),
+        ]})]
+      }),
+      sp(2),
+      // Logo
+      ...(logoData ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new ImageRun({ data: logoData.data, type: logoData.type, transformation: { width: logoData.w, height: logoData.h } })] })] : []),
+      sp(1),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [new TextRun({ text: nomestruttura.toUpperCase(), font: 'Arial', size: 28, bold: true, color: V })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 }, children: [new TextRun({ text: 'SISTEMA DI AUTOCONTROLLO ALIMENTARE', font: 'Arial', size: 36, bold: true, color: NR })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [new TextRun({ text: 'Reg. CE 852/2004 — D.Lgs 27/2021', font: 'Arial', size: 20, italic: true, color: GS })] }),
+      sp(2),
+      // Linea verde
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [W],
+        rows: [new TableRow({ height: { value: 120, rule: 'exact' }, children: [
+          new TableCell({ width: { size: W, type: WidthType.DXA }, borders: BDS(V), shading: { fill: V, type: ShadingType.CLEAR }, children: [new Paragraph({ children: [] })] }),
+        ]})]
+      }),
+      sp(1),
+      // Box titolo modulistica
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [W],
+        rows: [new TableRow({ children: [
+          new TableCell({
+            width: { size: W, type: WidthType.DXA }, borders: BDS(V),
+            shading: { fill: VL, type: ShadingType.CLEAR },
+            margins: { top: 200, bottom: 200, left: 300, right: 300 },
+            children: [
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'MODULISTICA DI AUTOCONTROLLO', font: 'Arial', size: 40, bold: true, color: V })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 80 }, children: [new TextRun({ text: 'Schede di monitoraggio e registrazione', font: 'Arial', size: 22, italic: true, color: GS })] }),
             ],
           }),
-          sp(),
-          legenda(W),
-          sp(),
-          new Paragraph({children:[new TextRun({text:'Riportare eventuali non conformità nel Registro Generale di Non Conformità (Autoc 6).', size:15, italic:true, color:'555555', font:'Arial'})]}),
-        ],
-      };
-    });
+        ]})]
+      }),
+      sp(3),
+      // Elenco schede
+      ...(() => {
+        const schede = [
+          ['Autoc 1',  'Controllo ricevimento merci'],
+          ...(frigoCucina.length > 0  ? [['Autoc 2A', 'Temperature frigoriferi cucina']] : []),
+          ...(frigoReparti.length > 0 ? [['Autoc 2A', 'Temperature frigoriferi reparti (una per apparecchio)']] : []),
+          ...(congelatori.length > 0  ? [['Autoc 2B', 'Temperature congelatori']] : []),
+          ...(congelatoriR.length > 0 ? [['Autoc 2B', 'Temperature congelatori reparti']] : []),
+          ...(isCucinaInterna || isAppalto ? [['Autoc 2C', 'Monitoraggio igiene cucina e lavaggio']] : []),
+          ['Autoc 2D', 'Monitoraggio igiene sala da pranzo / refettori'],
+          ['Autoc 2E', 'Monitoraggio igiene servizi igienici / spogliatoi'],
+          ...(isCucinaInterna || isAppalto ? [['Autoc 2F', 'Monitoraggio igiene personale di cucina']] : []),
+          ...(isCucinaInterna ? [['Autoc 3A', 'Temperature di cottura (CCP)']] : []),
+          ...(isCucinaInterna ? [['Autoc 3B', 'Conservazione a caldo']] : []),
+          ...(isCucinaInterna ? [['Autoc 3C', 'Raffreddamento e abbattimento']] : []),
+          ...(op_cena_abbattuta || isAppalto ? [['Autoc 3D', 'Riattivazione pasti abbattuti (CCP2)']] : []),
+          ...(isVeicolata || isAppalto ? [['Autoc 8',  'Controlli ricevimento pasti veicolati (CCP1)']] : []),
+          ...(op_disfagici ? [['Autoc 8D', 'Registro distribuzione pasti disfagici']] : []),
+          ...(op_monouso_infetti ? [['Autoc 9',  'Registro isolamento infettivo']] : []),
+          ...(op_distributore_acqua ? [['Autoc 5A', 'Manutenzione distributore acqua potabile']] : []),
+          ...(op_macchinetta_caffe ? [['Autoc 5B', 'Manutenzione macchinetta bevande calde']] : []),
+          ['Autoc 4',  'Comunicazione variazioni menù'],
+          ['Autoc 7',  'Elenco fornitori qualificati'],
+          ['Autoc 6',  'Registro generale non conformità'],
+        ];
+        const c0 = Math.round(W * 0.18);
+        const c1 = W - c0;
+        return [
+          new Table({
+            width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1],
+            rows: [
+              new TableRow({ children: [hC('Codice', c0), hC('Descrizione scheda', c1)] }),
+              ...schede.map(([cod, desc], i) => new TableRow({ children: [
+                cell(cod, c0, { fill: i % 2 === 0 ? VL : W_, bold: true, color: V, bc: 'DDDDDD' }),
+                cell(desc, c1, { fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
+              ]})),
+            ],
+          }),
+        ];
+      })(),
+      sp(2),
+      new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Anno: ____________________', font: 'Arial', size: 20, bold: true, color: V })] }),
+    ];
+    return { properties: { page: pPort }, children };
   }
 
-  // ── Autoc 2B — Temperature congelatori (Landscape) ────────
-  function scheda2B() {
-    const W = W_L;
-    const nC = Math.max(congelatori.length, 1);
-    const cFixed = 700+700+1400+1600;
-    const tW = Math.max(Math.floor((W-cFixed)/nC), 500);
-    const tCols = Array.from({length:nC},(_,i)=> i===nC-1 ? W-cFixed-tW*(nC-1) : tW);
-    const colWidths = [700,700,...tCols,1400,1600];
-    const noteApp = congelatori.length
-      ? congelatori.map((r,i)=>`${i+1} = ${r}`).join(' | ')
-      : '1 = Congelatore cucina';
-    return {
-      properties: { page: pLand },
-      children: [
-        intestazione('Autoc 2B','TEMPERATURE CONGELATORI / SURGELATORI CUCINA', W, true),
-        sp(),
-        new Paragraph({children:[new TextRun({text:`LOCALE: Cucina — Codice apparecchiatura: ${noteApp}`, bold:true, size:19, color:VERDE, font:'Arial'})]}),
-        sp(),
+  // ═══════════════════════════════════════════════════════════════
+  // SCHEDE
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── Autoc 1 — Ricevimento merci ───────────────────────────────
+  function autoc1() {
+    const W = W_P;
+    const c0 = 500; const c1 = Math.floor(W * 0.42); const c2 = Math.floor(W * 0.12);
+    const c3 = Math.floor(W * 0.12); const c4 = W - c0 - c1 - c2 - c3;
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 1', 'CONTROLLO RICEVIMENTO MERCI', W),
+      sp(),
+      new Paragraph({ children: [new TextRun({ text: 'Fornitore: _______________________________________   N° DDT/Fattura: ______________________', font: 'Arial', size: 17, bold: true })] }),
+      sp(),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4],
+        rows: [
+          new TableRow({ children: [hC('N°', c0), hC('Prodotto / Partita', c1), hC('T° (°C)', c2), hC('Scad.', c3), hC('Esito ✓/✗', c4)] }),
+          ...Array.from({ length: 18 }, (_, i) => new TableRow({
+            height: { value: 380, rule: 'exact' },
+            children: [
+              cell(String(i + 1), c0, { bold: true, align: AlignmentType.CENTER, size: 16, fill: i % 2 === 0 ? W_ : VL, bc: 'DDDDDD' }),
+              eC(c1, i % 2 === 0 ? W_ : VL),
+              eC(c2, i % 2 === 0 ? W_ : VL),
+              eC(c3, i % 2 === 0 ? W_ : VL),
+              eC(c4, i % 2 === 0 ? W_ : VL),
+            ],
+          })),
+        ],
+      }),
+      sp(),
+      // Box NC
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [W],
+        rows: [new TableRow({ children: [cell('TUTTI I CONTROLLI CONFORMI?     ☐ SÌ     ☐ NO  →  se NO compilare sotto e aprire Autoc 6', W, { bold: true, size: 17, fill: VL, align: AlignmentType.CENTER, bc: VM })] })],
+      }),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [Math.floor(W * 0.5), Math.floor(W * 0.5)],
+        rows: [
+          new TableRow({ children: [hC('Prodotto non conforme', Math.floor(W * 0.5)), hC('Azione correttiva', Math.floor(W * 0.5))] }),
+          ...Array.from({ length: 3 }, (_, i) => new TableRow({ height: { value: 420, rule: 'exact' }, children: [eC(Math.floor(W * 0.5), i % 2 === 0 ? W_ : VL), eC(Math.floor(W * 0.5), i % 2 === 0 ? W_ : VL)] })),
+        ],
+      }),
+      sp(),
+      rigaFirma(W),
+      sp(0.5),
+      noteFooter('Riportare le non conformità nel Registro Generale NC (Autoc 6). T° limite: carne +7°C, pesce +2°C, surgelati -15°C.', W),
+    ]};
+  }
+
+  // ── Autoc 2A cucina — Frigoriferi cucina (Landscape) ──────────
+  function autoc2ACucina() {
+    const W   = W_L;
+    const nF  = Math.max(frigoCucina.length, 1);
+    const cFix = 700 + 700 + 1500 + 1600;
+    const tW  = Math.max(Math.floor((W - cFix) / nF), 500);
+    const tCols = Array.from({ length: nF }, (_, i) => i === nF - 1 ? W - cFix - tW * (nF - 1) : tW);
+    const colWidths = [700, 700, ...tCols, 1500, 1600];
+    const noteApp = frigoCucina.length ? frigoCucina.map((r, i) => `${i + 1} = ${getCodice(r)} (${getDesc(r)})`).join(' | ') : '1 = Frigorifero cucina';
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 2A', 'TEMPERATURE FRIGORIFERI CUCINA', W, true),
+      sp(0.5),
+      new Paragraph({ children: [new TextRun({ text: `Apparecchiature: ${noteApp}`, font: 'Arial', size: 17, bold: true, color: V })] }),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
+        rows: [
+          new TableRow({ children: [hC('Giorno', 700), hC('Ora', 700), hC('Temperatura (°C)', tW * nF, nF), hC('Anomalia / Guasto', 1500), hC('Firma', 1600)] }),
+          new TableRow({ children: [eC(700), eC(700), ...tCols.map((w, i) => cell(frigoCucina[i] ? getCodice(frigoCucina[i]) : String(i + 1), w, { bold: true, align: AlignmentType.CENTER, size: 16, fill: VL, bc: 'DDDDDD' })), eC(1500), cell('Apporre firma →', 1600, { size: 14, italic: true, color: GS })] }),
+          ...righeGiornaliere(colWidths, W, true),
+        ],
+      }),
+      sp(),
+      noteFooter('Limite: ≤ +4°C. Se T° > 4°C: spostare gli alimenti, segnalare anomalia, aprire Autoc 6. Taratura termometro: annuale.', W),
+    ]};
+  }
+
+  // ── Autoc 2A reparto — un frigo per scheda (Portrait) ─────────
+  function autoc2AReparti() {
+    return frigoReparti.map(r => {
+      const W = W_P;
+      const cod = getCodice(r); const dsc = getDesc(r);
+      const colWidths = [700, 700, W - 700 - 700 - 1500 - 1700, 1500, 1700];
+      return { properties: { page: pPort }, children: [
+        intestazione('Autoc 2A', `TEMPERATURA — ${cod}: ${dsc}`, W),
+        sp(0.5),
         new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:colWidths,
-          rows:[
-            new TableRow({children:[hC('Data',700),hC('Ore',700),hC('Temperature rilevate (°C)',tW*nC,nC),hC('Guasto / Disattivato',1400),hC('Incaricato al controllo',1600)]}),
-            new TableRow({children:[sC('',700),sC('',700),...tCols.map((w,i)=>sC(String(i+1),w)),sC('',1400),cell('Negli spazi a lato riportare la firma di chi ha effettuato il controllo',1600,{size:14,italic:true,color:'555555'})]}),
-            ...tabella31(colWidths, W, true).rows,
+          width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
+          rows: [
+            new TableRow({ children: [hC('Giorno', 700), hC('Ora', 700), hC(`T° ${cod} (°C)`, colWidths[2]), hC('Anomalia / Guasto', 1500), hC('Firma', 1700)] }),
+            new TableRow({ children: [eC(700), eC(700), cell('Limite ≤ 4°C', colWidths[2], { size: 15, italic: true, color: GS, fill: VL }), eC(1500), cell('Apporre firma →', 1700, { size: 14, italic: true, color: GS })] }),
+            ...righeGiornaliere(colWidths, W, false),
           ],
         }),
         sp(),
-        legenda(W, true),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Riportare eventuali non conformità nel Registro Generale di Non Conformità (Autoc 6).', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Helper scheda pre-operativo con voci ──────────────────
-  // Formato Ossago: colonne 1→31, una firma per riga "Negli spazi a lato..."
-  function schedaPreOperativo(autoc, titolo, VOCI, W, landscape = false) {
-    // 31 colonne giornaliere + 1 colonna voce
-    const cVoce = landscape ? 3200 : 2800;
-    const resto = W - cVoce;
-    const cGiorno = Math.floor(resto / 31);
-    const cUltimo = W - cVoce - cGiorno * 30;
-    const colWidths = [cVoce, ...Array.from({length:30}, ()=>cGiorno), cUltimo];
-
-
-    const altRiga = landscape
-      ? Math.max(Math.floor((5800 - 900) / (VOCI.length + 2)), 300)
-      : Math.max(Math.floor((8600 - 900) / (VOCI.length + 2)), 320);
-
-    return new Table({
-      width:{size:W,type:WidthType.DXA}, columnWidths: colWidths,
-      rows:[
-        // Header giorni
-        new TableRow({children:[
-          hC('',cVoce),
-          ...Array.from({length:30},(_,i)=>hC(String(i+1),cGiorno)),
-          hC('31',cUltimo),
-        ]}),
-        // Riga firma
-        new TableRow({height:{value:altRiga*1.4|0,rule:'exact'}, children:[
-          cell('Negli spazi a lato deve essere riportata la firma di chi ha effettuato il monitoraggio pre-operativo', cVoce, {size:14,italic:true,color:'555555'}),
-          ...Array.from({length:30},()=>eC(cGiorno)),
-          eC(cUltimo),
-        ]}),
-        // Voci
-        ...VOCI.map(v => new TableRow({height:{value:altRiga,rule:'exact'}, children:[
-          cell(v, cVoce, {size:15}),
-          ...Array.from({length:30},()=>eC(cGiorno)),
-          eC(cUltimo),
-        ]})),
-      ],
+        noteFooter(`${cod} — ${dsc}. Limite: ≤ +4°C. Disfagici (FD): verificare separazione pasti etichettati. NC → Autoc 6.`, W),
+      ]};
     });
   }
 
-  // ── Autoc 2C — Monitoraggio igiene cucina/lavaggio ────────
-  function scheda2C() {
-    const W = W_P;
-    const VOCI = [
+  // ── Autoc 2B — Congelatori cucina (Landscape) ─────────────────
+  function autoc2B() {
+    if (congelatori.length === 0 && congelatoriR.length === 0) return null;
+    const all = [...congelatori, ...congelatoriR];
+    const W   = W_L;
+    const nC  = Math.max(all.length, 1);
+    const cFix = 700 + 700 + 1500 + 1600;
+    const tW  = Math.max(Math.floor((W - cFix) / nC), 500);
+    const tCols = Array.from({ length: nC }, (_, i) => i === nC - 1 ? W - cFix - tW * (nC - 1) : tW);
+    const colWidths = [700, 700, ...tCols, 1500, 1600];
+    const noteApp = all.length ? all.map((r, i) => `${i + 1} = ${getCodice(r)} (${getDesc(r)})`).join(' | ') : '1 = Congelatore';
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 2B', 'TEMPERATURE CONGELATORI / SURGELATORI', W, true),
+      sp(0.5),
+      new Paragraph({ children: [new TextRun({ text: `Apparecchiature: ${noteApp}`, font: 'Arial', size: 17, bold: true, color: V })] }),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
+        rows: [
+          new TableRow({ children: [hC('Giorno', 700), hC('Ora', 700), hC('Temperatura (°C)', tW * nC, nC), hC('Anomalia / Guasto', 1500), hC('Firma', 1600)] }),
+          new TableRow({ children: [eC(700), eC(700), ...tCols.map((w, i) => cell(all[i] ? getCodice(all[i]) : String(i + 1), w, { bold: true, align: AlignmentType.CENTER, size: 16, fill: VL, bc: 'DDDDDD' })), eC(1500), cell('Apporre firma →', 1600, { size: 14, italic: true, color: GS })] }),
+          ...righeGiornaliere(colWidths, W, true),
+        ],
+      }),
+      sp(),
+      noteFooter('Limite: ≤ -18°C. Se T° > -15°C: valutare spostamento merce, segnalare anomalia, aprire Autoc 6.', W),
+    ]};
+  }
+
+  // ── Autoc 2C — Cucina e lavaggio (Landscape, 31 giorni) ────────
+  function autoc2C() {
+    const W = W_L;
+    const c0 = 2800;
+    const cG = Math.floor((W - c0) / 31);
+    const c31 = W - c0 - cG * 30;
+    const colWidths = [c0, ...Array.from({ length: 31 }, (_, i) => i === 30 ? c31 : cG)];
+
+    const voci = [
       'Pavimenti e pareti lavabili idonei',
-      'Porte e maniglie idonei',
-      'Esterno arredi e apparecchiature idonei (es. frigoriferi, forno, ecc...)',
-      'Interni apparecchiature (es. frigorifero, forno, ecc...) e arredi idonei',
+      'Porte e maniglie idonee',
+      'Esterno arredi e apparecchiature idoneo (frigo, forno…)',
+      'Interni apparecchiature e arredi idonei',
       'Lavastoviglie idonea',
       'Posateria, pentolame e stoviglie idonei',
       'Lavelli e piani di lavoro idonei',
@@ -1538,610 +1705,547 @@ export async function generaModulisticaHaccp({
       'Carrelli acciaio idonei',
       'Portarifiuti idoneo',
       'Vetri e plafoniere idonei',
-      'Soffitti e coperture varie idonei',
       'Corretta separazione alimenti stoccati',
       'Assenza materiale non inerente nei locali',
       'Presenza termometro sonda funzionante',
-      'Assenza confezioni alterate',
-      'Assenza prodotti scaduti',
-      'Assenza visiva di tracce di animali e/o insetti indesiderati',
-    ];
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 2C','MONITORAGGIO (PRE-OPERATIVO) AREA: CUCINA, LAVAGGIO, DISPENSA', W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'MESE: _______________   ANNO: ___________', bold:true, size:18, font:'Arial'})]}),
-        sp(),
-        schedaPreOperativo('2C','',VOCI,W,false),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Riportare eventuali non conformità nel Registro Generale di Non Conformità (Autoc 6) indicando l\'azione correttiva attuata.', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Autoc 2D — Monitoraggio sala da pranzo / refettori ────
-  function scheda2D() {
-    const W = W_P;
-    const VOCI = [
-      'Pavimenti e pareti lavabili idonei',
-      'Scaffalature, mensole, tavoli, sedie, maniglie e porte idonei',
-      'Esterni e interni arredi idonei',
-      'Carrelli distribuzione idonei',
-      'Posateria, bicchieri e stoviglie idonei',
-      'Tovaglie / tovagliette monouso disponibili',
-      'Vetri e plafoniere idonei',
-      'Soffitti e coperture varie idonei',
-      'Assenza materiale non inerente nei locali',
-      'Assenza visiva di tracce di animali e/o insetti indesiderati',
-    ];
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 2D','MONITORAGGIO (PRE-OPERATIVO) AREA: SALA DA PRANZO / REFETTORI', W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'MESE: _______________   ANNO: ___________', bold:true, size:18, font:'Arial'})]}),
-        sp(),
-        schedaPreOperativo('2D','',VOCI,W,false),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Riportare eventuali non conformità nel Registro Generale di Non Conformità (Autoc 6).', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Autoc 2E — Servizi igienici / spogliatoio (Portrait) ──
-  function scheda2E() {
-    const W = W_P;
-    const VOCI = [
-      'Pavimenti e pareti lavabili idonei',
-      'Interno/esterno armadietti, porte e maniglie idonei',
-      'Sanitari e accessori idonei',
-      'Lavandini e rubinetteria idonei',
-      'Distributori sapone e carta idonei',
-      'Docce (se presenti) idonee',
-      'Vetri e plafoniere idonei',
-      'Soffitti e coperture varie idonei',
-      'Assenza materiale non inerente nei locali',
-      'Assenza visiva di tracce di animali e/o insetti indesiderati',
-    ];
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 2E','MONITORAGGIO (PRE-OPERATIVO) AREA: SERVIZI IGIENICI / SPOGLIATOI', W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'MESE: _______________   ANNO: ___________', bold:true, size:18, font:'Arial'})]}),
-        sp(),
-        schedaPreOperativo('2E','',VOCI,W,false),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Riportare eventuali non conformità nel Registro Generale di Non Conformità (Autoc 6).', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Autoc 2F — Igiene personale cucina (formato Quinzano) ─
-  function scheda2F() {
-    const W = W_P;
-    // Colonne: voce (label) | P/C | 1→31
-    const cVoce  = 2400;
-    const cPC    = 500;
-    const resto  = W - cVoce - cPC;
-    const cGiorno = Math.floor(resto / 31);
-    const cUltimo = W - cVoce - cPC - cGiorno * 30;
-    const colWidths = [cVoce, cPC, ...Array.from({length:30},()=>cGiorno), cUltimo];
-
-    const rigaGiorni = [
-      hC('',cVoce), hC('',cPC),
-      ...Array.from({length:30},(_,i)=>hC(String(i+1),cGiorno)),
-      hC('31',cUltimo),
+      'Assenza confezioni alterate o prodotti scaduti',
+      'Assenza visiva tracce animali/insetti',
     ];
 
-    // Riga firma unica
-    const rigaFirma = new TableRow({ height:{value:700,rule:'exact'}, children:[
-      cell('Negli spazi a lato deve essere riportata la firma di chi ha effettuato il monitoraggio pre-operativo', cVoce, {size:14,italic:true,color:'555555'}),
-      sC('',cPC),
-      ...Array.from({length:30},()=>eC(cGiorno)),
-      eC(cUltimo),
-    ]});
-
-    // Voce con due righe P e C
-    function rigaPC(label) {
-      return [
-        new TableRow({ height:{value:480,rule:'exact'}, children:[
-          cell(label, cVoce, {size:15}),
-          sC('P', cPC),
-          ...Array.from({length:30},()=>eC(cGiorno)),
-          eC(cUltimo),
-        ]}),
-        new TableRow({ height:{value:480,rule:'exact'}, children:[
-          eC(cVoce),
-          sC('C', cPC),
-          ...Array.from({length:30},()=>eC(cGiorno)),
-          eC(cUltimo),
-        ]}),
-      ];
+    function headerGiorni() {
+      return new TableRow({ children: [
+        hC('Voce di controllo', c0),
+        ...Array.from({ length: 31 }, (_, i) => hC(String(i + 1), i === 30 ? c31 : cG)),
+      ]});
     }
-
-    // Voce senza P/C (riga singola)
-    function rigaSingola(label) {
-      return new TableRow({ height:{value:500,rule:'exact'}, children:[
-        cell(label, cVoce, {size:15}),
-        sC('',cPC),
-        ...Array.from({length:30},()=>eC(cGiorno)),
-        eC(cUltimo),
+    function rigaFirmaGiorni() {
+      return new TableRow({ height: { value: 560, rule: 'exact' }, children: [
+        cell('Firma giornaliera (la firma conferma tutti i controlli conformi)', c0, { bold: true, size: 15, fill: VL, bc: VM }),
+        ...Array.from({ length: 31 }, (_, i) => eC(i === 30 ? c31 : cG, VL)),
+      ]});
+    }
+    function rigaVoce(v, i) {
+      return new TableRow({ height: { value: 360, rule: 'exact' }, children: [
+        cell(v, c0, { size: 15, fill: i % 2 === 0 ? W_ : VL, bc: 'DDDDDD' }),
+        ...Array.from({ length: 31 }, (_, j) => eC(j === 30 ? c31 : cG, i % 2 === 0 ? W_ : VL)),
       ]});
     }
 
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 2F','MONITORAGGIO (PRE-OPERATIVO): IGIENE PERSONALE DI CUCINA E ALLO SPORZIONAMENTO', W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'MESE: _______________   ANNO: ___________', bold:true, size:18, font:'Arial'})]}),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:colWidths,
-          rows:[
-            new TableRow({children: rigaGiorni}),
-            rigaFirma,
-            new TableRow({ children:[eC(cVoce),eC(cPC),...Array.from({length:30},()=>eC(cGiorno)),eC(cUltimo)] }),
-            ...rigaPC('Davantino indossato'),
-            ...rigaPC('Raccoglitore capelli indossato'),
-            ...rigaPC('Assenza anelli, orologi e bracciali'),
-            ...rigaPC('Assenza di ferite scoperte'),
-            rigaSingola('Carta a perdere disponibile in cucina e servizi'),
-            rigaSingola('Sapone liquido disponibile in cucina e servizi'),
-            rigaSingola('Disponibilità guanti e mascherine'),
-            new TableRow({ children:[
-              cell('La sigla nella prima riga indica la verifica dei controlli qui riportati. Indicare con X eventuali anomalie da inserire nelle non conformità.', W, {size:13,italic:true,color:'555555',colspan:colWidths.length}),
-            ]}),
-          ],
-        }),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Legenda: P = Pranzo   C = Cena', bold:true, size:17, font:'Arial'})]}),
-        new Paragraph({children:[new TextRun({text:'In caso di sintomi influenzali/gastrointestinali comunicare immediatamente al Responsabile HACCP. Riportare NC nel Registro Generale (Autoc 6).', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Autoc 3A — Temperature cottura (Landscape) ────────────
-  function scheda3A() {
-    const W = W_L;
-    const cW = [700, 1800, 2200, 1400, 1400, 1400, W-700-1800-2200-1400-1400-1400];
-    return {
-      properties: { page: pLand },
-      children: [
-        intestazione('Autoc 3A','MONITORAGGIO TEMPERATURE — COTTURA', W, true),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:cW,
-          rows:[
-            new TableRow({children:[hC('Data',700),hC('Tipo di preparazione',1800),hC('Prodotto',2200),hC('T° raggiunta al cuore (min. 75°C)',1400),hC('Ora fine cottura',1400),hC('Azione correttiva',1400),hC('Firma',cW[6])]}),
-            ...Array.from({length:20},()=>new TableRow({height:{value:440,rule:'exact'},children:cW.map(w=>eC(w))})),
-          ],
-        }),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Temperatura minima al cuore: ≥ 75°C. Per pollame e macinati: ≥ 85°C. Riportare NC nel Registro Generale.', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Autoc 3B — Conservazione a caldo (Landscape) ──────────
-  function scheda3B() {
-    const W = W_L;
-    const cW = [700, 2400, 1600, 1600, 1600, 1600, W-700-2400-1600*4];
-    return {
-      properties: { page: pLand },
-      children: [
-        intestazione('Autoc 3B','MONITORAGGIO TEMPERATURE — CONSERVAZIONE A CALDO', W, true),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:cW,
-          rows:[
-            new TableRow({children:[hC('Data',700),hC('Prodotto / Preparazione',2400),hC('T° ore _:__',1600),hC('T° ore _:__',1600),hC('T° ore _:__',1600),hC('Azione correttiva',1600),hC('Firma',cW[6])]}),
-            ...Array.from({length:20},()=>new TableRow({height:{value:440,rule:'exact'},children:cW.map(w=>eC(w))})),
-          ],
-        }),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Temperatura minima di mantenimento: ≥ 65°C. Tempo massimo mantenimento a caldo: 3 ore.', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Autoc 3C — Raffreddamento (Portrait) ──────────────────
-  function scheda3C() {
-    const W = W_P;
-    const cW = [700, 2200, 1200, 1200, 1200, 1000, W-700-2200-1200*3-1000];
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 3C','MONITORAGGIO TEMPERATURE — RAFFREDDAMENTO', W),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:cW,
-          rows:[
-            new TableRow({children:[hC('Data',700),hC('Tipo prodotto',2200),hC('T° inizio processo',1200),hC('T° a 2h (max 10°C)',1200),hC('T° finale (max 4°C)',1200),hC('Ora termine',1000),hC('Firma',cW[6])]}),
-            ...Array.from({length:20},()=>new TableRow({height:{value:440,rule:'exact'},children:cW.map(w=>eC(w))})),
-          ],
-        }),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Da 65°C a 10°C in max 2 ore — Da 10°C a 4°C in max 4 ore. Usare abbattitore o bagno ghiaccio.', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Autoc 3D — Riattivazione (Portrait, con P/C come Quinzano)
-  function scheda3D() {
-    const W = W_P;
-    const cData = 700, cPC = 500, cProd = W-700-500-1400-1400-1400;
-    const cW = [cData, cPC, cProd, 1400, 1400, 1400];
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 3D','MONITORAGGIO TEMPERATURE — RIATTIVAZIONE', W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'AD OGNI RISCALDAMENTO DI TUTTI GLI ALIMENTI', bold:true, size:18, color:VERDE, font:'Arial'})]}),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:cW,
-          rows:[
-            new TableRow({children:[hC('Data',cData),hC('P/C',cPC),hC('Tipo di prodotto / preparazione',cProd),hC('T° al cuore raggiunta (min. +75°C)',1400),hC('Ora fine riattivazione',1400),hC('Firma',1400)]}),
-            ...Array.from({length:20},()=>new TableRow({height:{value:450,rule:'exact'},children:cW.map(w=>eC(w))})),
-          ],
-        }),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Legenda: P = Pranzo   C = Cena', bold:true, size:17, font:'Arial'})]}),
-        new Paragraph({children:[new TextRun({text:'T° minima al cuore: ≥ 75°C. Non riattivare lo stesso prodotto più di una volta. Riportare NC nel Registro Generale (Autoc 6).', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Autoc 4 — Variazioni menù (Portrait) ──────────────────
-  function scheda4() {
-    const W = W_P;
-    const cW = [700, 2400, 2400, 1800, W-700-2400*2-1800];
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 4','COMUNICAZIONE VARIAZIONI MENÙ', W),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:cW,
-          rows:[
-            new TableRow({children:[hC('Data',700),hC('Pietanza prevista da menù',2400),hC('Sostituzione effettuata',2400),hC('Motivo sostituzione',1800),hC('Firma resp. cucina',cW[4])]}),
-            ...Array.from({length:25},()=>new TableRow({height:{value:400,rule:'exact'},children:cW.map(w=>eC(w))})),
-          ],
-        }),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Comunicare le variazioni all\'OSS di reparto e al Direttore entro la mattina del giorno stesso.', size:15, italic:true, color:'555555', font:'Arial'})]}),
-      ],
-    };
-  }
-
-  // ── Autoc 5A — Distributore acqua (formato Quinzano P/V) ──
-  function scheda5A(nota = '') {
-    const W = W_P;
-    const cVoce = 3200;
-    const resto = W - cVoce - 400; // 400 per colonna P/V
-    const cGiorno = Math.floor(resto / 31);
-    const cUltimo = W - cVoce - 400 - cGiorno * 30;
-    const colWidths = [cVoce, 400, ...Array.from({length:30},()=>cGiorno), cUltimo];
-
-    const rigaGiorni = [
-      hC('',cVoce), hC('',400),
-      ...Array.from({length:30},(_,i)=>hC(String(i+1),cGiorno)),
-      hC('31',cUltimo),
-    ];
-
-    function rigaPV(testo, pv) {
-      return new TableRow({ height:{value:520,rule:'exact'}, children:[
-        ...(pv === 'P' ? [cell(testo, cVoce, {size:14})] : [eC(cVoce)]),
-        sC(pv, 400),
-        ...Array.from({length:30},()=>eC(cGiorno)),
-        eC(cUltimo),
-      ]});
-    }
-
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 5A', `DISTRIBUTORE ACQUA POTABILE${nota ? ' — ' + nota : ''}`, W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'MESE: _______________   ANNO: ___________', bold:true, size:18, font:'Arial'})]}),
-        new Paragraph({children:[new TextRun({text:'Ubicazione: ' + (nota || '___________________'), size:16, italic:true, color:'555555', font:'Arial'})]}),
-        sp(),
-        // PULIZIA QUOTIDIANA
-        new Paragraph({children:[new TextRun({text:'PULIZIA QUOTIDIANA', bold:true, size:20, color:VERDE, font:'Arial'})]}),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:colWidths,
-          rows:[
-            new TableRow({children: rigaGiorni}),
-            new TableRow({ height:{value:900,rule:'exact'}, children:[
-              cell('Pulizia parti esterne (vaschette raccogli gocce, superfici). Pulire ugello con panno sanificante e far scorrere acqua per almeno 15 secondi', cVoce, {size:14}),
-              sC('',400),
-              ...Array.from({length:30},()=>eC(cGiorno)),
-              eC(cUltimo),
-            ]}),
-            new TableRow({ children:[
-              cell('Chi esegue la pulizia deve apporre la firma nel giorno corrispondente. Riportare NC nel Registro Generale (Autoc 6).', W, {size:13,italic:true,color:'555555',colspan:colWidths.length}),
-            ]}),
-          ],
-        }),
-        sp(),
-        // PULIZIA SETTIMANALE / DOPO 48h INATTIVITÀ
-        new Paragraph({children:[new TextRun({text:'PULIZIA SETTIMANALE O DOPO 48 ORE DI INATTIVITÀ', bold:true, size:20, color:VERDE, font:'Arial'})]}),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:colWidths,
-          rows:[
-            new TableRow({children: rigaGiorni}),
-            rigaPV('Sanificare ugelli: pulire con spazzolino i rubinetti per rimuovere residui/calcare, far scorrere acqua per almeno 30 secondi', 'P'),
-            rigaPV('', 'V'),
-            rigaPV('Aprire bypass acqua non trattata, far scorrere ≥3 litri, riattivare circuito trattamento, far scorrere acqua trattata per ≥1 minuto', 'P'),
-            rigaPV('', 'V'),
-            new TableRow({ children:[
-              cell('"P" (programmato) = apporre X nelle date programmate. "V" (verifica) = apporre la firma nei giorni in cui gli interventi sono stati realmente eseguiti. Riportare NC nel Registro Generale (Autoc 6).', W, {size:13,italic:true,color:'555555',colspan:colWidths.length}),
-            ]}),
-          ],
-        }),
-      ],
-    };
-  }
-
-  // ── Autoc 5B — Macchinetta bevande calde (formato Quinzano P/V)
-  function scheda5B(nota = '') {
-    const W = W_P;
-    const cVoce = 3200;
-    const resto = W - cVoce - 400;
-    const cGiorno = Math.floor(resto / 31);
-    const cUltimo = W - cVoce - 400 - cGiorno * 30;
-    const colWidths = [cVoce, 400, ...Array.from({length:30},()=>cGiorno), cUltimo];
-
-    const rigaGiorni = [
-      hC('',cVoce), hC('',400),
-      ...Array.from({length:30},(_,i)=>hC(String(i+1),cGiorno)),
-      hC('31',cUltimo),
-    ];
-
-    function rigaPV(testo, pv) {
-      return new TableRow({ height:{value:520,rule:'exact'}, children:[
-        ...(pv === 'P' ? [cell(testo, cVoce, {size:14})] : [eC(cVoce)]),
-        sC(pv, 400),
-        ...Array.from({length:30},()=>eC(cGiorno)),
-        eC(cUltimo),
-      ]});
-    }
-
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 5B', `APPARECCHIATURA BEVANDE CALDE${nota ? ' — ' + nota : ''}`, W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'MESE: _______________   ANNO: ___________', bold:true, size:18, font:'Arial'})]}),
-        new Paragraph({children:[new TextRun({text:'Ubicazione: ' + (nota || '___________________'), size:16, italic:true, color:'555555', font:'Arial'})]}),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'PULIZIA QUOTIDIANA', bold:true, size:20, color:VERDE, font:'Arial'})]}),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:colWidths,
-          rows:[
-            new TableRow({children: rigaGiorni}),
-            new TableRow({ height:{value:700,rule:'exact'}, children:[
-              cell('Pulire con panno carta pulito e soluzione sanificante le superfici esterne e interne', cVoce, {size:14}),
-              sC('',400),
-              ...Array.from({length:30},()=>eC(cGiorno)),
-              eC(cUltimo),
-            ]}),
-            new TableRow({ height:{value:700,rule:'exact'}, children:[
-              cell('Aprire porta e premere tasto "WASHING" per ciclo automatico di pulizia', cVoce, {size:14}),
-              sC('',400),
-              ...Array.from({length:30},()=>eC(cGiorno)),
-              eC(cUltimo),
-            ]}),
-            new TableRow({ children:[
-              cell('Chi esegue la pulizia appone la firma nel giorno corrispondente. Riportare NC nel Registro Generale (Autoc 6).', W, {size:13,italic:true,color:'555555',colspan:colWidths.length}),
-            ]}),
-          ],
-        }),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'PULIZIA SETTIMANALE', bold:true, size:20, color:VERDE, font:'Arial'})]}),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:colWidths,
-          rows:[
-            new TableRow({children: rigaGiorni}),
-            rigaPV('Estrarre contenitori polvere, pulire esternamente e piano di appoggio, riposizionare rispettando corrispondenza colori', 'P'),
-            rigaPV('', 'V'),
-            rigaPV('Smontare imbuto e miscelatore, eliminare residui, sanificare con acqua bollente o lavastoviglie, rimontare accuratamente', 'P'),
-            rigaPV('', 'V'),
-            new TableRow({ children:[
-              cell('"P" (programmato) = apporre X nelle date programmate. "V" (verifica) = apporre la firma nei giorni di esecuzione effettiva. Riportare NC nel Registro Generale (Autoc 6).', W, {size:13,italic:true,color:'555555',colspan:colWidths.length}),
-            ]}),
-          ],
-        }),
-      ],
-    };
-  }
-
-  // ── Autoc 8 — Ricevimento pasti veicolati (Portrait) ──────
-  // Una sezione per ogni giorno della settimana (come Quinzano)
-  function scheda8() {
-    const W = W_P;
-    const GIORNI = ['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
-    const VOCI = [
-      { label: 'Igiene mezzo di trasporto', nota: '' },
-      { label: 'Integrità e igiene contenitori isotermici', nota: '' },
-      { label: 'Quantità pasti', nota: '' },
-      { label: 'Aspetto merceologico', nota: '' },
-      { label: 'Conformità pasti (diete speciali, allergeni)', nota: '' },
-      { label: 'Temperatura alimenti CALDI', nota: '(ACCETTABILE TRA 60 E 65 °C)' },
-      { label: 'Temperatura alimenti FREDDI / abbattuti', nota: '(ACCETTABILE SE ≤ 10 °C)' },
-    ];
-
-    const cDa = Math.floor(W * 0.38);
-    const cOk = Math.floor(W * 0.09);
-    const cNo = Math.floor(W * 0.09);
-    const cNote = Math.floor(W * 0.28);
-    const cFirma = W - cDa - cOk - cNo - cNote;
-    const cW = [cDa, cOk, cNo, cNote, cFirma];
-
-    // Una sezione per giorno = intestazione giorno + tabella voci
-    const blocchiGiorni = GIORNI.flatMap((giorno, gi) => [
-      ...(gi > 0 ? [new Paragraph({children:[new PageBreak()]})] : []),
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 2C', 'MONITORAGGIO PRE-OPERATIVO — CUCINA, LAVAGGIO, DISPENSA', W, true),
+      sp(0.5),
       new Table({
-        width:{size:W,type:WidthType.DXA}, columnWidths:[Math.floor(W*0.5), Math.floor(W*0.3), W-Math.floor(W*0.5)-Math.floor(W*0.3)],
-        rows:[new TableRow({children:[
-          cell(giorno.toUpperCase(), Math.floor(W*0.5), {bold:true,size:22,color:'FFFFFF',fill:VERDE,bc:VERDE}),
-          cell('N. LOTTO / BOLLA: ____________________', Math.floor(W*0.3), {size:16}),
-          cell('SETTIMANA: ______ / ______', W-Math.floor(W*0.5)-Math.floor(W*0.3), {size:16}),
-        ]})]
-      }),
-      new Table({
-        width:{size:W,type:WidthType.DXA}, columnWidths:cW,
-        rows:[
-          new TableRow({children:[hC('DA VERIFICARE',cDa),hC('OK',cOk),hC('NON OK',cNo),hC('NOTE',cNote),hC('FIRMA',cFirma)]}),
-          ...VOCI.map(v => new TableRow({height:{value:560,rule:'exact'}, children:[
-            cell(v.label + (v.nota ? '\n' + v.nota : ''), cDa, {size:16}),
-            eC(cOk), eC(cNo),
-            eC(cNote),
-            eC(cFirma),
-          ]})),
+        width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
+        rows: [
+          headerGiorni(),
+          rigaFirmaGiorni(),
+          ...voci.map((v, i) => rigaVoce(v, i)),
         ],
       }),
       sp(),
-      new Paragraph({children:[new TextRun({text:'Riportare NC nel Registro Generale di Non Conformità (Autoc 6).', size:14, italic:true, color:'555555', font:'Arial'})]}),
-    ]);
-
-    return {
-      properties: { page: pPort },
-      children: [
-        intestazione('Autoc 8','CONTROLLI AL RICEVIMENTO DEI PASTI', W),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'MESE: _______________   ANNO: ___________   FORNITORE: ___________________________', bold:true, size:18, font:'Arial'})]}),
-        sp(),
-        ...blocchiGiorni,
-      ],
-    };
+      noteFooter('La firma in prima riga conferma tutti i controlli conformi. Segnalare il numero della voce NC solo se non conforme. Non conformità → Autoc 6.', W),
+    ]};
   }
 
-  // ── Autoc 7 — Elenco fornitori (Landscape) ────────────────
-  function scheda7() {
+  // ── Autoc 2D — Sala pranzo + Servizi igienici (Landscape, 31 giorni) ──
+  function autoc2D() {
     const W = W_L;
-    const c7 = [Math.floor(W*0.22), Math.floor(W*0.26), Math.floor(W*0.14), Math.floor(W*0.16), Math.floor(W*0.1), W-Math.floor(W*0.22)-Math.floor(W*0.26)-Math.floor(W*0.14)-Math.floor(W*0.16)-Math.floor(W*0.1)];
-    return {
-      properties: { page: pLand },
-      children: [
-        intestazione('Autoc 7','ELENCO FORNITORI QUALIFICATI', W, true),
-        sp(),
-        new Table({
-          width:{size:W,type:WidthType.DXA}, columnWidths:c7,
-          rows:[
-            new TableRow({children:[hC('Ragione sociale',c7[0]),hC('Prodotti / Servizi forniti',c7[1]),hC('P.IVA',c7[2]),hC('Referente / Contatto',c7[3]),hC('Data ultima verifica',c7[4]),hC('Note / SCIA fornitore',c7[5])]}),
-            ...Array.from({length:22},()=>new TableRow({height:{value:430,rule:'exact'},children:c7.map(w=>eC(w))})),
-          ],
+    // c0 = colonna voce (larga), poi 31 colonne giorno uguali
+    const c0 = 2800;
+    const cG = Math.floor((W - c0) / 31);
+    const c31 = W - c0 - cG * 30; // ultima colonna prende il resto
+    const colWidths = [c0, ...Array.from({ length: 31 }, (_, i) => i === 30 ? c31 : cG)];
+
+    const vociSala = [
+      'Pavimenti e pareti idonei',
+      'Esterni e interni arredi idonei',
+      'Tavoli e sedie idonei',
+      'Posateria e stoviglie idonei',
+      'Assenza prodotti scaduti',
+      'Porte e maniglie idonee',
+      'Vetri e plafoniere idonei',
+      'Assenza materiale non inerente i locali',
+      'Alimenti stoccati correttamente',
+      'Assenza visiva tracce animali/insetti',
+    ];
+    const vociSI = [
+      'Pavimenti e pareti lavabili idonei',
+      'Sanitari, accessori e rubinetteria idonei',
+      'Interno/esterno armadietti idonei',
+      'Assenza materiali non inerenti i locali',
+      'Indumenti riposti negli armadietti',
+      'Assenza visiva tracce animali/insetti',
+    ];
+
+    function headerGiorni() {
+      return new TableRow({ children: [
+        hC('Voce di controllo', c0),
+        ...Array.from({ length: 31 }, (_, i) => hC(String(i + 1), i === 30 ? c31 : cG)),
+      ]});
+    }
+    function rigaFirmaGiorni(label) {
+      return new TableRow({ height: { value: 560, rule: 'exact' }, children: [
+        cell(label, c0, { bold: true, size: 15, fill: VL, bc: VM }),
+        ...Array.from({ length: 31 }, (_, i) => eC(i === 30 ? c31 : cG, VL)),
+      ]});
+    }
+    function rigaVoce(v, i) {
+      return new TableRow({ height: { value: 380, rule: 'exact' }, children: [
+        cell(v, c0, { size: 15, fill: i % 2 === 0 ? W_ : VL, bc: 'DDDDDD' }),
+        ...Array.from({ length: 31 }, (_, j) => eC(j === 30 ? c31 : cG, i % 2 === 0 ? W_ : VL)),
+      ]});
+    }
+    function sezioneHeader(titolo) {
+      return new TableRow({ children: [
+        new TableCell({
+          columnSpan: 32,
+          width: { size: W, type: WidthType.DXA },
+          borders: BDS(V),
+          shading: { fill: V, type: ShadingType.CLEAR },
+          margins: { top: 60, bottom: 60, left: 160, right: 160 },
+          children: [new Paragraph({ children: [new TextRun({ text: titolo, font: 'Arial', size: 18, bold: true, color: W_ })] })],
         }),
-        sp(),
-        new Paragraph({children:[new TextRun({text:'Verificato da: ________________________________   Data: _______________   Firma R-HACCP: _______________', size:18, font:'Arial'})]}),
-      ],
-    };
+      ]});
+    }
+
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 2D', 'MONITORAGGIO PRE-OPERATIVO — SALA DA PRANZO E SERVIZI IGIENICI', W, true),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
+        rows: [
+          headerGiorni(),
+          rigaFirmaGiorni('Firma giornaliera (la firma conferma tutti i controlli conformi)'),
+          sezioneHeader('AREA: SALA DA PRANZO / REFETTORI'),
+          ...vociSala.map((v, i) => rigaVoce(v, i)),
+          sezioneHeader('AREA: SERVIZI IGIENICI E SPOGLIATOI'),
+          ...vociSI.map((v, i) => rigaVoce(v, i)),
+        ],
+      }),
+      sp(),
+      noteFooter('La firma in prima riga conferma che tutti i controlli sono conformi. Indicare il problema solo se non conforme: scrivere il numero della voce NC nella cella del giorno e aprire Autoc 6.', W),
+    ]};
   }
 
-  // ── Legenda temperature ────────────────────────────────────
-  function legenda(W, isCongelatore = false) {
-    const items = isCongelatore
-      ? [['Surgelati / congelati','< −18°C'],['Gelati','< −18°C']]
-      : [['Frutta e verdura','+2 / +8°C'],['Salumi e affettati','+2 / +8°C'],['Latticini','0 / +4°C'],['Cibi cotti','0 / +4°C'],['Surgelati','−18 / −21°C']];
-    const lW = Math.floor(W/2);
-    return new Table({
-      width:{size:W,type:WidthType.DXA}, columnWidths:[lW, W-lW],
-      rows:[
-        new TableRow({children:[hC('LEGENDA',lW),hC('Temperature di riferimento standard',W-lW)]}),
-        new TableRow({children:[
-          cell('F = Frigorifero     S = Surgelatore/Congelatore', lW, {italic:true,size:15,color:'555555'}),
-          cell('Alimento → Temperatura',W-lW,{bold:true,size:15}),
+  // ── Autoc 2E — ora inglobata in Autoc 2D (landscape) ───────────
+  function autoc2E() { return null; }
+
+  // ── Autoc 2F — Igiene personale cucina (Portrait) ─────────────
+  function autoc2F() {
+    const W = W_P;
+    const c0 = 280; const c1 = 1600; const cRest = Math.floor((W - c0 - c1) / 7);
+    const voci = ['Divisa da lavoro indossata e pulita', 'Capelli raccolti e coperti', 'Mani lavate (prima del servizio)', 'Assenza gioielli/anelli/orologio', 'Assenza unghie finte o smalto', 'Assenza sintomi gastro/febbre', 'Ferite/tagli coperti con cerotto colorato'];
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 2F', 'MONITORAGGIO IGIENE PERSONALE', W),
+      sp(0.5),
+      new Paragraph({ children: [new TextRun({ text: 'Compilare: ✓ conforme · ✗ NC (segnalare a R-HACCP) · / assente', font: 'Arial', size: 16, italic: true, color: GS })] }),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, ...Array.from({ length: 7 }, (_, i) => i === 6 ? W - c0 - cRest * 6 : cRest), c1],
+        rows: [
+          new TableRow({ children: [hC('N°', c0), ...Array.from({ length: 6 }, (_, i) => hC(String(i + 1), cRest)), hC(String(7), W - c0 - cRest * 6), hC('Voce di controllo', c1)] }),
+          ...voci.map((v, i) => new TableRow({
+            height: { value: 520, rule: 'exact' },
+            children: [
+              cell(String(i + 1), c0, { bold: true, align: AlignmentType.CENTER, size: 16, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
+              ...Array.from({ length: 7 }, (_, j) => eC(j === 6 ? W - c0 - cRest * 6 : cRest, i % 2 === 0 ? VL : W_)),
+              cell(v, c1, { size: 15, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
+            ],
+          })),
+          new TableRow({ children: [cell('Firma', c0, { bold: true, fill: VL, align: AlignmentType.CENTER }), ...Array.from({ length: 7 }, (_, j) => eC(j === 6 ? W - c0 - cRest * 6 : cRest, VL)), eC(c1, VL)] }),
+        ],
+      }),
+      sp(),
+      noteFooter('Numeri colonna = operatori. Inserire iniziali operatore nella riga intestazione. In caso di sintomi gastro/febbre: comunicare immediatamente a R-HACCP.', W),
+    ]};
+  }
+
+  // ── Autoc 3A — Cottura (Landscape) ───────────────────────────
+  function autoc3A() {
+    if (!isCucinaInterna) return null;
+    const W = W_L;
+    const c0 = 700; const c1 = 2200; const c2 = 1200; const c3 = 1200; const c4 = 1600; const c5 = W - c0 - c1 - c2 - c3 - c4;
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 3A', 'MONITORAGGIO TEMPERATURE — COTTURA (CCP)', W, true),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5],
+        rows: [
+          new TableRow({ children: [hC('Data', c0), hC('Preparazione', c1), hC('T° cuore (°C)', c2), hC('Ora fine cottura', c3), hC('Esito ✓/✗', c4), hC('Firma', c5)] }),
+          ...Array.from({ length: 25 }, (_, i) => new TableRow({
+            height: { value: 340, rule: 'exact' },
+            children: [c0, c1, c2, c3, c4, c5].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('Limite CCP: T° al cuore ≥ 75°C per almeno 1 minuto. Se T° < 75°C: prolungare la cottura. Non servire mai alimenti non conformi. NC → Autoc 6.', W),
+    ]};
+  }
+
+  // ── Autoc 3B — Conservazione a caldo (Landscape) ──────────────
+  function autoc3B() {
+    if (!isCucinaInterna) return null;
+    const W = W_L;
+    const c0 = 700; const c1 = 2200; const c2 = 1200; const c3 = 1200; const c4 = 1200; const c5 = W - c0 - c1 - c2 - c3 - c4;
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 3B', 'MONITORAGGIO TEMPERATURE — CONSERVAZIONE A CALDO', W, true),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5],
+        rows: [
+          new TableRow({ children: [hC('Data', c0), hC('Preparazione', c1), hC('T° inizio (°C)', c2), hC('T° fine (°C)', c3), hC('Durata (min)', c4), hC('Firma', c5)] }),
+          ...Array.from({ length: 25 }, (_, i) => new TableRow({
+            height: { value: 340, rule: 'exact' },
+            children: [c0, c1, c2, c3, c4, c5].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('Limite: T° ≥ 65°C. Tempo massimo di conservazione a caldo: 2 ore. Dopo 2 ore: abbattere o smaltire. NC → Autoc 6.', W),
+    ]};
+  }
+
+  // ── Autoc 3C — Raffreddamento (Portrait) ─────────────────────
+  function autoc3C() {
+    if (!isCucinaInterna) return null;
+    const W = W_P;
+    const c0 = 600; const c1 = 1800; const c2 = 1000; const c3 = 1000; const c4 = 1000; const c5 = W - c0 - c1 - c2 - c3 - c4;
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 3C', 'MONITORAGGIO TEMPERATURE — RAFFREDDAMENTO E ABBATTIMENTO', W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5],
+        rows: [
+          new TableRow({ children: [hC('Data', c0), hC('Preparazione', c1), hC('T° inizio (°C)', c2), hC('T° a 90 min (°C)', c3), hC('T° finale (°C)', c4), hC('Firma', c5)] }),
+          ...Array.from({ length: 20 }, (_, i) => new TableRow({
+            height: { value: 380, rule: 'exact' },
+            children: [c0, c1, c2, c3, c4, c5].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('Limite: da +65°C a +10°C in max 2 ore (abbattitore). Da +10°C a +4°C in max 4 ore. NC → Autoc 6.', W),
+    ]};
+  }
+
+  // ── Autoc 3D — Riattivazione pasti abbattuti (CCP2) ───────────
+  function autoc3D() {
+    if (!op_cena_abbattuta && !isAppalto) return null;
+    const W = W_P;
+    const c0 = 600; const c1 = 600; const c2 = Math.floor(W * 0.22); const c3 = 1100; const c4 = 1000; const c5 = W - c0 - c1 - c2 - c3 - c4;
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 3D', 'MONITORAGGIO RIATTIVAZIONE PASTI ABBATTUTI (CCP2)', W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5],
+        rows: [
+          new TableRow({ children: [hC('Data', c0), hC('Ora', c1), hC('Preparazione / Teglia', c2), hC('T° cuore ≥75°C', c3), hC('Esito ✓/✗', c4), hC('Firma', c5)] }),
+          ...Array.from({ length: 28 }, (_, i) => new TableRow({
+            height: { value: 310, rule: 'exact' },
+            children: [c0, c1, c2, c3, c4, c5].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('CCP2 — Limite critico: T° al cuore ≥ 75°C. Se T° < 75°C: riscaldare ancora. Se dopo 2 cicli ancora NC: smaltire e aprire Autoc 6. Max 1 riattivazione per lotto.', W),
+    ]};
+  }
+
+  // ── Autoc 8 — Ricevimento pasti veicolati (Portrait, settimana) ─
+  function autoc8() {
+    if (!isVeicolata && !isAppalto) return null;
+    const W = W_P;
+    const giorni = ['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+    const voci = [
+      ['Igiene mezzo di trasporto', ''],
+      ['Integrità e igiene contenitori isotermici', ''],
+      ['Quantità pasti corretta', ''],
+      ['Aspetto merceologico pasti', ''],
+      ['Conformità pasti (celiaci, disfagici, ecc.)', ''],
+      ['Temperatura alimenti caldi', 'Accettabile: 60-65°C (CCP1)'],
+      ['Temperatura alimenti freddi / abbattuti', 'Accettabile: ≤ 10°C (CCP1)'],
+    ];
+    const c0 = Math.floor(W * 0.46);
+    const c1 = Math.floor(W * 0.17);
+    const c2 = Math.floor(W * 0.17);
+    const c3 = W - c0 - c1 - c2;
+
+    // Un blocco per giorno
+    function bloccoGiorno(giorno) {
+      return [
+        // Intestazione giorno (banda verde)
+        new TableRow({ children: [
+          new TableCell({
+            columnSpan: 4,
+            width: { size: W, type: WidthType.DXA },
+            borders: BDS(V), shading: { fill: V, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 160, right: 160 },
+            children: [new Paragraph({ children: [
+              new TextRun({ text: giorno.toUpperCase(), font: 'Arial', size: 22, bold: true, color: W_ }),
+              new TextRun({ text: '   Data: ________________   N. Lotto / Bolla: _____________________', font: 'Arial', size: 17, color: 'CCFFCC' }),
+            ]})],
+          }),
         ]}),
-        ...items.map(([a,t])=>new TableRow({children:[eC(lW),cell(`${a}: ${t}`,W-lW,{size:15})]})),
-      ],
-    });
-  }
-
-  // ══════════════════════════════════════════════════════════
-  // ASSEMBLA SEZIONI IN BASE AL MODELLO
-  // ══════════════════════════════════════════════════════════
-  const sections = [];
-
-  // 1 — Ricevimento merci:
-  //   - cucina interna + appalto (sempre)
-  //   - distribuzione/appalto: anche se hanno cucinetta (ricevono derrate colazioni/merenda)
-  if (isCucinaInterna || isAppalto || op_cena_abbattuta || frigoCucina.length > 0 || frigoReparti.length > 0) {
-    sections.push(scheda1());
-  }
-
-  // 2A cucina — solo cucina interna (F1, F2...)
-  if (isCucinaInterna) sections.push(scheda2ACucina());
-
-  // 2A reparti — cucina interna + distribuzione con frigoriferi propri (FR, FD)
-  if (frigoReparti.length > 0) sections.push(...schede2AReparto());
-
-  // 2B congelatori — solo cucina interna (C1, C2...)
-  if (isCucinaInterna && congelatori.length > 0) sections.push(scheda2B());
-
-  // 2C igiene cucina/lavaggio — solo cucina interna
-  if (isCucinaInterna) sections.push(scheda2C());
-
-  // 2D sala da pranzo — tutti i modelli
-  sections.push(scheda2D());
-
-  // 2E servizi igienici/spogliatoio — tutti i modelli
-  sections.push(scheda2E());
-
-  // 2F igiene personale — solo cucina interna
-  if (isCucinaInterna) sections.push(scheda2F());
-
-  // 3A/B/C — solo cucina interna
-  if (isCucinaInterna) {
-    sections.push(scheda3A());
-    sections.push(scheda3B());
-    sections.push(scheda3C());
-  }
-
-  // 3D riattivazione — cucina interna con cena abbattuta, O modelli esterni con riattivazione
-  if (op_cena_abbattuta) sections.push(scheda3D());
-
-  // 4 variazioni menù — cucina interna + appalto
-  if (isCucinaInterna || isAppalto) sections.push(scheda4());
-
-  // 5A distributore acqua — tutti se flag attivo (una per distributore)
-  if (op_distributore_acqua) {
-    const note = op_distributore_acqua_note || '';
-    const apparecchi = note.split(/[,;]/).map(n=>n.trim()).filter(Boolean);
-    if (apparecchi.length > 1) {
-      apparecchi.forEach(n => sections.push(scheda5A(n)));
-    } else {
-      sections.push(scheda5A(note));
+        // Sotto-header
+        new TableRow({ children: [hC('DA VERIFICARE', c0), hC('OK ✓', c1), hC('NON OK ✗', c2), hC('Note / Firma', c3)] }),
+        // Voci
+        ...voci.map(([v, note], i) => new TableRow({
+          height: { value: 400, rule: 'exact' },
+          children: [
+            cell(v + (note ? ' — ' + note : ''), c0, { size: 16, fill: i % 2 === 0 ? W_ : VL, bc: 'DDDDDD' }),
+            eC(c1, i % 2 === 0 ? W_ : VL),
+            eC(c2, i % 2 === 0 ? W_ : VL),
+            eC(c3, i % 2 === 0 ? W_ : VL),
+          ],
+        })),
+      ];
     }
+
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 8', 'CONTROLLI RICEVIMENTO PASTI — CCP1', W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3],
+        rows: giorni.flatMap(g => bloccoGiorno(g)),
+      }),
+      sp(),
+      noteFooter('CCP1 — Limite critico: pasto caldo ≥ 65°C · pasto freddo/abbattuto ≤ 10°C. Se NON OK: rifiutare il pasto, contattare il fornitore, aprire Autoc 6.', W),
+    ]};
   }
 
-  // 5B macchinetta caffè — tutti se flag attivo (una per macchinetta)
-  if (op_macchinetta_caffe) {
-    const note = op_macchinetta_caffe_note || '';
-    const apparecchi = note.split(/[,;]/).map(n=>n.trim()).filter(Boolean);
-    if (apparecchi.length > 1) {
-      apparecchi.forEach(n => sections.push(scheda5B(n)));
-    } else {
-      sections.push(scheda5B(note));
-    }
+  // ── Autoc 8D — Registro disfagici (Portrait) ─────────────────
+  function autoc8D() {
+    if (!op_disfagici) return null;
+    const W = W_P;
+    const c0 = 560; const c1 = 560; const c2 = 1600; const c3 = 800; const c4 = 900; const c5 = 1000; const c6 = W - c0 - c1 - c2 - c3 - c4 - c5;
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 8D', 'REGISTRO DISTRIBUZIONE PASTI DISFAGICI', W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5, c6],
+        rows: [
+          new TableRow({ children: [hC('Data', c0), hC('Ora', c1), hC('Nome ospite', c2), hC('IDDSI level', c3), hC('T° ≥75°C ✓/✗', c4), hC('Allergie ✓/✗', c5), hC('Firma', c6)] }),
+          ...Array.from({ length: 28 }, (_, i) => new TableRow({
+            height: { value: 310, rule: 'exact' },
+            children: [c0, c1, c2, c3, c4, c5, c6].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('IDDSI levels: L3 Minced · L4 Puree · L5 Soft · L6 Easy Chew. Verificare nominativo prima di ogni consegna. Anomalie deglutizione → bloccare e chiamare infermiere. NC → Autoc 6.', W),
+    ]};
   }
 
-  // 8 — Ricevimento pasti: appalto + distribuzione veicolata
-  if (!isCucinaInterna) sections.push(scheda8());
+  // ── Autoc 9 — Isolamento infettivo (Portrait) ─────────────────
+  function autoc9() {
+    if (!op_monouso_infetti) return null;
+    const W = W_P;
+    const c0 = 560; const c1 = 1600; const c2 = 1200; const c3 = 1000; const c4 = 1000; const c5 = W - c0 - c1 - c2 - c3 - c4;
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 9', 'REGISTRO ISOLAMENTO INFETTIVO — GESTIONE PASTI', W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5],
+        rows: [
+          new TableRow({ children: [hC('Data', c0), hC('Nome ospite / Stanza', c1), hC('Agente infettivo', c2), hC('Vassoio monouso ✓', c3), hC('DPI indossati ✓', c4), hC('Firma', c5)] }),
+          ...Array.from({ length: 25 }, (_, i) => new TableRow({
+            height: { value: 340, rule: 'exact' },
+            children: [c0, c1, c2, c3, c4, c5].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('DPI obbligatori: guanti nitrile (1 paio per pasto) · mascherina chirurgica · grembiule monouso. Rifiuti in sacchetto "BIOHAZARD". Smaltimento tramite ditta autorizzata. NC → Autoc 6.', W),
+    ]};
+  }
 
-  // 7 fornitori — sempre (messa in fondo)
-  sections.push(scheda7());
+  // ── Autoc 5A — Distributore acqua (Portrait) ─────────────────
+  function autoc5A() {
+    if (!op_distributore_acqua) return null;
+    const W = W_P;
+    const nota = op_distributore_acqua_note || '';
+    const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    const attivita = [
+      ['Pulizia esterna erogatori', 'Settimanale', 'Firma'],
+      ['Sostituzione filtri (secondo scheda tecnica)', 'Semestrale', 'Firma + n° lotto filtro'],
+      ['Disinfezione circuito interno', 'Semestrale', 'Firma + prodotto usato'],
+      ['Analisi acqua erogata (laboratorio)', 'Annuale', 'Allegare rapporto'],
+    ];
+    const c0 = Math.floor(W * 0.42); const c1 = Math.floor(W * 0.18); const cM = Math.floor((W - c0 - c1) / 12);
+    const colWidths = [c0, c1, ...Array.from({ length: 12 }, (_, i) => i === 11 ? W - c0 - c1 - cM * 11 : cM)];
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 5A', `MANUTENZIONE DISTRIBUTORE ACQUA POTABILE${nota ? ' — ' + nota : ''}`, W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
+        rows: [
+          new TableRow({ children: [hC('Attività', c0), hC('Frequenza', c1), ...mesi.map((m, i) => hC(m, i === 11 ? W - c0 - c1 - cM * 11 : cM))] }),
+          ...attivita.map(([att, freq], i) => new TableRow({
+            height: { value: 520, rule: 'exact' },
+            children: [
+              cell(att, c0, { size: 16, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
+              cell(freq, c1, { size: 15, italic: true, color: GS, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
+              ...Array.from({ length: 12 }, (_, j) => eC(j === 11 ? W - c0 - c1 - cM * 11 : cM, i % 2 === 0 ? VL : W_)),
+            ],
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('P = programmato (apporre X) · V = verificato (apporre firma alla data di esecuzione effettiva). Conservare rapporti analisi acqua per 5 anni. NC → Autoc 6.', W),
+    ]};
+  }
+
+  // ── Autoc 5B — Macchinetta bevande calde (Portrait) ───────────
+  function autoc5B() {
+    if (!op_macchinetta_caffe) return null;
+    const W = W_P;
+    const nota = op_macchinetta_caffe_note || '';
+    const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    const attivita = [
+      ['Pulizia esterna macchina e vassoio raccogligocce', 'Giornaliera'],
+      ['Pulizia cappuccino/schiuma latte', 'Dopo ogni uso'],
+      ['Decalcificazione circuito', 'Mensile (o secondo display)'],
+      ['Pulizia circuito interno (risciacquo)', 'Settimanale'],
+      ['Sostituzione filtro acqua', 'Semestrale'],
+      ['Manutenzione tecnica completa (assistenza)', 'Annuale'],
+    ];
+    const c0 = Math.floor(W * 0.42); const c1 = Math.floor(W * 0.18); const cM = Math.floor((W - c0 - c1) / 12);
+    const colWidths = [c0, c1, ...Array.from({ length: 12 }, (_, i) => i === 11 ? W - c0 - c1 - cM * 11 : cM)];
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 5B', `MANUTENZIONE MACCHINETTA BEVANDE CALDE${nota ? ' — ' + nota : ''}`, W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
+        rows: [
+          new TableRow({ children: [hC('Attività', c0), hC('Frequenza', c1), ...mesi.map((m, i) => hC(m, i === 11 ? W - c0 - c1 - cM * 11 : cM))] }),
+          ...attivita.map(([att, freq], i) => new TableRow({
+            height: { value: 520, rule: 'exact' },
+            children: [
+              cell(att, c0, { size: 16, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
+              cell(freq, c1, { size: 15, italic: true, color: GS, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
+              ...Array.from({ length: 12 }, (_, j) => eC(j === 11 ? W - c0 - c1 - cM * 11 : cM, i % 2 === 0 ? VL : W_)),
+            ],
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('P = programmato · V = verificato con firma. Acqua con calcare elevato: aumentare frequenza decalcificazione. NC → Autoc 6.', W),
+    ]};
+  }
+
+  // ── Autoc 4 — Variazioni menù (Portrait) ─────────────────────
+  function autoc4() {
+    const W = W_P;
+    const c0 = 600; const c1 = 600; const c2 = 1200; const c3 = Math.floor(W * 0.28); const c4 = W - c0 - c1 - c2 - c3;
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 4', 'COMUNICAZIONE VARIAZIONI MENÙ', W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4],
+        rows: [
+          new TableRow({ children: [hC('Data', c0), hC('Pasto', c1), hC('Piatto sostituito', c2), hC('Piatto sostitutivo', c3), hC('Motivazione / Firma', c4)] }),
+          ...Array.from({ length: 28 }, (_, i) => new TableRow({
+            height: { value: 310, rule: 'exact' },
+            children: [c0, c1, c2, c3, c4].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('Comunicare variazioni al responsabile di struttura entro l\'orario di servizio. Verificare assenza allergeni nel piatto sostitutivo prima della distribuzione.', W),
+    ]};
+  }
+
+  // ── Autoc 7 — Elenco fornitori (Landscape) ───────────────────
+  // ── Autoc 7 — Elenco fornitori (Portrait, 5 col Quinzano) ──────
+  function autoc7() {
+    const W = W_P;
+    const c0 = Math.floor(W * 0.26);
+    const c1 = Math.floor(W * 0.26);
+    const c2 = Math.floor(W * 0.16);
+    const c3 = Math.floor(W * 0.18);
+    const c4 = W - c0 - c1 - c2 - c3;
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 7', 'ELENCO FORNITORI QUALIFICATI', W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4],
+        rows: [
+          new TableRow({ children: [hC('Derrate / Prodotto', c0), hC('Fornitore', c1), hC('Telefono', c2), hC('Referente', c3), hC('Note', c4)] }),
+          ...Array.from({ length: 16 }, (_, i) => new TableRow({
+            height: { value: 480, rule: 'exact' },
+            children: [c0, c1, c2, c3, c4].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('Aggiornare ad ogni cambio fornitore. Conservare SCIA e certificati nel fascicolo HACCP.', W),
+    ]};
+  }
+
+  // ── Autoc 6 — Registro NC (Landscape, 14 righe ampie) ──────────
+  function autoc6() {
+    const W = W_L;
+    const c0 = 500;
+    const c1 = 800;
+    const c2 = 800;
+    const c3 = Math.floor((W - c0 - c1 - c2) * 0.45);
+    const c4 = Math.floor((W - c0 - c1 - c2) * 0.40);
+    const c5 = W - c0 - c1 - c2 - c3 - c4;
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 6', 'REGISTRO GENERALE NON CONFORMITÀ', W, true),
+      sp(0.5),
+      new Paragraph({ children: [new TextRun({ text: 'Anno: _______________________', font: 'Arial', size: 20, bold: true, color: V })] }),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5],
+        rows: [
+          new TableRow({ children: [hC('N°', c0), hC('Scheda\nAutoc', c1), hC('Data', c2), hC('Identificazione Non Conformità', c3), hC('Azioni Correttive Attuate', c4), hC('Firma', c5)] }),
+          ...Array.from({ length: 10 }, (_, i) => new TableRow({
+            height: { value: 720, rule: 'exact' },
+            children: [
+              cell(String(i + 1), c0, { bold: true, align: AlignmentType.CENTER, size: 18, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
+              ...[c1, c2, c3, c4, c5].map(w => eC(w, i % 2 === 0 ? VL : W_)),
+            ],
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('Le NC vanno riportate anche in QualiCAVA (registro digitale). Conservare questo registro fisico per almeno 5 anni. NC gravi → notifica R-HACCP / ASL.', W),
+    ]};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ASSEMBLAGGIO DOCUMENTO
+  // ═══════════════════════════════════════════════════════════════
+
+  const sezioni = [
+    copertina(),
+    autoc1(),
+    ...(frigoCucina.length > 0 ? [autoc2ACucina()] : []),
+    ...autoc2AReparti(),
+    autoc2B(),
+    ...(isCucinaInterna || isAppalto ? [autoc2C()] : []),
+    autoc2D(),
+    autoc2E(),
+    ...(isCucinaInterna || isAppalto ? [autoc2F()] : []),
+    autoc3A(),
+    autoc3B(),
+    autoc3C(),
+    autoc3D(),
+    autoc8(),
+    autoc8D(),
+    autoc9(),
+    autoc5A(),
+    autoc5B(),
+    autoc4(),
+    autoc7(),
+    autoc6(),
+  ].filter(Boolean);
 
   const doc = new Document({
-    styles: { default: { document: { run: { font: 'Arial', size: 18 } } } },
-    sections,
+    styles: { default: { document: { run: { font: 'Arial', size: 20, color: NR } } } },
+    sections: sezioni,
   });
 
   const blob = await Packer.toBlob(doc);

@@ -18,7 +18,6 @@ import {
 import { supabase }            from '../supabaseClient';
 import { useHaccpFascicolo, useHaccpInvalidate } from '../hooks/useHaccpData';
 import { useAuth }             from '../contexts/AuthContext';
-import { buildPromptHaccpManuale } from '../config/aiPrompts';
 
 // ── Costanti ──────────────────────────────────────────────────
 const TABS = [
@@ -1063,11 +1062,9 @@ function SciaCard({ scia, facilityId, onUpdateStato, onUploadDone, canEdit }) {
 // TAB 3 — MANUALE
 // ══════════════════════════════════════════════════════════════
 function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRequest, isUdoPsi }) {
-  const [generating, setGenerating]   = useState(false);
-  const [generatedText, setGeneratedText] = useState('');
-  const [showGenerated, setShowGenerated] = useState(false);
   const [revNote, setRevNote]         = useState('');
   const [saving, setSaving]           = useState(false);
+  const [savingMod, setSavingMod]     = useState(false);
   const [logoVariante, setLogoVariante] = useState('A');
   const [requesting, setRequesting]   = useState(false);
   const ultimo = manuali[0] ?? null;
@@ -1102,140 +1099,68 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
   };
 
 
-  // ── buildPrompt — delegato a src/config/aiPrompts.js ────────
-  const buildPrompt = (p) => {
-    const sa     = p.sezioni_attive || {};
-    const sezioni = sa.sezioni_manuale || SEZIONI_BASE_DEFAULT;
-    return buildPromptHaccpManuale({
-      facilityName:        facility.name,
-      pivaOsa:             sa.piva_osa            || '—',
-      udoName:             facility.udo_name       || '',
-      region:              facility.region         || '',
-      address:             facility.address        || '',
-      bedCount:            facility.bed_count      || null,
-      modello:             p.modello_ristorazione  || 'cucina_interna',
-      fornitoreNome:       p.fornitore_nome        || '',
-      fornitorePiva:       p.fornitore_piva        || '',
-      fornitoreScia:       p.fornitore_ha_scia && p.fornitore_scia_estremi ? p.fornitore_scia_estremi : '',
-      lr:                  p.lr_attuale            || '—',
-      rHaccp:              p.r_haccp               || '—',
-      teamHaccp:           sa.team_haccp           || [],
-      redattore:           sa.redattore            || 'Ufficio Qualità OVER',
-      revPrecedente:       sa.rev_precedente       || '0 – prima emissione',
-      revCorrente:         sa.rev_corrente         || '1',
-      dataRevisione:       sa.data_revisione       || new Date().toLocaleDateString('it-IT'),
-      nucleiNote:          sa.op_nuclei_note       || '',
-      orariDistribuzione:  sa.op_orari_distribuzione || '',
-      apparecchiature:     (() => {
-        const app = parseApparecchiature(p.apparecchiature_frigorifere || '');
-        const isInt = p.modello_ristorazione === 'cucina_interna';
-        if (isInt) {
-          return [
-            app.frigoCucina.length  ? 'Frigoriferi cucina: ' + app.frigoCucina.map(f => f.codice + ' – ' + f.desc).join(', ') : '',
-            app.congelatori.length  ? 'Congelatori cucina: ' + app.congelatori.map(f => f.codice + ' – ' + f.desc).join(', ') : '',
-            app.frigoReparti.filter(f => f.tipo === 'frigorifero_reparto').length ? 'Frigoriferi reparto: ' + app.frigoReparti.filter(f => f.tipo === 'frigorifero_reparto').map(f => f.codice + ' – ' + f.desc).join(', ') : '',
-            app.frigoReparti.filter(f => f.tipo === 'congelatore_reparto').length ? 'Congelatori reparto: ' + app.frigoReparti.filter(f => f.tipo === 'congelatore_reparto').map(f => f.codice + ' – ' + f.desc).join(', ') : '',
-          ].filter(Boolean).join('\n') || 'Da definire';
-        }
-        return app.frigoReparti.length
-          ? 'Frigoriferi in nostra gestione: ' + app.frigoReparti.map(f => f.codice + ' – ' + f.desc).join(', ')
-          : 'Nessun frigorifero di nostra diretta responsabilità';
-      })(),
-      macchinettaColazioni: sa.op_macchinetta_caffe        || false,
-      macchinettaNote:      sa.op_macchinetta_caffe_note   || '',
-      distributoreAcqua:    sa.op_distributore_acqua       || false,
-      distributoreNote:     sa.op_distributore_acqua_note  || '',
-      opDisfagici:          sa.op_disfagici                || false,
-      opDisfagiciNote:      sa.op_disfagici_note           || '',
-      opCenaAbbattuta:      sa.op_cena_abbattuta           || false,
-      opCenaAbbatutaNote:   sa.op_cena_abbattuta_note      || '',
-      opCarrelloTermico:    sa.op_carrello_termico         || false,
-      opCucinette:          sa.op_cucinette_nuclei         || false,
-      opCucinetteNote:      sa.op_cucinette_note           || '',
-      opSrtr:               sa.op_srtr                     || false,
-      opMonousoInfetti:     sa.op_monouso_infetti          || false,
-      opRiabilitazione:     sa.op_riabilitazione           || false,
-      opCeliaciaNote:       sa.op_celiachia_note           || '',
-      noteOperative:        p.note_operative               || '',
-      sezioni,
-      isUdoPsi,
-    });
-  };
 
 
-  const handleGenera = async () => {
-    if (!profiloCompleto) {
-      alert('Completa prima il Profilo HACCP (modello ristorazione, LR e R-HACCP obbligatori).');
-      return;
-    }
-    setGenerating(true);
-    setShowGenerated(false);
-    setGeneratedText('');
+
+
+
+  const handleSalvaModulistica = async () => {
+    setSavingMod(true);
     try {
-      const prompt = buildPrompt(profilo);
-      const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error('REACT_APP_ANTHROPIC_API_KEY non configurata nel .env');
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type':                              'application/json',
-          'x-api-key':                                apiKey,
-          'anthropic-version':                        '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model:      'claude-haiku-4-5-20251001',
-          max_tokens: 12000,
-          stream:     true,
-          messages:   [{ role: 'user', content: prompt }],
-        }),
+      const sa  = profilo?.sezioni_attive || {};
+      const oggi = new Date().toISOString().split('T')[0];
+      const { generaModulisticaHaccp } = await import('../services/haccpManualeService');
+      const modBuffer = await generaModulisticaHaccp({
+        nomestruttura:               facility.name,
+        modello:                     profilo.modello_ristorazione || 'cucina_interna',
+        apparecchiature_frigorifere: profilo.apparecchiature_frigorifere || '',
+        op_macchinetta_caffe:        sa.op_macchinetta_caffe   || false,
+        op_disfagici:                sa.op_disfagici            || false,
+        op_cena_abbattuta:           sa.op_cena_abbattuta       || false,
+        op_srtr:                     sa.op_srtr                 || false,
+        op_monouso_infetti:          sa.op_monouso_infetti      || false,
+        op_riabilitazione:           sa.op_riabilitazione       || false,
+        logoVariante:                logoVariante,
       });
 
-      if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`Anthropic ${response.status}: ${err}`);
+      // Upload su Supabase Storage
+      const path = `${facility.id}/manuali/modulistica_${oggi}.docx`;
+      const { error: upErr } = await supabase.storage.from('haccp-documents').upload(path, modBuffer, {
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        upsert: true,
+      });
+      if (upErr) throw upErr;
+
+      const { data: signData } = await supabase.storage.from('haccp-documents').createSignedUrl(path, 60 * 60 * 24 * 365);
+
+      // Aggiorna file_url_modulistica sull'ultimo manuale
+      const ultimoId = manuali.filter(m => !m.richiesta_pending)[0]?.id;
+      if (ultimoId && signData?.signedUrl) {
+        await supabase.from('haccp_manuali').update({ file_url_modulistica: signData.signedUrl }).eq('id', ultimoId);
       }
 
-      // Streaming SSE — nessun timeout browser
-      const reader  = response.body.getReader();
-      const decoder = new TextDecoder();
-      let testo     = '';
-      let buf       = '';
-      outer: while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const evts = buf.split('\n');
-        buf = evts.pop();
-        for (const ev of evts) {
-          if (!ev.startsWith('data: ')) continue;
-          const raw = ev.slice(6).trim();
-          if (raw === '[DONE]') break outer;
-          try {
-            const obj = JSON.parse(raw);
-            if (obj.type === 'content_block_delta' && obj.delta?.type === 'text_delta')
-              testo += obj.delta.text;
-          } catch { /* skip non-JSON */ }
-        }
-      }
-      if (!testo) throw new Error('Risposta vuota dal modello');
-      setGeneratedText(testo);
-      setShowGenerated(true);
+      await invalidate.manuali();
+      alert('Modulistica generata e salvata correttamente.');
     } catch (err) {
-      alert('Errore generazione: ' + err.message);
+      alert('Errore modulistica: ' + err.message);
     } finally {
-      setGenerating(false);
+      setSavingMod(false);
     }
   };
 
   const handleSalvaManuale = async () => {
-    if (!generatedText) return;
     setSaving(true);
     try {
       const sa      = profilo?.sezioni_attive || {};
-      // numRev ufficiale da profilo — NON dal conteggio manuali
-      const numRev  = String(sa.rev_corrente || profilo?.numero_revisione || '1');
+      // numRev: prendi dall'ultimo manuale salvato, poi da rev_corrente, poi da profilo, poi '1'
+      const ultimoSalvato = manuali.filter(m => !m.richiesta_pending)[0];
+      const numRevBase = String(
+        (sa.rev_corrente && sa.rev_corrente !== '') ? sa.rev_corrente
+        : ultimoSalvato?.numero_revisione
+        || profilo?.numero_revisione
+        || '1'
+      );
+      const numRev = numRevBase;
       // versioneInterna: quanti salvataggi già fatti per questa rev
       const versioneInterna = manuali.filter(
         m => !m.richiesta_pending && String(m.numero_revisione) === numRev
@@ -1255,14 +1180,30 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         lr:            profilo.lr_attuale      || '—',
         rHaccp:        profilo.r_haccp         || '—',
         teamHaccp:     sa.team_haccp           || [],
-        numRev:          numRev,
-        versioneInterna: versioneInterna,
-        dataRev:         new Date().toLocaleDateString('it-IT'),
-        redattore:       sa.redattore            || 'Ufficio Qualità OVER',
-        noteRevisione:   revNote                 || 'Prima emissione',
-        revStorico:      revStorico,
-        testoManuale:    generatedText,
-        logoVariante:    logoVariante,
+        numRev:                    numRev,
+        versioneInterna:           versioneInterna,
+        dataRev:                   sa.data_revisione
+                                     ? new Date(sa.data_revisione).toLocaleDateString('it-IT')
+                                     : new Date().toLocaleDateString('it-IT'),
+        redattore:                 sa.redattore                  || 'Ufficio Qualità OVER',
+        noteRevisione:             revNote                       || 'Prima emissione',
+        revStorico:                revStorico,
+        // Dati dal profilo HACCP — SSOT
+        apparecchiatureFrigorifere: profilo.apparecchiature_frigorifere || '',
+        layoutStruttura:           sa.op_nuclei_note              || '',
+        orariServizio:             sa.op_orari_distribuzione      || '',
+        opDisfagici:               sa.op_disfagici                || false,
+        opDisfagiciNote:           sa.op_disfagici_note           || '',
+        opCenaAbbattuta:           sa.op_cena_abbattuta           || false,
+        opCenaAbbatutaNote:        sa.op_cena_abbattuta_note      || '',
+        opMonousoInfetti:          sa.op_monouso_infetti          || false,
+        opCarrelloTermico:         sa.op_carrello_termico         || false,
+        opCeliaciaNote:            sa.op_celiachia_note           || '',
+        opCucinetteNote:           sa.op_cucinette_note           || '',
+        opDistributoreAcqua:       sa.op_distributore_acqua       || false,
+        opDistributoreNote:        sa.op_distributore_acqua_note  || '',
+        testoManuale:              '',   // niente AI — tutto dal profilo
+        logoVariante:              logoVariante,
       });
 
       // 2. Upload .docx manuale in Storage
@@ -1329,8 +1270,6 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
 
       await invalidate.manuali();
       await invalidate.semafori();
-      setShowGenerated(false);
-      setGeneratedText('');
       setRevNote('');
       const revLabel = versioneInterna > 0 ? `${numRev}_${versioneInterna}` : numRev;
       alert(`Manuale Rev. ${revLabel} salvato correttamente.${modulisticaUrl ? ' Modulistica allegata.' : ''}`);
@@ -1476,19 +1415,9 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
             )}
           </div>
 
-          <div className="flex justify-center">
-            <button
-              onClick={handleGenera}
-              disabled={generating || !profiloCompleto}
-              className="flex items-center gap-3 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-all text-sm"
-            >
-              {generating
-                ? <><Loader2 size={18} className="animate-spin" /> Generazione in corso (30-60 sec.)...</>
-                : <><ChefHat size={18} /> Genera Manuale HACCP</>
-              }
-            </button>
-          </div>
+
         </section>
+      )}
 
       {/* Tasto richiedi — admin / sede / director */}
       {canRequest && !canGenerate && (
@@ -1517,45 +1446,34 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         </div>
       )}
 
-      {/* Area testo generato — solo superadmin può editare */}
-      {showGenerated && generatedText && (
+      {/* Note revisione + salva */}
+      {canGenerate && profiloCompleto && (
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black text-emerald-600 uppercase tracking-widest">
-              ✓ Manuale generato — rivedi e salva
-            </h3>
-            <button onClick={() => setShowGenerated(false)}
-              className="text-xs text-slate-400 hover:text-slate-600 font-bold">Chiudi anteprima</button>
-          </div>
-
-          {/* Solo superadmin può modificare il testo */}
-          {canGenerate ? (
-            <textarea
-              value={generatedText}
-              onChange={e => setGeneratedText(e.target.value)}
-              rows={20}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-800 font-mono leading-relaxed outline-none focus:border-amber-400 resize-y"
-            />
-          ) : (
-            <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">
-              {generatedText}
-            </div>
-          )}
-
           <div>
             <label className={LBL}>Note di revisione (opzionale)</label>
             <input type="text" value={revNote} onChange={e => setRevNote(e.target.value)}
               className={INP} placeholder="es. Prima emissione, aggiornamento R-HACCP, variazione fornitore..." />
           </div>
-          <div className="flex justify-end gap-3">
-            <button onClick={() => { setShowGenerated(false); setGeneratedText(''); }}
-              className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">
-              Scarta
+          <div className="flex justify-center gap-3 flex-wrap">
+            <button
+              onClick={handleSalvaManuale}
+              disabled={saving}
+              className="flex items-center gap-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-all text-sm"
+            >
+              {saving
+                ? <><Loader2 size={18} className="animate-spin" /> Generazione in corso...</>
+                : <><ChefHat size={18} /> Genera e Salva Manuale HACCP</>
+              }
             </button>
-            <button onClick={handleSalvaManuale} disabled={saving}
-              className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-black hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-md">
-              {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-              {saving ? 'Salvataggio...' : 'Salva manuale'}
+            <button
+              onClick={handleSalvaModulistica}
+              disabled={savingMod}
+              className="flex items-center gap-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-all text-sm"
+            >
+              {savingMod
+                ? <><Loader2 size={18} className="animate-spin" /> Generazione...</>
+                : <><ClipboardList size={18} /> Genera Modulistica HACCP</>
+              }
             </button>
           </div>
         </section>

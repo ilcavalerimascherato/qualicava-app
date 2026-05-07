@@ -237,117 +237,6 @@ Usa ESATTAMENTE questi titoli in maiuscolo:
 `.trim(),
   },
 
-  // ── 8. HACCP → Manuale struttura ────────────────────────────
-  haccpManuale: {
-    required: ['facilityName', 'modello', 'lr', 'rHaccp'],
-    build: ({
-      facilityName, pivaOsa, udoName, region, address, bedCount,
-      modello, fornitoreNome, fornitorePiva, fornitoreScia,
-      lr, rHaccp, teamHaccp = [], redattore, revPrecedente, revCorrente, dataRevisione,
-      nucleiNote, orariDistribuzione,
-      apparecchiature,
-      macchinettaColazioni, macchinettaNote,
-      distributoreAcqua, distributoreNote,
-      opDisfagici, opDisfagiciNote,
-      opCenaAbbattuta, opCenaAbbatutaNote,
-      opCarrelloTermico,
-      opCucinette, opCucinetteNote,
-      opSrtr, opMonousoInfetti, opRiabilitazione,
-      opCeliaciaNote, noteOperative,
-      sezioni = [],
-      isUdoPsi = false,
-    }) => {
-      const isCucinaInterna = modello === 'cucina_interna';
-      const isAppalto       = modello === 'appalto_fresco_caldo';
-
-      const modelloLabel = {
-        cucina_interna:          'CUCINA INTERNA – produzione diretta dei pasti da parte del personale OSA',
-        appalto_fresco_caldo:    'CUCINA IN APPALTO – pasti prodotti da fornitore in cucina presente in struttura; nostro personale distribuisce e sporziona',
-        distribuzione_veicolata: 'DISTRIBUZIONE VEICOLATA – pasti pronti da centro cottura esterno; nostro personale riceve, eventualmente riscalda, porziona e distribuisce. NON gestiamo fasi di produzione.',
-      }[modello] || modello;
-
-
-      const fasiCompetenza = isCucinaInterna
-        ? 'Ricevimento derrate, stoccaggio, preparazione, cottura, raffreddamento, porzionamento, distribuzione, lavaggio stoviglie, sanificazione.'
-        : isAppalto
-        ? `Ricevimento pasti dal fornitore, stoccaggio breve pasti abbattuti, riattivazione, porzionamento, distribuzione, raccolta, lavaggio stoviglie, sanificazione refettori.
-IMPORTANTE: le fasi di produzione (cottura, preparazione) sono di esclusiva competenza del FORNITORE con propria SCIA e proprio HACCP. Non descrivere la loro cucina.`
-        : `Ricevimento pasti pronti/abbattuti in contenitori isotermici, stoccaggio brevissimo, riattivazione a caldo (se abbattuti ≥75°C al cuore), porzionamento, distribuzione vassoi, raccolta, lavaggio stoviglie, sanificazione locali.
-IMPORTANTE: la cucina è del FORNITORE${fornitoreNome ? ' (' + fornitoreNome + ')' : ''}. Non gestiamo produzione. Non monitoriamo i loro frigoriferi (F1, C1 del fornitore non sono nostri). Il CCP principale è la temperatura di ricezione pasti.`;
-
-      const teamRighe = teamHaccp.filter(m => m.ruolo)
-        .map(m => `${m.ruolo}: ${m.nome || '(da nominare)'}`).join('\n');
-
-
-      return `Sei un esperto di sicurezza alimentare e normativa HACCP italiana.
-Genera il contenuto testuale personalizzato per il Manuale HACCP di ${facilityName}.
-
-━━ CONTESTO STRUTTURA ━━
-Struttura / OSA: ${facilityName}
-Tipo: ${udoName || 'struttura socio-sanitaria'}
-Regione: ${region || '—'} | Indirizzo: ${address || '—'}
-${bedCount ? 'Posti letto: ' + bedCount : ''}
-Modello ristorazione: ${modelloLabel}
-${fornitoreNome ? 'Fornitore pasti: ' + fornitoreNome : ''}
-Legale Rappresentante: ${lr}
-Responsabile HACCP: ${rHaccp}
-${teamRighe}
-
-━━ SPECIFICITÀ OPERATIVE ━━
-${fasiCompetenza}
-Disfagici: ${opDisfagici ? 'SÌ – ' + (opDisfagiciNote || 'Nucleo AS, frigo FD dedicato piano interrato') : 'NO'}
-${opCenaAbbattuta ? 'Cena con teglie abbattute: SÌ – ' + (opCenaAbbatutaNote || 'riattivazione ≥75°C al cuore') : ''}
-${opMonousoInfetti ? 'Isolamento infettivo con vassoio monouso: SÌ' : ''}
-${opCeliaciaNote ? 'Note celiachia/allergeni: ' + opCeliaciaNote : ''}
-${nucleiNote ? 'Note nuclei/locali: ' + nucleiNote : ''}
-${orariDistribuzione ? 'Orari distribuzione: ' + orariDistribuzione : ''}
-${noteOperative ? 'Note operative aggiuntive: ' + noteOperative : ''}
-
-━━ ISTRUZIONI TASSATIVE ━━
-- Scrivi SOLO testo puro: NO markdown (no #, **, tabelle |, frecce →)
-- NO diagrammi di flusso (già generati automaticamente)
-- NO tabelle (già generate automaticamente)
-- NO titoli di sezione (già presenti nel documento)
-- Ogni paragrafo su riga separata
-- Bullet point con • (punto elenco) o numerati con 1. 2. 3.
-- Grassetto: NON usare ** — il testo è già formattato dal sistema
-- Lunghezza: 3-6 paragrafi per sezione, concisi e operativi
-- Tono: professionale, diretto, orientato all'operatore ASA/OSS
-- Riferimenti normativi: Reg. CE 852/2004, D.Lgs 27/2021, Reg. UE 2021/382
-- NON includere: copertina, indice, registro revisioni, sezioni 3-6, 8-12 (già generate)
-- USA "vassoio" (mai "vascello") e "macchinetta colazioni" (mai "macchinetta caffè")
-
-━━ GENERA ESATTAMENTE QUESTE SEZIONI con i marcatori indicati ━━
-
-===SEZ_1===
-Scrivi 2-3 paragrafi che introducono il manuale specificando:
-- Il contesto operativo specifico di ${facilityName}
-- Il modello di ristorazione adottato (${modelloLabel})
-- Il fornitore esterno${fornitoreNome ? ' ' + fornitoreNome : ''} e il perimetro di competenza OSA
-- L'impegno della struttura verso la sicurezza alimentare
-
-===SEZ_1b===
-Scrivi il campo di applicazione specifico: elenca con bullet • le fasi di competenza OSA di ${facilityName} (ricevimento, stoccaggio, riattivazione se prevista, porzionamento, distribuzione, raccolta, lavaggio, sanificazione). Poi elenca cosa NON rientra nel campo (fasi del fornitore).
-
-===SEZ_1c===
-Elenca con bullet • le normative di riferimento applicabili: Reg. CE 852/2004, Reg. UE 2021/382, D.Lgs 27/2021, Reg. CE 178/2002, Reg. UE 1169/2011, D.Lgs 231/2001, Reg. CE 2073/2005, D.Lgs 31/2001 (acqua potabile). Per ciascuna una riga con titolo e breve oggetto.
-
-===SEZ_2===
-Scrivi 2-3 paragrafi che descrivono il programma prerequisiti specifico per ${facilityName}: come la struttura gestisce igiene del personale, pulizia e sanificazione, approvvigionamento idrico, controllo infestanti. Personalizza in base al modello ${modelloLabel}.
-
-===SEZ_4===
-Descrivi in 2-3 paragrafi il layout specifico della struttura${nucleiNote ? ' considerando: ' + nucleiNote : ''}: organizzazione per nuclei, cucinette, locali di supporto. Includi eventuali specificità operative rilevanti per l'HACCP (percorsi sporco/pulito, zone di stoccaggio).
-
-===SEZ_7===
-Scrivi contenuto operativo per la gestione celiachia e allergeni specifica di ${facilityName}:
-• Come comunicare le allergie al momento dell'ammissione
-• Come Sodexo SpA${fornitoreNome && fornitoreNome !== 'Sodexo SpA' ? ' / ' + fornitoreNome : ''} identifica i pasti celiaci
-• La regola del pasto celiaco servito per primo
-• Come prevenire contaminazione incrociata nelle cucinette${opCeliaciaNote ? ' — Nota specifica: ' + opCeliaciaNote : ''}
-
-`;
-    },
-  },
 
   // ── 9. DocMASTER → Analisi documento ─────────────────────────
   docMasterAnalisi: {
@@ -396,6 +285,5 @@ export const buildPromptOperatoreDirezione = (p) => buildPrompt('operatoreDirezi
 export const buildPromptGlobaleBoard     = (p) => buildPrompt('globaleBoard',     p);
 export const buildPromptKpiMensile       = (p) => buildPrompt('kpiMensile',       p);
 export const buildPromptKpiPeriodo       = (p) => buildPrompt('kpiPeriodo',       p);
-export const buildPromptHaccpManuale     = (p) => buildPrompt('haccpManuale',     p);
 
 export const docMasterAnalisi = PROMPT_REGISTRY.docMasterAnalisi;
