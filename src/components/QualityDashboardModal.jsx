@@ -126,6 +126,12 @@ export default function QualityDashboardModal({
     window.location.href = `mailto:?bcc=${mailingList.map(r => r.email).join(';')}`;
   };
 
+  // Conteggio NC aperte/pending — usato per badge tab e header
+  const ncOpenCount = useMemo(
+    () => ncs.filter(n => n.stato === 'Aperto' || n.stato === 'Pending').length,
+    [ncs]
+  );
+
   // ── NC filtrate ───────────────────────────────────────────────
   const filteredNcs = useMemo(() => ncs.filter(nc => {
     const fname   = nc.facilities?.name?.toLowerCase() || '';
@@ -152,7 +158,7 @@ export default function QualityDashboardModal({
     });
     return {
       byStatus, bySeverity, byCategory, byUdo,
-      aperte:   (byStatus['aperta'] || 0) + (byStatus['in_lavorazione'] || 0),
+      aperte:   (byStatus['Aperto'] || 0) + (byStatus['Pending'] || 0),
       risolte:  byStatus['risolta'] || 0,
       totale:   ncs.length,
       critiche: bySeverity['critica'] || 0,
@@ -193,8 +199,20 @@ export default function QualityDashboardModal({
           <div className="flex items-center gap-4">
             <div className="p-2.5 bg-rose-600 rounded-lg text-white"><CheckCircle2 size={22} /></div>
             <div>
-              <h2 className="text-xl font-black text-white uppercase tracking-wider">Dashboard Qualità</h2>
-              <p className="text-xs text-rose-400 font-bold uppercase tracking-widest">Gestione qualità e conformità — HQ</p>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-black text-white uppercase tracking-wider">Dashboard Qualità</h2>
+                {!loadingNc && ncOpenCount > 0 && (
+                  <span className="min-w-[22px] h-[22px] bg-rose-500 text-white text-[11px] font-black rounded-full flex items-center justify-center px-1.5 leading-none shadow">
+                    {ncOpenCount > 99 ? '99+' : ncOpenCount}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-rose-400 font-bold uppercase tracking-widest">
+                Gestione qualità e conformità — HQ
+                {!loadingNc && ncOpenCount > 0 && (
+                  <span className="ml-2 text-rose-300">· {ncOpenCount} NC aperte/pending</span>
+                )}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition-colors"><X size={26} /></button>
@@ -210,6 +228,11 @@ export default function QualityDashboardModal({
                   : 'border-transparent text-slate-400 hover:text-slate-600'
               }`}>
               <Icon size={14} /> {label}
+              {id === 'nc_list' && !loadingNc && ncOpenCount > 0 && (
+                <span className="min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none">
+                  {ncOpenCount > 99 ? '99+' : ncOpenCount}
+                </span>
+              )}
             </button>
           ))}
         </div>

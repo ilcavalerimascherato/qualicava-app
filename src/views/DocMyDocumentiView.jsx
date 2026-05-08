@@ -4,7 +4,7 @@ import {
   FileText, Download, Loader2, FolderOpen, AlertTriangle,
   CheckCircle2, Clock, Star, Pill, Shield, Apple, Droplets,
   FolderPlus, Plus, Pencil, Send, Archive, X,
-  Stethoscope, BookOpen, HardHat, BarChart2
+  Stethoscope, BookOpen, HardHat, BarChart2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
@@ -14,7 +14,7 @@ import {
   logAccesso,
   getDocStruttura,
   inviaAQualita,
-  setDocStrutturaObsoleto
+  setDocStrutturaObsoleto,
 } from '../services/documentiService';
 import DocStrutturaProprioModal from '../components/DocStrutturaProprioModal';
 
@@ -32,7 +32,7 @@ const CAT_STYLE = {
   PCA: { bg: 'bg-blue-50',    icon: Stethoscope,    iconColor: 'text-blue-600',    badge: 'bg-blue-100 text-blue-700'    },
   CDS: { bg: 'bg-violet-50',  icon: BookOpen,       iconColor: 'text-violet-600',  badge: 'bg-violet-100 text-violet-700'},
   SSL: { bg: 'bg-amber-50',   icon: HardHat,        iconColor: 'text-amber-600',   badge: 'bg-amber-100 text-amber-700'  },
-  RDD: { bg: 'bg-cyan-50',    icon: BarChart2,      iconColor: 'text-cyan-600',    badge: 'bg-cyan-100 text-cyan-700'    }
+  RDD: { bg: 'bg-cyan-50',    icon: BarChart2,      iconColor: 'text-cyan-600',    badge: 'bg-cyan-100 text-cyan-700'    },
 };
 const CAT_DEFAULT = { bg: 'bg-slate-50', icon: FileText, iconColor: 'text-slate-400', badge: 'bg-slate-100 text-slate-600' };
 
@@ -41,7 +41,7 @@ const CAT_DEFAULT = { bg: 'bg-slate-50', icon: FileText, iconColor: 'text-slate-
 const STATO_STR_BADGE = {
   bozza:           { label: 'Bozza',                cls: 'bg-slate-100 text-slate-600'    },
   inviato_qualita: { label: 'In revisione Qualità', cls: 'bg-amber-100 text-amber-700'    },
-  approvato:       { label: 'Approvato',            cls: 'bg-emerald-100 text-emerald-700' }
+  approvato:       { label: 'Approvato',            cls: 'bg-emerald-100 text-emerald-700' },
 };
 
 function scadenzaBadge(dateStr) {
@@ -60,15 +60,19 @@ function DocCard({ istanza, facilityData, onDownload }) {
   const style  = CAT_STYLE[doc.categoria] ?? CAT_DEFAULT;
   const Icon   = style.icon;
   const scad   = scadenzaBadge(doc.data_scadenza);
-  const isNuovo    = !istanza.primo_accesso;
-  const isUpdated  = istanza.generato_il && istanza.primo_accesso &&
-    new Date(istanza.generato_il) > new Date(istanza.primo_accesso);
+  const isNuovo    = !istanza.primo_accesso_il;
+  const isUpdated  = istanza.generato_il && istanza.primo_accesso_il &&
+    new Date(istanza.generato_il) > new Date(istanza.primo_accesso_il);
   const [loading, setLoading] = useState(false);
 
   const handleClick = useCallback(async () => {
     if (loading) return;
     setLoading(true);
     try { await onDownload(istanza, facilityData); }
+    catch (err) {
+      const msg = err?.message || err?.error_description || JSON.stringify(err);
+      alert('Errore download: ' + msg);
+    }
     finally { setLoading(false); }
   }, [loading, onDownload, istanza, facilityData]);
 
@@ -98,7 +102,10 @@ function DocCard({ istanza, facilityData, onDownload }) {
       </div>
 
       <div className="flex-1">
-        <p className="font-black text-slate-800 text-sm leading-tight line-clamp-2">{doc.titolo}</p>
+        {doc.titolo
+          ? <p className="font-black text-slate-800 text-sm leading-tight line-clamp-2">{doc.titolo}</p>
+          : <p className="font-black text-slate-400 italic text-sm leading-tight">Titolo non disponibile</p>
+        }
         <p className="text-[11px] text-slate-500 font-bold mt-0.5">{doc.codice_documento}</p>
         {doc.revisione_corrente && (
           <p className="text-[10px] text-slate-400 font-bold mt-0.5">Rev. {doc.revisione_corrente}</p>
@@ -113,25 +120,32 @@ function DocCard({ istanza, facilityData, onDownload }) {
         ) : <span />}
 
         <div className="flex items-center gap-1 text-[10px] text-slate-400">
-          {istanza.primo_accesso
+          {istanza.primo_accesso_il
             ? <><CheckCircle2 size={10} className="text-emerald-500" /> Scaricato</>
             : <><Clock size={10} /> Non ancora</>
           }
         </div>
       </div>
 
-      <button
-        onClick={handleClick}
-        disabled={loading}
-        className="w-full flex items-center justify-center gap-2 bg-white text-slate-700 border border-slate-200
-          rounded-xl py-2 text-xs font-black uppercase hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200
-          transition-all disabled:opacity-50"
-      >
-        {loading
-          ? <><Loader2 size={13} className="animate-spin" /> Compilazione…</>
-          : <><Download size={13} /> Scarica .docx</>
-        }
-      </button>
+      {doc.file_url_master ? (
+        <button
+          onClick={handleClick}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 bg-white text-slate-700 border border-slate-200
+            rounded-xl py-2 text-xs font-black uppercase hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200
+            transition-all disabled:opacity-50"
+        >
+          {loading
+            ? <><Loader2 size={13} className="animate-spin" /> Compilazione…</>
+            : <><Download size={13} /> Scarica .docx</>
+          }
+        </button>
+      ) : (
+        <div className="w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-400
+          rounded-xl py-2 text-xs font-bold border border-slate-200">
+          <AlertTriangle size={13} /> File non ancora disponibile
+        </div>
+      )}
     </div>
   );
 }
@@ -172,30 +186,49 @@ export default function DocMyDocumentiView() {
     setLoading(true);
     setError('');
 
-    Promise.all([
-      supabase
-        .from('doc_istanze')
-        .select('*, doc_master(*)')
-        .eq('facility_id', facilityId)
-        .order('generato_il', { ascending: false }),
-      supabase
+    // Step 1: carica istanze
+    supabase
+      .from('doc_istanze')
+      .select('*')
+      .eq('facility_id', facilityId)
+      .order('generato_il', { ascending: false })
+    .then(async ({ data: ist, error: e1 }) => {
+      if (e1) { setError(e1.message); setLoading(false); return; }
+      const istanze = ist ?? [];
+
+      // Step 2: carica i doc_master solo per gli id che servono
+      const masterIds = [...new Set(istanze.map(i => i.master_id).filter(Boolean))];
+      const mastersMap = {};
+      if (masterIds.length > 0) {
+        const { data: masters } = await supabase
+          .from('doc_master')
+          .select('*')
+          .in('id', masterIds);
+        (masters ?? []).forEach(m => { mastersMap[m.id] = m; });
+      }
+
+      // Step 3: carica facility
+      const { data: fac, error: e3 } = await supabase
         .from('facilities')
         .select('id, name, address, region, director, director_sanitario, email_direzione, bed_count, company_id, companies(name), udos(name)')
         .eq('id', facilityId)
-        .single(),
-    ]).then(([{ data: ist, error: e1 }, { data: fac, error: e2 }]) => {
-      if (e1) { setError(e1.message); return; }
-      if (e2) { setError(e2.message); return; }
-      setIstanze(ist ?? []);
+        .single();
+      if (e3) { setError(e3.message); setLoading(false); return; }
+
+      const istConMaster = istanze.map(i => ({
+        ...i,
+        doc_master: mastersMap[i.master_id] ?? null,
+      }));
+      setIstanze(istConMaster);
       if (fac) {
         setFacilityData({
           ...fac,
           ragione_sociale: fac.companies?.name ?? '',
-          udo_tipo:        fac.udos?.name       ?? ''
+          udo_tipo:        fac.udos?.name       ?? '',
         });
       }
-    }).catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+      setLoading(false);
+    }).catch(e => { setError(e.message); setLoading(false); });
   }, [facilityId]);
 
   // Carica documenti propri struttura
@@ -261,7 +294,10 @@ export default function DocMyDocumentiView() {
 
   const handleDownload = useCallback(async (istanza, fData) => {
     const doc = istanza.doc_master;
-    if (!doc?.file_url_master) throw new Error('Percorso file non trovato');
+    if (!doc?.file_url_master) {
+      alert("Il file del documento non è ancora disponibile. Contatta l'Ufficio Qualità.");
+      return;
+    }
 
     const buffer = await downloadMasterFile(doc.file_url_master);
     const blob   = await compileDocumento(buffer, fData, doc);
@@ -281,8 +317,8 @@ export default function DocMyDocumentiView() {
     // Aggiorna stato localmente
     setIstanze(prev => prev.map(i =>
       i.id === istanza.id
-        ? { ...i, accesso_count: (i.accesso_count ?? 0) + 1, ultimo_accesso: new Date().toISOString(),
-            primo_accesso: i.primo_accesso || new Date().toISOString() }
+        ? { ...i, accesso_count: (i.accesso_count ?? 0) + 1, ultimo_accesso_il: new Date().toISOString(),
+            primo_accesso_il: i.primo_accesso_il || new Date().toISOString() }
         : i
     ));
   }, []);

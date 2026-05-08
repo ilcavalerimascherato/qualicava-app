@@ -4,13 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
   Settings, LogOut, ShieldCheck, ChefHat,
-  Search, Grid2X2, Grid3X3, LayoutGrid, FileSignature, BarChart2, PawPrint, FileText
+  Search, Grid2X2, Grid3X3, LayoutGrid, FileSignature, BarChart2, PawPrint, FileText, Trophy
 } from 'lucide-react';
 
 import { useAuth }                                           from './contexts/AuthContext';
 import { useModals }                                         from './contexts/ModalContext';
 import { useDashboardData, useInvalidate }                   from './hooks/useDashboardData';
 import { useHaccpSemafori }                                  from './hooks/useHaccpData';
+import { useBadgeCounts }                                    from './hooks/useBadgeCounts';
 import { facilityService, questionnaireService, udoService } from './services/supabaseService';
 import { getDocumentiInScadenza }                            from './services/documentiService';
 import { enrichFacilitiesData, calculateDashboardStats }     from './utils/statusCalculator';
@@ -30,6 +31,7 @@ import KpiHubModal        from './components/KpiHubModal';
 import KpiLaserModal      from './components/KpiLaserModal';
 import KpiXrayModal           from './components/KpiXrayModal';
 import QualityDashboardModal  from './components/QualityDashboardModal';
+import RankingModal           from './components/RankingModal';
 import NotificheDropdown      from './components/NotificheDropdown';
 
 export default function App() {
@@ -70,6 +72,9 @@ export default function App() {
     const stats = calculateDashboardStats(withHaccp, 'all');
     return { list: withHaccp, ...stats };
   }, [data.facilities, data.surveys, data.kpiRecords, data.udos, year, haccpSemafori]);
+
+  const allFacilityIds = useMemo(() => processedData.list.map(f => f.id), [processedData.list]);
+  const { totals: badgeTotals } = useBadgeCounts(allFacilityIds);
 
   const filteredFacilities = useMemo(() => {
     return processedData.list.filter(f => {
@@ -196,16 +201,26 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate('/master')}
-              className="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
+              className="relative bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
             >
               <ChefHat size={14} /> HACCP
+              {badgeTotals.haccp > 0 && (
+                <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] ${badgeTotals.haccpRossi > 0 ? 'bg-rose-500' : 'bg-amber-500'} text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow`}>
+                  {badgeTotals.haccp > 99 ? '99+' : badgeTotals.haccp}
+                </span>
+              )}
             </button>
 
             <button
               onClick={() => navigate('/documenti')}
-              className="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
+              className="relative bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
             >
               <FileText size={14} /> Documenti
+              {badgeTotals.documenti > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow">
+                  {badgeTotals.documenti > 99 ? '99+' : badgeTotals.documenti}
+                </span>
+              )}
             </button>
 
             <button
@@ -216,17 +231,34 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => open('qualityDashboard')}
+              onClick={() => open('ranking')}
               className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
             >
+              <Trophy size={14} /> Ranking
+            </button>
+
+            <button
+              onClick={() => open('qualityDashboard')}
+              className="relative bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
+            >
               <ShieldCheck size={14} /> Qualità
+              {badgeTotals.nc > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow">
+                  {badgeTotals.nc > 99 ? '99+' : badgeTotals.nc}
+                </span>
+              )}
             </button>
 
             <button
               onClick={() => open('kpiHub')}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
+              className="relative bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
             >
               <BarChart2 size={14} /> KPI
+              {badgeTotals.kpi > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-blue-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow">
+                  {badgeTotals.kpi > 99 ? '99+' : badgeTotals.kpi}
+                </span>
+              )}
             </button>
 
             {isAdmin && (
@@ -527,6 +559,11 @@ export default function App() {
         surveys={data.surveys}
         year={Number(year)}
         isSuperAdmin={profile?.role === 'superadmin'}
+      />
+      <RankingModal
+        isOpen={modals.ranking}
+        onClose={() => close('ranking')}
+        facilities={processedData.list}
       />
     </div>
   );

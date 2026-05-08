@@ -248,6 +248,24 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
     op_distributore_acqua:       false,
     op_distributore_acqua_note:  '',
     op_celiachia_note:           '',
+    // Cucina interna — sezioni aggiuntive
+    op_abbattitore:              false,
+    op_abbattitore_note:         '',
+    op_frittura:                 false,
+    op_affettatrice:             false,
+    op_pasto_campione:           false,
+    op_accesso_esterni:          false,
+    op_moca_note:                '',
+    descrizione_ambienti:        '',
+    // Piano analisi microbiologiche
+    analisi_problemi_recenti:    false,
+    analisi_acqua_bottiglia:     null,   // null = non ancora risposto
+    analisi_frequenze: {
+      superfici:    'annuale',
+      mani:         'annuale',
+      stoviglie:    'annuale',
+      acqua:        'annuale',
+    },
   };
 
   const [form, setForm]     = useState(EMPTY);
@@ -295,6 +313,17 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_distributore_acqua:       sa.op_distributore_acqua            || false,
         op_distributore_acqua_note:  sa.op_distributore_acqua_note       || '',
         op_celiachia_note:           sa.op_celiachia_note                || '',
+        op_abbattitore:              sa.op_abbattitore              || false,
+        op_abbattitore_note:         sa.op_abbattitore_note         || '',
+        op_frittura:                 sa.op_frittura                 || false,
+        op_affettatrice:             sa.op_affettatrice             || false,
+        op_pasto_campione:           sa.op_pasto_campione           || false,
+        op_accesso_esterni:          sa.op_accesso_esterni          || false,
+        op_moca_note:                sa.op_moca_note                || '',
+        descrizione_ambienti:        sa.descrizione_ambienti        || '',
+        analisi_problemi_recenti:    sa.analisi_problemi_recenti    || false,
+        analisi_acqua_bottiglia:     sa.analisi_acqua_bottiglia     ?? null,
+        analisi_frequenze:           sa.analisi_frequenze           || { superfici:'annuale', mani:'annuale', stoviglie:'annuale', acqua:'annuale' },
       });
     }
   }, [profilo]);
@@ -333,6 +362,17 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_distributore_acqua:   form.op_distributore_acqua,
         op_distributore_acqua_note: form.op_distributore_acqua_note,
         op_celiachia_note:       form.op_celiachia_note,
+        op_abbattitore:          form.op_abbattitore,
+        op_abbattitore_note:     form.op_abbattitore_note,
+        op_frittura:             form.op_frittura,
+        op_affettatrice:         form.op_affettatrice,
+        op_pasto_campione:       form.op_pasto_campione,
+        op_accesso_esterni:      form.op_accesso_esterni,
+        op_moca_note:            form.op_moca_note,
+        descrizione_ambienti:    form.descrizione_ambienti,
+        analisi_problemi_recenti: form.analisi_problemi_recenti,
+        analisi_acqua_bottiglia:  form.analisi_acqua_bottiglia,
+        analisi_frequenze:        form.analisi_frequenze,
       };
       const payload = {
         struttura_id:                facility.id,
@@ -531,7 +571,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
       </section>
 
       {/* Note operative strutturate per modello */}
-      <NoteOperativeSection form={form} set={set} modello={form.modello_ristorazione} />
+      <NoteOperativeSection form={form} set={set} setForm={setForm} modello={form.modello_ristorazione} />
 
       {/* Sezioni manuale e dati revisione */}
       <section className="space-y-5">
@@ -625,6 +665,95 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
             );
           })}
         </div>
+
+        {/* ── Configuratore piano analisi microbiologiche ────── */}
+        {form.sezioni_manuale.includes('microbio') && (
+          <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl p-4 space-y-4">
+            <p className="text-sm font-black text-indigo-800">🔬 Configurazione Piano Analisi Microbiologiche</p>
+
+            {/* Domanda 1: problemi recenti */}
+            <div>
+              <p className="text-xs font-bold text-slate-700 mb-2">
+                Negli ultimi 12 mesi si sono verificati problemi microbiologici
+                (non conformità analitiche, episodi gastroenterici, segnalazioni ASL/NAS)?
+              </p>
+              <div className="flex gap-3">
+                {[{v: false, label: 'NO — campionamento standard annuale'},
+                  {v: true,  label: 'SÌ — definisci frequenze per tipologia'}].map(({v, label}) => (
+                  <button key={String(v)}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, analisi_problemi_recenti: v }))}
+                    className={`flex-1 text-xs font-bold px-3 py-2 rounded-xl border-2 transition-all ${
+                      form.analisi_problemi_recenti === v
+                        ? 'border-indigo-500 bg-indigo-100 text-indigo-800'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Frequenze per tipologia — solo se problemi recenti */}
+            {form.analisi_problemi_recenti && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-700">Frequenza campionamenti:</p>
+                {[
+                  { k: 'superfici', label: 'Superfici e piani di lavoro (per cucinetta)' },
+                  { k: 'mani',      label: 'Mani operatore (post igiene mani)' },
+                  { k: 'stoviglie', label: 'Stoviglie o attrezzature (a campione)' },
+                  { k: 'acqua',     label: 'Acqua potabile (rubinetto cucina)' },
+                ].map(({ k, label }) => (
+                  <div key={k} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-indigo-200">
+                    <span className="text-xs text-slate-700">{label}</span>
+                    <select
+                      value={form.analisi_frequenze?.[k] || 'annuale'}
+                      onChange={e => setForm(f => ({ ...f, analisi_frequenze: { ...f.analisi_frequenze, [k]: e.target.value } }))}
+                      className="text-xs border border-indigo-300 rounded-lg px-2 py-1 bg-indigo-50 text-indigo-800 font-bold"
+                    >
+                      {['annuale','semestrale','trimestrale','mensile'].map(v => (
+                        <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Domanda 2: acqua (solo se NON ha distributore acqua) */}
+            {!form.op_distributore_acqua && (
+              <div>
+                <p className="text-xs font-bold text-slate-700 mb-2">
+                  Gli ospiti bevono acqua in bottiglia?
+                </p>
+                <div className="flex gap-3">
+                  {[{v: true,  label: 'SÌ — bottiglia (campionamento solo rubinetto cucina)'},
+                    {v: false, label: 'NO — acqua di rete (campionamento rubinetto cucina + punto rete ospiti)'}].map(({v, label}) => (
+                    <button key={String(v)}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, analisi_acqua_bottiglia: v }))}
+                      className={`flex-1 text-xs font-bold px-3 py-2 rounded-xl border-2 transition-all ${
+                        form.analisi_acqua_bottiglia === v
+                          ? 'border-indigo-500 bg-indigo-100 text-indigo-800'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}
+                    >{label}</button>
+                  ))}
+                </div>
+                {form.analisi_acqua_bottiglia === false && (
+                  <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2 border border-amber-200">
+                    ⚠️ Includere nel piano: campionamento punto/i rete distribuzione ospiti — annuale (D.Lgs. 18/2023)
+                  </p>
+                )}
+              </div>
+            )}
+
+            {form.op_distributore_acqua && (
+              <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-200">
+                ✓ Distributore/microfiltratore: potabilità garantita dal fornitore (certificato annuale). Campionamento interno: solo rubinetto cucina.
+              </p>
+            )}
+          </div>
+        )}
 
         <p className="text-[10px] text-slate-400 italic">
           Le sezioni relative a ospiti disfagici, SRTR, pazienti infetti, teglie abbattute e riabilitazione
@@ -1199,6 +1328,17 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         opMonousoInfetti:          sa.op_monouso_infetti          || false,
         opCarrelloTermico:         sa.op_carrello_termico         || false,
         opCeliaciaNote:            sa.op_celiachia_note           || '',
+        descrizioneAmbienti:       sa.descrizione_ambienti        || '',
+        opMocaNote:                sa.op_moca_note                || '',
+        opAbbattitore:             sa.op_abbattitore              || false,
+        opAbbattitoreNote:         sa.op_abbattitore_note         || '',
+        opFrittura:                sa.op_frittura                 || false,
+        opAffettatrice:            sa.op_affettatrice             || false,
+        opPastoCampione:           sa.op_pasto_campione           || false,
+        opAccessoEsterni:          sa.op_accesso_esterni          || false,
+        analisiProblemiRecenti:    sa.analisi_problemi_recenti    || false,
+        analisiAcquaBottiglia:     sa.analisi_acqua_bottiglia     ?? null,
+        analisiFrequenze:          sa.analisi_frequenze           || { superfici:'annuale', mani:'annuale', stoviglie:'annuale', acqua:'annuale' },
         opCucinetteNote:           sa.op_cucinette_note           || '',
         opDistributoreAcqua:       sa.op_distributore_acqua       || false,
         opDistributoreNote:        sa.op_distributore_acqua_note  || '',
@@ -1827,7 +1967,7 @@ function FormazioneTab({ facility, formazione, invalidate, canEdit }) {
 // COMPONENTE NOTE OPERATIVE — campi specifici per modello
 // Alimentano direttamente il prompt di generazione del manuale
 // ══════════════════════════════════════════════════════════════
-function NoteOperativeSection({ form, set, modello }) {
+function NoteOperativeSection({ form, set, setForm, modello }) {
   const isCucinaInterna = modello === 'cucina_interna';
   const isAppalto       = modello === 'appalto_fresco_caldo';
   const isVeicolato     = modello === 'distribuzione_veicolata';
@@ -2074,6 +2214,69 @@ function NoteOperativeSection({ form, set, modello }) {
             placeholder="es. 3 ospiti celiaci: dieta gluten-free certificata, preparazione separata con utensili dedicati, fornitore con certificazione prodotti gluten-free." />
         </div>
       </div>
+
+      {/* ── DESCRIZIONE AMBIENTI (sempre visibile) ── */}
+      <div className="space-y-3">
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Descrizione ambienti e locali</p>
+        <div>
+          <label className={LBL}>Layout struttura, nuclei, locali di pertinenza OSA</label>
+          <textarea value={form.descrizione_ambienti} onChange={set('descrizione_ambienti')} rows={3} className={INP}
+            placeholder="es. Struttura su 3 nuclei. Cucinetta nucleo A: piano terra, FR1, scaldavivande. Magazzino derrate: piano seminterrato con zanzariera. Lavanderia stoviglie comune al piano -1." />
+        </div>
+      </div>
+
+      {/* ── MOCA (sempre visibile) ── */}
+      <div className="space-y-3">
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">MOCA — Materiali a contatto con alimenti</p>
+        <div>
+          <label className={LBL}>Note specifiche sui materiali utilizzati (opzionale)</label>
+          <textarea value={form.op_moca_note} onChange={set('op_moca_note')} rows={2} className={INP}
+            placeholder="es. Utilizzo di contenitori GN in acciaio inox 18/10 certificati FDA. Pellicola PVC solo per freddo. Carta alluminio: vietato con acidi/salati." />
+        </div>
+      </div>
+
+      {/* ── CUCINA INTERNA — sezioni aggiuntive ── */}
+      {form.modello_ristorazione === 'cucina_interna' && (
+        <div className="space-y-4">
+          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Specificità cucina interna</p>
+
+          {/* Abbattitore */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <input type="checkbox" checked={form.op_abbattitore} onChange={e => setForm(f=>({...f,op_abbattitore:e.target.checked}))} className="accent-amber-500 w-4 h-4" />
+            <div className="flex-1">
+              <span className="text-sm font-bold text-slate-700">Abbattitore di temperatura presente</span>
+              {form.op_abbattitore && (
+                <input type="text" value={form.op_abbattitore_note} onChange={set('op_abbattitore_note')}
+                  className={INP + " mt-2"} placeholder="es. Abbattitore Irinox MF 35.2 — 35 kg/ciclo" />
+              )}
+            </div>
+          </div>
+
+          {/* Frittura */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <input type="checkbox" checked={form.op_frittura} onChange={e => setForm(f=>({...f,op_frittura:e.target.checked}))} className="accent-amber-500 w-4 h-4" />
+            <span className="text-sm font-bold text-slate-700">Si esegue frittura (attiva sezione acrilammide)</span>
+          </div>
+
+          {/* Affettatrice */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <input type="checkbox" checked={form.op_affettatrice} onChange={e => setForm(f=>({...f,op_affettatrice:e.target.checked}))} className="accent-amber-500 w-4 h-4" />
+            <span className="text-sm font-bold text-slate-700">Presente affettatrice</span>
+          </div>
+
+          {/* Pasto campione */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <input type="checkbox" checked={form.op_pasto_campione} onChange={e => setForm(f=>({...f,op_pasto_campione:e.target.checked}))} className="accent-amber-500 w-4 h-4" />
+            <span className="text-sm font-bold text-slate-700">Raccolta pasto campione giornaliero</span>
+          </div>
+
+          {/* Accesso esterni */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <input type="checkbox" checked={form.op_accesso_esterni} onChange={e => setForm(f=>({...f,op_accesso_esterni:e.target.checked}))} className="accent-amber-500 w-4 h-4" />
+            <span className="text-sm font-bold text-slate-700">Accesso cucina da esterni (fornitori, ispettori, delegati)</span>
+          </div>
+        </div>
+      )}
 
     </section>
   );

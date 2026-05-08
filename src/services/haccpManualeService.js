@@ -13,6 +13,10 @@ import {
 
 import { LOGO_A_BASE64, LOGO_B_BASE64 } from './logoBase64';
 
+// ── Variabili modulo (iniettate da generaManualeHaccp) ─────────
+let _forn   = 'Fornitore esterno';
+let _params = {};
+
 // ── Colori ────────────────────────────────────────────────────
 const VERDE        = '1D6F42';
 const VERDE_LIGHT  = 'E8F5EE';
@@ -70,6 +74,7 @@ const p = (children, opts = {}) => new Paragraph({
 // Titoli
 const h1 = (text) => p([r(text, { size: 28, bold: true, color: VERDE })], { before: 240, after: 160, borderBottom: true, borderSize: 8 });
 const h2 = (text) => p([r(text, { size: 22, bold: true, color: VERDE })], { before: 180, after: 100 });
+const h3 = (text) => p([r(text, { size: 20, bold: true, color: GRIGIO_TESTO })], { before: 120, after: 80 });
 
 // Paragrafo testo corpo (con bold inline **testo**)
 function txt(text, opts = {}) {
@@ -296,7 +301,7 @@ function diagramma51() {
   return [
     h2('5.1 Flusso Generale — Pasti Caldi (Pranzo)'),
     ...spacer(1),
-    dashedBox('Centro cottura esterno (Sodexo SpA)', 'Non gestito dalla struttura · SCIA esterna · Reg. CE 852/2004'),
+    dashedBox('Centro cottura esterno (' + _forn + ')', 'Non gestito dalla struttura · SCIA esterna · Reg. CE 852/2004'),
     arrow('Contenitori isotermici'),
     flowBox('Ricevimento contenitori isotermici pranzo (CCP1)', 'Verifica T° ≥65°C · Integrità confezione · Etichetta · Allergeni', C.teal),
     arrow(),
@@ -304,7 +309,7 @@ function diagramma51() {
     arrow(),
     flowBox('Porzionamento in vassoi identificati', 'Celiaci per primi · Verifica allergeni · Nominativo', C.gray),
     arrow(),
-    flowBox('Trasporto con carrello termico', 'Scomparto caldo ≥65°C · Max 20 min', C.teal),
+    flowBox('Trasporto con carrello e servizio immediato', 'Scomparto caldo ≥65°C · Max 20 min', C.teal),
     arrow(),
     flowBox('Distribuzione agli ospiti', 'Verifica nominativo · Doppio controllo dieta', C.green),
     arrow(),
@@ -320,17 +325,24 @@ function diagramma52() {
   return [
     h2('5.2 Flusso Pasti Abbattuti — Cena'),
     ...spacer(1),
-    dashedBox('Centro cottura esterno (Sodexo SpA)', 'Abbattimento e confezionamento pasti cena'),
+    dashedBox('Centro cottura esterno (' + _forn + ')', 'Abbattimento e confezionamento pasti cena'),
     arrow('Contenitori isotermici freddi'),
     flowBox('Ricevimento teglie abbattute (CCP1)', 'Verifica T° ≤4°C · Integrità etichetta · FIFO', C.blue),
     arrow(),
-    flowBox('Stoccaggio frigorifero di nucleo FR1-FR4', 'T° ≤4°C · Isolate da altri alimenti · Fino alle 17:30', C.blue),
+    ...((() => {
+      const appRaw = _params?.apparecchiatureFrigorifere || '';
+      const frReparti = appRaw.split('\n').map(r=>r.trim()).filter(r=>/^FR\d+/i.test(r.split(/[\u2013\-:]/)[0].trim()));
+      const label = frReparti.length > 0
+        ? frReparti.map(r=>r.split(/[\u2013\-:]/)[0].trim()).join(', ')
+        : 'FR1-FR4';
+      return [flowBox('Stoccaggio frigorifero di nucleo — ' + label, 'T° ≤4°C · Isolate da altri alimenti · Fino alle 17:30', C.blue)];
+    })()),
     arrow('Ore 17:30 — 1h prima cena'),
     flowBox('Riattivazione (CCP2)', 'Forno ≥75°C al cuore · Microonde ≥75°C al cuore · Sonda termometrica', C.coral),
     arrow(),
     flowBox('Porzionamento e identificazione vassoi', 'Nominativo · Allergeni · Celiaci per primi', C.gray),
     arrow(),
-    flowBox('Trasporto carrello termico ≥65°C', 'Max 20 min', C.teal),
+    flowBox('Trasporto con carrello e servizio immediato', '≥65°C · Max 20 min', C.teal),
     arrow(),
     flowBox('Distribuzione e verifica nominativo', null, C.green),
     arrow(),
@@ -344,13 +356,13 @@ function diagramma53() {
   return [
     h2('5.3 Flusso Pasti Disfagici — Nucleo AS'),
     ...spacer(1),
-    flowBox('Ricevimento pasto disfagico abbattuto da Sodexo', 'Teglione separato · T° ≤4°C · Verifica IDDSI level dichiarato', C.blue),
+    flowBox('Ricevimento pasto disfagico abbattuto da ' + _forn, 'Teglione separato · T° ≤4°C · Verifica IDDSI level dichiarato', C.blue),
     arrow(),
     flowBox('Identificazione nominativa ospite', 'Nome · Data ricezione · Consistenza IDDSI (L3/L4/L5/L6) · Scadenza', C.purple),
     arrow(),
     flowBox('Stoccaggio frigorifero FD — piano interrato', 'Nucleo AS · Contenitore separato "DISFAGICI" · ≤4°C', C.blue),
     arrow('~30 min prima cena'),
-    flowBox('Riattivazione (CCP2) — gastronorm dedicata', 'Microonde · Stessa scaldavivande dei pasti Sodexo · Gastronorm identificata', C.coral),
+    flowBox('Riattivazione (CCP2) — gastronorm dedicata', 'Microonde · Stessa scaldavivande dei pasti ' + _forn + ' · Gastronorm identificata', C.coral),
     arrow(),
     flowBox('Verifica T° ≥75°C al cuore', 'Sonda sterile · Se <75°C → riscaldamento supplementare', C.amber),
     arrow(),
@@ -368,7 +380,7 @@ function diagramma54() {
   return [
     h2('5.4 Flusso Pasti Celiaci — Tutti i Nuclei'),
     ...spacer(1),
-    flowBox('Ricevimento pasto Gluten-Free certificato da Sodexo', 'Contenitore etichettato "GLUTEN-FREE" + nominativo ospite', C.teal),
+    flowBox('Ricevimento pasto Gluten-Free certificato da ' + _forn, 'Contenitore etichettato "GLUTEN-FREE" + nominativo ospite', C.teal),
     arrow(),
     flowBox('Stoccaggio frigorifero nucleo — ripiano superiore', 'Contenitore identificato "CELIACO – [NOME]" · Segregato da altri alimenti', C.teal),
     arrow(),
@@ -464,7 +476,7 @@ function tabellaCCP() {
       header,
       sezRow('Ricevimento pasti caldi (pranzo)', 6, W),
       row('Ricevimento','Temperatura inadeguata <65°C','B','Fornitura min ≥65°C; ispezione visiva','Misurazione T° (2 punti); Modulo CCP1','CCP1'),
-      row('','Allergeni non dichiarati','C','SCIA Sodexo con dichiarazione allergeni','Controllo etichetta 100% celiaci','PCC'),
+      row('','Allergeni non dichiarati','C','SCIA ' + _forn + ' con dichiarazione allergeni','Controllo etichetta 100% celiaci','PCC'),
       row('','Danni/perdite contenitori','F','Controllo integrità; reso merce danneggiata','Ispezione visiva 100%; modulo anomalia','PCC'),
       sezRow('Ricevimento pasti abbattuti (cena)', 6, W),
       row('Ricevimento','Temperatura inadeguata >4°C','B','Fornitura max ≤4°C; verifica T° ricevimento','Misurazione T° (2 punti); Modulo CCP1','CCP1'),
@@ -559,29 +571,7 @@ function tabellaApparecchiature(rawApparecchiature) {
 // SEZIONE 10 — Piano analisi microbiologiche
 // ═══════════════════════════════════════════════════════════════
 
-function tabellaMicrobiologiche() {
-  const c0 = Math.round(CONTENT_W * 0.14);
-  const c1 = Math.round(CONTENT_W * 0.16);
-  const c2 = Math.round(CONTENT_W * 0.14);
-  const c3 = Math.round(CONTENT_W * 0.14);
-  const c4 = Math.round(CONTENT_W * 0.22);
-  const c5 = CONTENT_W - c0 - c1 - c2 - c3 - c4;
-  return new Table({
-    width: { size: CONTENT_W, type: WidthType.DXA },
-    columnWidths: [c0, c1, c2, c3, c4, c5],
-    rows: [
-      new TableRow({ tableHeader: true, children: [hCell('Campione',c0), hCell('Punto prelievo',c1), hCell('Frequenza',c2), hCell('Parametri',c3), hCell('Limiti accettabilità',c4), hCell('Azione correttiva',c5)] }),
-      ...[
-        ['Pasto caldo (pranzo)', 'Scaldavivande nucleo', 'Trimestrale', 'CBT, Enterobatteri, Listeria', 'CBT <10⁵ UFC/g; Listeria assente', 'Blocco distribuzione; NC al fornitore'],
-        ['Pasto abbattuto (cena)', 'Frigorifero nucleo', 'Trimestrale', 'CBT, Salmonella, Listeria', 'Salmonella assente/25g; Listeria <100 UFC/g', 'Eliminazione lotto; verifica catena freddo'],
-        ['Pasto disfagico', 'Frigorifero FD', 'Semestrale', 'CBT, Listeria, Stafilococco', 'CBT <10⁴ UFC/g; Listeria assente', 'Blocco; ricerca non conformità'],
-        ['Superfici piani lavoro', 'Cucinette nuclei', 'Semestrale', 'Enterobatteri, Listeria', 'Enterobatteri <10 UFC/cm²', 'Sanificazione straordinaria; verifica procedure'],
-        ['Mani operatore', 'Post-igiene mani', 'Annuale', 'CBT, Stafilococco', 'CBT <100 UFC/mani', 'Formazione rinforzo; verifica procedura lavaggio'],
-        ['Acqua potabile', 'Erogatori nuclei', 'Annuale', 'E. coli, Enterococchi, CBT', 'Conforme D.Lgs 31/2001', 'Comunicazione a gestore acquedotto'],
-      ].map(r => new TableRow({ children: r.map((v, i) => cell(v, [c0,c1,c2,c3,c4,c5][i])) })),
-    ],
-  });
-}
+
 
 // ═══════════════════════════════════════════════════════════════
 // SEZIONE 11 — Piano formazione
@@ -599,13 +589,12 @@ function tabellaFormazione() {
     rows: [
       new TableRow({ tableHeader: true, children: [hCell('Corso / Argomento',c0), hCell('Freq.',c1), hCell('Durata',c2), hCell('Destinatari',c3), hCell('Documentazione',c4)] }),
       ...[
-        ['HACCP base — igiene e sicurezza alimentare', 'All\'assunzione', '4h', 'Tutti gli ASA/OSS', 'Registro presenza + test valutazione'],
-        ['Aggiornamento HACCP annuale', 'Annuale', '2h', 'Tutti gli ASA/OSS', 'Registro presenza + firma'],
+        ['HACCP base — igiene e sicurezza alimentare', 'All\'assunzione', '4h', 'Tutto il personale che manipola alimenti', 'Registro presenza + test valutazione + attestato'],
+        ['Aggiornamento HACCP', 'Triennale', '4h', 'Tutto il personale che manipola alimenti', 'Registro presenza + firma + attestato'],
         ['Gestione ospiti celiaci e allergeni', 'Biennale', '2h', 'ASA/OSS distribuzione', 'Scheda formazione individuale'],
-        ['Gestione ospiti disfagici (IDDSI)', 'Biennale', '3h', 'ASA/OSS nucleo AS', 'Attestato + scheda IDDSI firmata'],
-        ['Isolamento infettivo — DPI e procedure', 'Annuale', '1h', 'Tutti gli ASA/OSS', 'Modulo presa visione procedura'],
-        ['Uso corretto termometro e registrazioni', 'All\'assunzione + annuale', '1h', 'ASA/OSS incaricati', 'Verifica pratica + firma'],
-        ['Sanificazione locali e attrezzature', 'Annuale', '2h', 'ASA/OSS cucinette', 'Piano sanificazione firmato'],
+        ['Uso corretto termometro e registrazioni (incluso in formazione base)', 'Triennale', '1h', 'Tutto il personale che manipola alimenti', 'Verifica pratica'],
+        ['Corso R-HACCP', 'Alla nomina', '8h', 'R-HACCP', 'Registro + Attestato'],
+        ['Corso R-HACCP aggiornamento', 'Triennale', '4h', 'R-HACCP', 'Registro + Attestato'],
       ].map(r => new TableRow({ children: r.map((v, i) => cell(v, [c0,c1,c2,c3,c4][i])) })),
     ],
   });
@@ -615,30 +604,36 @@ function tabellaFormazione() {
 // SEZIONE 12 — Manutenzione e taratura
 // ═══════════════════════════════════════════════════════════════
 
-function tabellaManutenzione() {
+function tabellaManutenzione(apparecchiatureFrigorifere) {
   const c0 = Math.round(CONTENT_W * 0.20);
   const c1 = Math.round(CONTENT_W * 0.14);
   const c2 = Math.round(CONTENT_W * 0.12);
   const c3 = Math.round(CONTENT_W * 0.14);
   const c4 = Math.round(CONTENT_W * 0.20);
   const c5 = CONTENT_W - c0 - c1 - c2 - c3 - c4;
+
+  // Ricava lista frigo reali da profilo
+  const appRaw = apparecchiatureFrigorifere || '';
+  const frigoList = appRaw.split('\n').map(r => r.trim()).filter(Boolean)
+    .map(r => r.split(/[\u2013\-:]/)[0].trim()).join(', ') || 'Frigoriferi in gestione';
+
+  const righe = [
+    [frigoList, 'Verifica T° con sonda esterna', 'Giornaliera', 'ASA incaricato', 'Modulo temperatura frigo', '±1°C vs display'],
+    [frigoList, 'Pulizia interna + guarnizioni', 'Mensile', 'ASA incaricato', 'Piano sanificazione', '—'],
+    ['Termometri a sonda', 'Taratura vs riferimento', 'Annuale', 'R-HACCP', 'Certificato taratura', '±0,5°C'],
+    ['Zona riattivazione (microonde/forno)', 'Verifica corretto funzionamento', 'Settimanale', 'ASA incaricato', 'Piano sanificazione', '—'],
+    ['Zona riattivazione (microonde/forno)', 'Pulizia interna', 'Giornaliera', 'ASA incaricato', 'Piano sanificazione', '—'],
+    ['Forno riattivazione (se presente)', 'Verifica funzionamento + pulizia', 'Settimanale', 'ASA incaricato', 'Piano sanificazione', '—'],
+    ['Forno riattivazione (se presente)', 'Taratura temperatura', 'Annuale', 'Ditta esterna', 'Rapporto tecnico', '±5°C'],
+    ['Lavastoviglie', 'Verifica T° ciclo lavaggio', 'Mensile', 'ASA incaricato', 'Piano sanificazione', 'Min 80°C'],
+  ];
+
   return new Table({
     width: { size: CONTENT_W, type: WidthType.DXA },
     columnWidths: [c0, c1, c2, c3, c4, c5],
     rows: [
       new TableRow({ tableHeader: true, children: [hCell('Attrezzatura',c0), hCell('Attività',c1), hCell('Freq.',c2), hCell('Responsabile',c3), hCell('Registrazione',c4), hCell('Tolleranza',c5)] }),
-      ...[
-        ['Frigoriferi FR1-FR4, FD', 'Verifica T° con sonda esterna', 'Giornaliera', 'ASA incaricato', 'Modulo temperatura frigo', '±1°C vs display'],
-        ['Frigoriferi FR1-FR4, FD', 'Pulizia interna + gasket', 'Mensile', 'ASA incaricato', 'Piano sanificazione', '—'],
-        ['Frigoriferi FR1-FR4, FD', 'Manutenzione tecnica + taratura', 'Annuale', 'Ditta esterna', 'Rapporto tecnico', '±1°C (0-4°C)'],
-        ['Termometri a sonda', 'Taratura vs riferimento', 'Annuale', 'R-HACCP', 'Certificato taratura', '±0,5°C'],
-        ['Scaldavivande nuclei', 'Verifica T° mantenimento', 'Giornaliera', 'ASA incaricato', 'Modulo scaldavivande', 'Min 60°C'],
-        ['Scaldavivande nuclei', 'Pulizia interna', 'Settimanale', 'ASA incaricato', 'Piano sanificazione', '—'],
-        ['Forno riattivazione', 'Verifica funzionamento + pulizia', 'Settimanale', 'ASA incaricato', 'Piano sanificazione', '—'],
-        ['Forno riattivazione', 'Taratura temperatura', 'Annuale', 'Ditta esterna', 'Rapporto tecnico', '±5°C'],
-        ['Lavastoviglie', 'Verifica T° ciclo lavaggio', 'Mensile', 'ASA incaricato', 'Registro manutenzione', 'Min 80°C'],
-        ['Carrello termico', 'Pulizia + verifica isolamento', 'Settimanale', 'ASA incaricato', 'Piano sanificazione', '—'],
-      ].map(r => new TableRow({ children: r.map((v, i) => cell(v, [c0,c1,c2,c3,c4,c5][i])) })),
+      ...righe.map((r, i) => new TableRow({ children: r.map((v, j) => cell(v, [c0,c1,c2,c3,c4,c5][j], { fill: i%2===0?VERDE_LIGHT:'FFFFFF', bc:'DDDDDD' })) })),
     ],
   });
 }
@@ -762,6 +757,12 @@ function indice() {
     { l:1, n:'10', t:'Piano Analisi Microbiologiche' },
     { l:1, n:'11', t:'Piano di Formazione del Personale' },
     { l:1, n:'12', t:'Manutenzione e Taratura Attrezzature' },
+    { l:1, n:'13', t:'M.O.C.A. — Materiali e Oggetti a Contatto con Alimenti' },
+    { l:2, n:'',   t:'13.1 Obblighi operativi' },
+    { l:2, n:'',   t:'13.2 Carta di alluminio — precauzioni specifiche' },
+    { l:1, n:'14', t:'Acrilammide — Misure di Attenuazione' },
+    { l:2, n:'',   t:'14.1 Prodotti da forno e cereali' },
+    { l:2, n:'',   t:'14.2 Frittura e prodotti fritti' },
   ];
 
   return voci.map(v => {
@@ -829,6 +830,7 @@ export async function generaManualeHaccp(params) {
     testoManuale     = '',   // testo AI puro, senza markdown strutturale
     logoVariante     = 'A',
     // Dati dal profilo HACCP
+    fornitoreNome              = '',  // haccp_profili.fornitore_nome
     apparecchiatureFrigorifere = '',  // haccp_profili.apparecchiature_frigorifere
     orariServizio              = '',  // sa.op_orari_distribuzione
     layoutStruttura            = '',  // sa.op_nuclei_note
@@ -837,7 +839,20 @@ export async function generaManualeHaccp(params) {
     opCenaAbbattuta            = false,
     opMonousoInfetti           = false,
     opCeliaciaNote             = '',
+    descrizioneAmbienti        = '',  // sa.descrizione_ambienti
+    opMocaNote                 = '',  // sa.op_moca_note
+    // Cucina interna only
+    opFrittura                 = false,
+    // Piano analisi microbiologiche
+    analisiProblemiRecenti     = false,
+    analisiAcquaBottiglia      = null,
+    analisiFrequenze           = { superfici:'annuale', mani:'annuale', stoviglie:'annuale', acqua:'annuale' },
   } = params;
+
+  // Inietta variabili modulo per funzioni top-level
+  _forn          = fornitoreNome || 'Fornitore esterno';
+  _params        = params;
+  const isCucinaInterna = modello === 'cucina_interna';
 
   const logoCfg  = LOGOS[logoVariante] || LOGOS.A;
   const logoData = logoCfg.data();
@@ -933,6 +948,33 @@ export async function generaManualeHaccp(params) {
     return m ? m[1].trim() : '';
   }
 
+
+  // ── Mappa normativa regionale per §10.4 ──────────────────────
+  const NORMATIVA_REGIONALE = {
+    'Lombardia':         { dgr: 'DGR 2569/2014 + Circolari ATS', note: 'Tamponi superfici: Enterobatteri <10 UFC/cm², Listeria assente. Piano Legionella obbligatorio RSA (DGR 7/19087/2016).' },
+    'Veneto':            { dgr: 'DGRV 2145/2018', note: 'Piano Legionella obbligatorio strutture sanitarie. Tamponi ambientali trimestrali su indicazione ULSS.' },
+    'Piemonte':          { dgr: 'DGR 25-8835/2008', note: 'Linee guida RSA con piano analitico semestrale per superfici e attrezzature.' },
+    'Lazio':             { dgr: 'DGR 2264/2002 + Circ. Reg. 2019', note: 'Criteri microbiologici per superfici e aria nelle strutture socio-sanitarie.' },
+    'Toscana':           { dgr: 'DGRT 647/2019', note: 'Piano sorveglianza Legionella obbligatorio RSA. Campionamenti ambientali secondo protocollo ISS 2015.' },
+    'Emilia-Romagna':    { dgr: 'DGR 2774/2004 + aggiornamenti ASL', note: 'Tamponi superfici trimestrali per cucine RSA. Criteri ISS 2015 per valutazione risultati.' },
+    'Umbria':            { dgr: 'DGR 1729/2012', note: 'Adozione Linee Guida nazionali ISS 2015. Piano campionamenti concordato con ASL locale.' },
+    'Sardegna':          { dgr: 'DGR 35/7/2016', note: 'Piano regionale sicurezza alimentare. Campionamenti secondo indicazioni ASSL competente.' },
+    'Liguria':           { dgr: 'DGR 1376/2011', note: 'Protocollo RSA con criteri microbiologici superfici. Coordinamento con ASL per frequenze.' },
+    'Marche':            { dgr: 'DGR 1337/2013', note: 'Piano campionamenti strutture socio-sanitarie. Tamponi ambientali semestrali superfici cucina.' },
+    'Sicilia':           { dgr: 'Decreto DASOE 2019', note: 'Piano regionale Legionella. Criteri ARPA Sicilia per valutazione tamponi ambientali.' },
+    'Campania':          { dgr: 'DGRC 460/2007 + aggiornamenti', note: 'Piano autocontrollo RSA. Tamponi mensili cucina su indicazione ASL competente.' },
+    'Puglia':            { dgr: 'DGR 2328/2012', note: 'Linee guida igiene alimenti strutture di assistenza. Protocollo concordato con Dipartimento Prevenzione.' },
+    'Calabria':          { dgr: 'DGR 787/2019', note: 'Adozione linee guida nazionali ISS. Piano campionamenti su indicazione ASPCA competente.' },
+    'Basilicata':        { dgr: 'DGR 1079/2013', note: 'Piano regionale sicurezza alimentare. Frequenze concordate con Dipartimento Prevenzione ASP.' },
+    'Molise':            { dgr: 'DGR 562/2015', note: 'Adozione linee guida ISS 2015. Campionamenti su indicazione ASREM competente.' },
+    'Abruzzo':           { dgr: 'DGR 461/2014', note: 'Piano campionamenti ASL. Tamponi ambientali semestrali strutture socio-sanitarie.' },
+    "Valle d'Aosta":   { dgr: "DGR 1892/2014", note: "Criteri nazionali + sorveglianza ARPA VdA. Piano concordato con Azienda USL della Valle d'Aosta." },
+    'Trentino-Alto Adige': { dgr: 'LP 7/2001 + DGP', note: 'Normativa provinciale autonoma. Piano campionamenti APSS (Trento) o SABES (Bolzano).' },
+    'Friuli-Venezia Giulia': { dgr: 'DGR 2042/2012', note: 'Piano regionale sicurezza alimentare. Tamponi ambientali secondo protocollo ASUGI/ASFO.' },
+    'PA Bolzano':        { dgr: 'LP 7/2001 + normativa autonoma', note: 'Normativa provinciale autonoma. Riferimento SABES per piano campionamenti.' },
+  };
+  const normReg = NORMATIVA_REGIONALE[nomestruttura] || null;
+
   // ── CORPO ─────────────────────────────────────────────────────
   const corpo = [
 
@@ -951,28 +993,44 @@ export async function generaManualeHaccp(params) {
     h2('1.2 Campo di Applicazione'),
     ...textToParagraphs(extractSez(testoManuale, '1b') || [
       'Il presente manuale si applica ESCLUSIVAMENTE alle fasi di competenza dell\'OSA ' + nomestruttura + ':',
-      '• Ricevimento pasti pronti e/o abbattuti da centro cottura esterno (Sodexo SpA)',
+      '• Ricevimento pasti pronti e/o abbattuti da centro cottura esterno (' + fornitoreNome + ')',
       '• Stoccaggio brevissimo in frigoriferi di cucinetta (FR1–FR4, FD)',
       '• Riattivazione a caldo di teglie abbattute per la cena (≥75°C al cuore)',
       '• Porzionamento e confezionamento in vassoi',
-      '• Distribuzione ai reparti tramite carrello termico e cucinette di nucleo',
+      '• Distribuzione ai reparti tramite carrello e cucinette di nucleo',
       '• Raccolta e smaltimento rifiuti · Lavaggio stoviglie · Sanificazione locali',
       '',
       'NON rientrano nel campo di applicazione:',
-      '• Fasi di produzione, preparazione e cottura presso il centro cottura Sodexo SpA',
+      '• Fasi di produzione, preparazione e cottura presso il centro cottura ' + fornitoreNome,
       '• Monitoraggio dei frigoriferi del fornitore',
       '• Fasi di trasporto termico esterno (competenza logistica fornitore)',
     ].join('\n')),
     h2('1.3 Normativa di Riferimento'),
-    ...textToParagraphs(extractSez(testoManuale, '1c') || [
-      '• **Reg. CE 852/2004**: Igiene dei prodotti alimentari',
+    ...textToParagraphs([
+      '• **Reg. CE 852/2004**: Igiene dei prodotti alimentari — obbligo procedure HACCP per tutti gli operatori del settore alimentare',
       '• **Reg. CE 853/2004**: Norme specifiche igiene alimenti di origine animale',
-      '• **Reg. UE 2021/382**: Modifica allegati Reg. CE 852/2004 (cultura sicurezza alimentare)',
+      '• **Reg. UE 2021/382**: Modifica allegati Reg. CE 852/2004 — cultura della sicurezza alimentare',
+      '• **Reg. CE 178/2002**: Principi generali della legislazione alimentare — tracciabilità',
+      '• **Reg. UE 1169/2011**: Informazioni sugli alimenti ai consumatori — gestione allergeni',
+      '• **Reg. CE 2073/2005** (mod. Reg. UE 2020/1475): Criteri microbiologici applicabili ai prodotti alimentari',
       '• **D.Lgs 27/2021**: Adeguamento normativa nazionale ai regolamenti UE',
-      '• **Reg. CE 178/2002**: Principi e requisiti della legislazione alimentare (tracciabilità)',
-      '• **Reg. UE 1169/2011**: Informazioni sugli alimenti ai consumatori (allergeni)',
-      '• **D.Lgs 231/2001**: Responsabilità amministrativa delle organizzazioni',
+      '• **D.Lgs 18/2023**: Attuazione Dir. UE 2020/2184 — qualità delle acque destinate al consumo umano (abroga D.Lgs. 31/2001)',
+      '• **D.Lgs 81/2008**: Sicurezza nei luoghi di lavoro — idoneità sanitaria personale a contatto con alimenti',
     ].join('\n')),
+    // Box rimando normativa regionale
+    new Table({
+      width: { size: CONTENT_W, type: WidthType.DXA }, columnWidths: [CONTENT_W],
+      rows: [new TableRow({ children: [new TableCell({
+        width: { size: CONTENT_W, type: WidthType.DXA },
+        borders: { top: B(VERDE), bottom: B(VERDE), left: B(VERDE), right: B(VERDE) },
+        shading: { fill: VERDE_LIGHT, type: ShadingType.CLEAR },
+        margins: { top: 80, bottom: 80, left: 200, right: 200 },
+        children: [
+          p([r('Normativa regionale applicabile', { bold: true, color: VERDE, size: 20 })], { after: 60 }),
+          p([r("La normativa regionale specifica applicabile alla struttura " + nomestruttura + " — inclusi i criteri microbiologici ambientali per le strutture socio-sanitarie, i piani di sorveglianza Legionella e i protocolli di campionamento definiti dall'autorità sanitaria locale — è riportata in dettaglio al § 10.4 del presente manuale.", { size: 18, color: GRIGIO_TESTO })]),
+        ],
+      })] })],
+    }),
     new Paragraph({ children: [new PageBreak()] }),
 
     // ── SEZ 2: Prerequisiti ──────────────────────────────────
@@ -984,16 +1042,62 @@ export async function generaManualeHaccp(params) {
     ...textToParagraphs([
       '• Lavaggio mani obbligatorio prima di manipolare alimenti, dopo uso servizi igienici, dopo gestione rifiuti',
       '• Indumenti da lavoro puliti e dedicati (non uscire con indumenti da lavoro)',
-      '• Divieto di gioielli, anelli, bracciali, orologi e **unghie finte o ricostruite** durante il servizio',
+      '• Divieto di gioielli, anelli, bracciali e orologi durante il servizio',
+      '• Se presenti unghie finte, ricostruite o presenza di smalto deve essere indossato il guanto monouso',
       '• Capelli raccolti e coperti con copricapo',
       '• Segnalazione immediata di ferite, infezioni, sintomi gastrointestinali al R-HACCP',
     ].join('\n')),
     h2('2.2 Pulizia e Sanificazione Locali'),
+    txt('La sanificazione si effettua secondo le seguenti fasi operative: rimozione grossolana dello sporco; risciacquo con acqua calda (>40°C); detersione con prodotto indicato nel piano di sanificazione; risciacquo; disinfezione con prodotto sgrassante disinfettante idoneo uso HACCP; asciugatura; verifica visiva.'),
+    txt('Le spugne e i panni per la sanificazione vengono igienizzati dopo ogni utilizzo (ammollo in soluzione disinfettante o lavaggio in lavatrice a 60°C). Non miscelare mai prodotti detergenti e disinfettanti.'),
+    h3('Pavimenti'),
     ...textToParagraphs([
-      '• Cucinette nucleo: pulizia giornaliera superfici, scaldavivande, piani lavoro',
-      '• Frigoriferi: pulizia mensile interna, verifica guarnizioni',
-      '• Magazzino derrate: pulizia mensile scaffalature, verifica zanzariera',
-      '• Lavastoviglie: pulizia settimanale filtri e bracci spruzzatori',
+      "• Sgombrare l'area; scopare e rimuovere lo sporco grossolano",
+      '• Preparare soluzione detergente in acqua calda; lavare con mop per sezioni di 20-25 mq',
+      '• Strizzare bene e asciugare con mop asciutto',
+      '• Ripetere con prodotto disinfettante',
+      '• Punti critici: pilette di scarico; residui resistenti',
+    ].join('\n')),
+    h3('Piani di lavoro e taglieri'),
+    ...textToParagraphs([
+      '• Rimuovere residui; risciacquare con acqua calda',
+      '• Prima pulizia di fondo con disinfettante; risciacquare',
+      '• Pulizia/disinfezione con soluzione disinfettante + spugna; lasciare agire 5 min',
+      '• Risciacquare abbondantemente con acqua calda; asciugare con carta monouso',
+      '• Punti critici: residui resistenti alle operazioni di pulizia',
+    ].join('\n')),
+    h3('Interno frigoriferi e congelatori'),
+    ...textToParagraphs([
+      '• Disinserire impianto; svuotare completamente trasferendo alimenti in altro apparecchio',
+      '• Eventualmente sbrinare; asportare residui grossolani',
+      '• Detergere con idoneo prodotto; risciacquare con acqua calda',
+      '• Disinfettare; lasciare agire 5 min; risciacquare; asciugare accuratamente',
+      '• Punti critici: non interrompere catena del freddo; punti di difficile accesso',
+    ].join('\n')),
+    h3('Scaffalature, arredi, tavoli e sedie'),
+    ...textToParagraphs([
+      "• Allontanare alimenti dall'area; rimuovere sporco con straccio umido",
+      '• Risciacquare con acqua calda; spruzzare prodotto detergente; lasciare agire',
+      '• Passare con carta monouso; ripetere con prodotto disinfettante',
+    ].join('\n')),
+    h3('Vetri, plafoniere e pareti lavabili'),
+    ...textToParagraphs([
+      "• Allontanare alimenti dall'area circostante; rimuovere sporco grossolano",
+      '• Spruzzare prodotto detergente/disinfettante; lasciare agire; passare con carta monouso; risciacquare',
+      '• Punti critici: sollevamento polvere durante la pulizia; allontanamento preventivo alimenti',
+    ].join('\n')),
+    h3('Lavastoviglie'),
+    ...textToParagraphs([
+      '• Disincrostare dal calcare formatosi nei precedenti lavaggi',
+      '• Verificare che gli ugelli di espulsione acqua siano liberi da incrostazioni e residui',
+      "• Procedere come da manuale di manutenzione dell'apparecchiatura",
+      '• Frequenza: pulizia filtri giornaliera; pulizia completa settimanale',
+    ].join('\n')),
+    h3('Contenitori rifiuti'),
+    ...textToParagraphs([
+      '• Svuotare il contenitore; sciacquare con acqua corrente',
+      '• Pulizia e disinfezione con prodotto combinato; lavare e spazzolare accuratamente; risciacquare con acqua calda',
+      '• Frequenza: giornaliera',
     ].join('\n')),
     h2('2.3 Controllo Infestanti'),
     ...textToParagraphs([
@@ -1021,8 +1125,7 @@ export async function generaManualeHaccp(params) {
     ...textToParagraphs([
       '• Il Responsabile HACCP organizza riunioni trimestrali per revisione non conformità e aggiornamento procedure',
       '• Bacheca informativa in ogni cucinetta di nucleo con contatti R-HACCP e procedure di emergenza',
-      '• Schede procedure laminate e affisse presso ogni postazione di lavoro',
-      '• Ogni non conformità rilevata viene registrata su apposito modulo e gestita entro 24h',
+      '• Ogni non conformità rilevata viene registrata sul supporto cartaceo e sul software aziendale e gestita entro 24h',
     ].join('\n')),
     new Paragraph({ children: [new PageBreak()] }),
 
@@ -1034,12 +1137,12 @@ export async function generaManualeHaccp(params) {
       ['Ragione sociale OSA',osa],
       ['P.IVA',              pivaOsa],
       ['Modello ristorazione', modello],
-      ['Fornitore pasti',    'Sodexo SpA'],
+      ['Fornitore pasti',    fornitoreNome || '—'],
       ['Referente HACCP',    rHaccp],
     ]),
     ...spacer(1),
     h2('4.2 Layout Nuclei e Locali'),
-    ...textToParagraphs(layoutStruttura || 'Struttura organizzata in nuclei residenziali dotati di cucinetta attrezzata.'),
+    ...textToParagraphs(layoutStruttura || descrizioneAmbienti || 'Struttura organizzata in nuclei residenziali dotati di cucinetta attrezzata.'),
     h2('4.3 Apparecchiature in Gestione OSA'),
     tabellaApparecchiature(apparecchiatureFrigorifere),
     ...spacer(1),
@@ -1074,7 +1177,8 @@ export async function generaManualeHaccp(params) {
 
     // ── SEZ 7: Celiachia e allergeni ─────────────────────────
     h1('7. GESTIONE CELIACHIA E ALLERGENI'),
-    ...textToParagraphs(opCeliaciaNote || 'La struttura applica il Reg. UE 1169/2011 garantendo la tracciabilità degli alimenti per celiaci e allergici dal fornitore all\'ospite.'),
+    txt('La struttura applica il Reg. UE 1169/2011 garantendo la tracciabilità degli alimenti per celiaci e allergici dal fornitore all\'ospite. La gestione allergeni è un prerequisito HACCP fondamentale per la tutela degli ospiti con patologie alimentari certificate.'),
+    ...(opCeliaciaNote ? [txt('Specificità della struttura: ' + opCeliaciaNote)] : []),
     h2('7.1 Normativa e Responsabilità'),
     ...textToParagraphs([
       '• **Tracciabilità** da fornitore a ospite per tutti gli alimenti con allergeni dichiarati',
@@ -1083,13 +1187,13 @@ export async function generaManualeHaccp(params) {
     ].join('\n')),
     h2('7.2 Registro Ospiti Celiaci e Allergici'),
     ...textToParagraphs([
-      'All\'ammissione il Responsabile Infermieristico raccoglie: nome e cognome, data di nascita, allergia certificata, livello di reazione, istruzioni dietetiche specifiche.',
+      'All\'ammissione il Responsabile raccoglie: nome e cognome, data di nascita, allergia certificata, livello di reazione, istruzioni dietetiche specifiche.',
       '',
-      'Il registro è conservato in formato cartaceo (fascicolo paziente) e digitale per l\'intero periodo di ospitalità più 2 anni dalla dimissione. Accesso limitato a R-HACCP, Responsabile Infermieristico e medico struttura.',
+      'Il registro è conservato in formato cartaceo (fascicolo paziente) e digitale per l\'intero periodo di ospitalità più 2 anni dalla dimissione. Accesso limitato a R-HACCP, Responsabile di struttura e medico.',
     ].join('\n')),
     h2('7.3 Ricezione Pasti Celiaci e Stoccaggio'),
     ...textToParagraphs([
-      'Il fornitore Sodexo SpA fornisce pasti gluten-free in contenitore dedicato con etichetta "GLUTEN-FREE – [NOME OSPITE]".',
+      'Il fornitore ' + fornitoreNome + ' fornisce pasti gluten-free in contenitore dedicato con etichetta "GLUTEN-FREE – [NOME OSPITE]".',
       '• Verifica etichetta al ricevimento: nome, data preparazione, integrità confezione',
       '• Stoccaggio nel ripiano SUPERIORE del frigorifero di nucleo in contenitore identificato "CELIACO – [NOME]"',
       '• Segregazione da pane, pasta e cereali contenenti glutine',
@@ -1108,13 +1212,25 @@ export async function generaManualeHaccp(params) {
     ...textToParagraphs([
       'In caso di contatto accidentale tra pasto celiaco e alimenti con glutine:',
       '1. Scartare immediatamente il pasto celiaco',
-      '2. Contattare Responsabile Infermieristico per monitoraggio ospite',
+      '2. Contattare il Responsabile di struttura per monitoraggio ospite',
       '3. Registrare su modulo "Non Conformità Celiachia"',
       '4. Sanificare piano di lavoro con detergente neutro + panno monouso',
     ].join('\n')),
     h2('7.6 Allergeni Diversi da Celiachia'),
+    txt('Per i 14 allergeni obbligatori Reg. UE 1169/2011, le informazioni relative ad allergie degli ospiti vengono raccolte al momento dell\'ammissione e comunicate al fornitore dei pasti per la predisposizione di menu personalizzati.'),
     ...textToParagraphs([
-      'Per i 14 allergeni obbligatori Reg. UE 1169/2011: al ricevimento verifica etichetta, stoccaggio in contenitore etichettato "ALLERGIA – [NOME] – [ALLERGENE]", distribuzione con vassoio identificato e verifica tripla nominativo.',
+      '• Al ricevimento: verifica etichetta e dichiarazione allergeni del fornitore',
+      '• Stoccaggio: contenitore etichettato "ALLERGIA – [NOME OSPITE] – [ALLERGENE]" in ripiano dedicato',
+      '• Distribuzione: vassoio identificato con nome e allergeni; verifica tripla nominativo prima della consegna',
+      '• Elenco 14 allergeni obbligatori (Reg. UE 1169/2011): cereali con glutine, crostacei, uova, pesce, arachidi, soia, latte, frutta a guscio, sedano, senape, sesamo, anidride solforosa/solfiti, lupino, molluschi',
+    ].join('\n')),
+    h2('7.7 Procedura operativa per ospite allergico'),
+    ...textToParagraphs([
+      "1. Controllo incrociato tra allergeni dell'ospite e ingredienti del pasto — verificare etichette prodotti preconfezionati (salse, dolci ecc.)",
+      "2. Se l'ingrediente allergenico è presente: contattare il fornitore per pasto alternativo privo dell'allergene",
+      '3. Lavorazione/riscaldamento pasto allergico: sempre per primo, con utensili puliti o dedicati, mani lavate con acqua e sapone (i guanti da soli non bastano)',
+      '4. Distribuzione: pasto consegnato per primo, con vassoio identificato, verifica nominativo + allergene da parte dell\'addetto',
+      '5. In caso di reazione allergica: interrompere immediatamente somministrazione, contattare medico/infermiere, registrare l\'evento come NC grave',
     ].join('\n')),
     new Paragraph({ children: [new PageBreak()] }),
 
@@ -1169,7 +1285,7 @@ export async function generaManualeHaccp(params) {
     ...textToParagraphs([
       'Ogni ospite disfagico ha cartella dietetica visibile in cucinetta con: nome, IDDSI level prescritto, allergie, note deglutizione, data prescrizione, firma medico.',
       '',
-      'In caso di variazione IDDSI: comunicazione scritta + email a Sodexo SpA entro 24h + aggiornamento cartella + comunicazione ai turni ASA/OSS.',
+      'In caso di variazione IDDSI: comunicazione scritta + email a ' + fornitoreNome + ' entro 24h + aggiornamento cartella + comunicazione ai turni ASA/OSS.',
     ].join('\n')),
     new Paragraph({ children: [new PageBreak()] }),
 
@@ -1180,7 +1296,7 @@ export async function generaManualeHaccp(params) {
     h1('9. GESTIONE ISOLAMENTO INFETTIVO'),
     h2('9.1 Protocollo e Notifica'),
     ...textToParagraphs([
-      'Quando un ospite è in isolamento infettivo (C. difficile, SARS-CoV-2, Norovirus, VRE ecc.), il Responsabile Infermieristico o il Medico curante emette il modulo "Avviso Isolamento Infettivo" affisso in cucinetta nucleo, bacheca portineria e inviato via email al team HACCP.',
+      'Quando un ospite è in isolamento infettivo (C. difficile, SARS-CoV-2, Norovirus, VRE ecc.), il Medico curante o il Responsabile di struttura emette il modulo "Avviso Isolamento Infettivo" affisso in cucinetta nucleo, bacheca portineria e inviato via email al team HACCP.',
     ].join('\n')),
     h2('9.2 Approvvigionamento Monouso'),
     ...textToParagraphs([
@@ -1208,11 +1324,106 @@ export async function generaManualeHaccp(params) {
 
     // ── SEZ 10: Piano analisi microbiologiche ────────────────────
     h1('10. PIANO ANALISI MICROBIOLOGICHE'),
-    txt('Il piano di campionamento microbiologico è volto a verificare l\'efficacia delle misure di controllo e la conformità ai limiti stabiliti dal Reg. CE 2073/2005. I campionamenti sono eseguiti da laboratorio accreditato esterno su incarico del R-HACCP.'),
+    h2('10.1 Responsabilità e perimetri'),
+    ...(() => {
+      const c0 = Math.round(CONTENT_W * 0.22);
+      const c1 = CONTENT_W - c0;
+      return [new Table({
+        width:{size:CONTENT_W,type:WidthType.DXA}, columnWidths:[c0,c1],
+        rows:[
+          new TableRow({ children:[
+            new TableCell({width:{size:c0,type:WidthType.DXA},borders:{top:B(VERDE),bottom:B(VERDE),left:B(VERDE),right:B(VERDE)},shading:{fill:VERDE,type:ShadingType.CLEAR},margins:{top:80,bottom:80,left:160,right:160},children:[
+              p([r('R-HACCP',{bold:true,color:'FFFFFF',size:20})],{after:40}),
+              p([r('Responsabile Autocontrollo',{color:'FFFFFF',size:17,italic:true})],{after:0}),
+            ]}),
+            new TableCell({width:{size:c1,type:WidthType.DXA},borders:{top:B(VERDE),bottom:B(VERDE),left:B(VERDE),right:B(VERDE)},shading:{fill:VERDE_LIGHT,type:ShadingType.CLEAR},margins:{top:80,bottom:80,left:200,right:200},children:[
+              txt('Campionamenti su superfici, attrezzature, mani operatori e acqua utilizzata come ingrediente o per pulizia attrezzature cucina. Base normativa: Reg. CE 852/2004 All. II Cap. VII + Reg. CE 2073/2005 (mod. Reg. UE 2020/1475).'),
+            ]}),
+          ]}),
+          new TableRow({ children:[
+            new TableCell({width:{size:c0,type:WidthType.DXA},borders:{top:B(VERDE),bottom:B(VERDE),left:B(VERDE),right:B(VERDE)},shading:{fill:VERDE,type:ShadingType.CLEAR},margins:{top:80,bottom:80,left:160,right:160},children:[
+              p([r('GIDI / RSPP',{bold:true,color:'FFFFFF',size:20})],{after:40}),
+              p([r('Gestore Interno Distribuzione Idrica',{color:'FFFFFF',size:17,italic:true})],{after:0}),
+            ]}),
+            new TableCell({width:{size:c1,type:WidthType.DXA},borders:{top:B(VERDE),bottom:B(VERDE),left:B(VERDE),right:B(VERDE)},shading:{fill:'F8F8F8',type:ShadingType.CLEAR},margins:{top:80,bottom:80,left:200,right:200},children:[
+              txt('Monitoraggio intera rete idrica edificio nell\'ambito del Piano di Valutazione e Gestione del Rischio (PVGR). Base normativa: D.Lgs. 18/2023 Art. 9. Il controllo Legionella è di competenza esclusiva del GIDI/RSPP — non incluso nel presente piano HACCP.'),
+            ]}),
+          ]}),
+        ],
+      })];
+    })(),
     ...spacer(1),
-    tabellaMicrobiologiche(),
+    h2('10.2 Piano campionamenti R-HACCP'),
+    ...(() => {
+      const freq = analisiFrequenze || { superfici:'annuale', mani:'annuale', stoviglie:'annuale', acqua:'annuale' };
+      const appRaw = params.apparecchiatureFrigorifere || '';
+      const nCucinette = Math.max(1, appRaw.split('\n').filter(r => /^FR\d+/i.test(r.trim().split(/[\u2013\-:]/)[0].trim())).length || 1);
+      const notaAcqua = params.opDistributoreAcqua
+        ? 'Potabilità garantita dal fornitore del microfiltratore (certificato annuale). Campionamento interno: rubinetto cucina/cucinetta.'
+        : analisiAcquaBottiglia
+          ? 'Ospiti consumano acqua in bottiglia. Campionamento: rubinetto cucina/cucinetta.'
+          : 'Acqua di rete erogata agli ospiti. Campionamento: rubinetto cucina/cucinetta + punto/i rete distribuzione ospiti (D.Lgs. 18/2023).';
+      const campionamenti = [
+        {tipo:'Superfici e piani di lavoro',punto:'Cucinette nucleo (post sanificazione)',freq:freq.superfici,n:nCucinette+' camp.',param:'Enterobatteri, Listeria, CBT',limiti:'Enterobatteri <10 UFC/cm² · Listeria assente',az:'Sanificazione straordinaria; verifica procedura'},
+        {tipo:'Mani operatore',punto:'Post lavaggio mani (addetto in servizio)',freq:freq.mani,n:'1 camp.',param:'CBT, Stafilococco aureo',limiti:'CBT <100 UFC/mani',az:'Formazione rinforzo; verifica lavaggio mani'},
+        {tipo:'Stoviglie / attrezzature',punto:'A campione a rotazione',freq:freq.stoviglie,n:'1 camp.',param:'CBT, Enterobatteri, Listeria',limiti:'CBT <1 UFC/cm² · Enterobatteri assenti',az:'Revisione ciclo lavaggio; verifica T° ≥80°C'},
+        {tipo:'Acqua potabile',punto:params.opDistributoreAcqua?'Rubinetto cucina':analisiAcquaBottiglia?'Rubinetto cucina':'Rubinetto cucina + punto rete',freq:freq.acqua,n:'1-2 camp.',param:'E. coli, Coliformi, Enterococchi, CBT',limiti:'E. coli 0/100ml · Coliformi 0/100ml (D.Lgs. 18/2023)',az:'Comunicazione gestore acquedotto'},
+      ];
+      const c0=Math.round(CONTENT_W*0.15),c1=Math.round(CONTENT_W*0.15),c2=Math.round(CONTENT_W*0.08);
+      const c3=Math.round(CONTENT_W*0.09),c4=Math.round(CONTENT_W*0.18),c5=Math.round(CONTENT_W*0.20);
+      const c6=CONTENT_W-c0-c1-c2-c3-c4-c5;
+      return [
+        ...(analisiProblemiRecenti?[p([r('⚠️ Piano di sorveglianza rafforzato a seguito di non conformità rilevate negli ultimi 12 mesi.',{bold:true,color:'A32D2D',size:18})],{after:100})]:[]),
+        new Table({
+          width:{size:CONTENT_W,type:WidthType.DXA},columnWidths:[c0,c1,c2,c3,c4,c5,c6],
+          rows:[
+            new TableRow({tableHeader:true,children:[hCell('Campione',c0),hCell('Punto prelievo',c1),hCell('Freq.',c2),hCell('N°',c3),hCell('Parametri',c4),hCell('Limiti',c5),hCell('Azione correttiva',c6)]}),
+            ...campionamenti.map((c,i)=>new TableRow({children:[
+              cell(c.tipo,c0,{fill:i%2===0?VERDE_LIGHT:'FFFFFF',bc:'DDDDDD'}),
+              cell(c.punto,c1,{fill:i%2===0?VERDE_LIGHT:'FFFFFF',bc:'DDDDDD',size:16}),
+              cell(c.freq.charAt(0).toUpperCase()+c.freq.slice(1),c2,{fill:i%2===0?VERDE_LIGHT:'FFFFFF',bc:'DDDDDD',align:AlignmentType.CENTER,bold:true,color:VERDE}),
+              cell(String(c.n),c3,{fill:i%2===0?VERDE_LIGHT:'FFFFFF',bc:'DDDDDD',align:AlignmentType.CENTER,size:16}),
+              cell(c.param,c4,{fill:i%2===0?VERDE_LIGHT:'FFFFFF',bc:'DDDDDD',size:16}),
+              cell(c.limiti,c5,{fill:i%2===0?VERDE_LIGHT:'FFFFFF',bc:'DDDDDD',size:16}),
+              cell(c.az,c6,{fill:i%2===0?VERDE_LIGHT:'FFFFFF',bc:'DDDDDD',size:16}),
+            ]})),
+          ],
+        }),
+        ...spacer(1),
+        p(parseInline('**Acqua potabile:** '+notaAcqua),{after:100}),
+        p(parseInline('**Laboratorio:** Campionamenti eseguiti da laboratorio accreditato ACCREDIA su incarico R-HACCP. Risultati archiviati con conservazione minima 3 anni.'),{after:100}),
+      ];
+    })(),
     ...spacer(1),
-    txt('I risultati delle analisi sono archiviati dal R-HACCP con conservazione minima 3 anni. In caso di non conformità viene aperto un modulo NC, applicata l\'azione correttiva e, se necessario, avvisata l\'ASL competente.'),
+    h2('10.3 Gestione non conformità analitiche'),
+    ...textToParagraphs([
+      'In caso di esito non conforme il R-HACCP:',
+      '1. Apre immediatamente un modulo NC (Autoc 6) e lo registra in QualiCAVA',
+      '2. Avvia le azioni correttive indicate in tabella',
+      '3. Dispone campionamento di verifica entro 30 giorni',
+      '4. Se NC riguarda patogeno pericoloso (Listeria, Salmonella, E. coli O157): notifica immediata al Dipartimento di Prevenzione ASL',
+      '5. Archivia i rapporti analitici per almeno 5 anni',
+    ].join('\n')),
+    ...spacer(1),
+    h2('10.4 Normativa regionale applicabile'),
+    ...(() => {
+      if (!normReg) return [txt('Per la normativa regionale specifica fare riferimento al Dipartimento di Prevenzione ASL competente per territorio.')];
+      const c0=Math.round(CONTENT_W*0.30),c1=CONTENT_W-c0;
+      return [
+        new Table({
+          width:{size:CONTENT_W,type:WidthType.DXA},columnWidths:[c0,c1],
+          rows:[
+            new TableRow({children:[hCell('Riferimento normativo regionale',c0),hCell('Note operative per RSA',c1)]}),
+            new TableRow({children:[
+              cell(normReg.dgr,c0,{fill:VERDE_LIGHT,bold:true,color:VERDE,bc:'C8E6D0'}),
+              cell(normReg.note,c1,{fill:VERDE_LIGHT,bc:'C8E6D0'}),
+            ]}),
+          ],
+        }),
+        ...spacer(0.5),
+        p([r('Per aggiornamenti locali fare riferimento al Dipartimento di Prevenzione ATS/ASL competente per territorio.',{size:17,italic:true,color:'888888'})]),
+      ];
+    })(),
     new Paragraph({ children: [new PageBreak()] }),
 
     // ── SEZ 11: Piano formazione ─────────────────────────────
@@ -1228,9 +1439,60 @@ export async function generaManualeHaccp(params) {
     h1('12. MANUTENZIONE E TARATURA ATTREZZATURE'),
     txt('La manutenzione preventiva e la taratura periodica delle attrezzature è essenziale per garantire l\'efficacia del sistema HACCP, in particolare per le attrezzature che influenzano direttamente i CCP (frigoriferi, termometri a sonda, forni, scaldavivande).'),
     ...spacer(1),
-    tabellaManutenzione(),
+    tabellaManutenzione(apparecchiatureFrigorifere),
     ...spacer(1),
     txt('I rapporti di manutenzione e i certificati di taratura sono conservati dal R-HACCP per almeno 5 anni. Le attrezzature fuori tolleranza vengono messe fuori servizio fino a riparazione/sostituzione e sostituite con attrezzature di riserva documentate.'),
+
+    // ── SEZ 13: MOCA ─────────────────────────────────────────
+    new Paragraph({ children: [new PageBreak()] }),
+    h1('13. M.O.C.A. — MATERIALI E OGGETTI A CONTATTO CON ALIMENTI'),
+    txt('I materiali e oggetti a contatto con gli alimenti (MOCA) sono regolamentati dal Reg. CE 1935/2004 e dai regolamenti specifici per ogni tipologia di materiale. Scopo: garantire che i MOCA non trasferiscano sostanze agli alimenti in quantità tali da rappresentare un pericolo per la salute umana.'),
+    h2('13.1 Obblighi operativi'),
+    ...textToParagraphs([
+      "• Tutti i materiali e oggetti a contatto con alimenti devono essere dichiarati idonei — verificare la presenza della dicitura -idoneo al contatto con alimenti- o simbolo calice+forchetta sull'etichetta o scheda tecnica",
+      '• Non solo gli imballaggi ma anche tutti gli utensili e le attrezzature usate per preparare, cuocere e servire gli alimenti rientrano nella previsione normativa',
+      "• In caso di acquisto al dettaglio: verificare sull'etichetta o su cartellino espositivo la conformità alimentare",
+      "• Durante l'attività: verificare il buono stato di conservazione dei MOCA — non utilizzare utensili scheggiati, graffiati o deteriorati",
+      '• Eventuali anomalie → registrare sul modulo Non Conformità',
+    ].join('\n')),
+    h2('13.2 Carta di alluminio — precauzioni specifiche'),
+    txt('La carta di alluminio a contatto con determinati cibi può cedere ioni di alluminio agli alimenti. I fattori che influiscono: tempo di conservazione, temperatura, composizione dell\'alimento.'),
+    ...textToParagraphs([
+      '• **NON idonea** al contatto con alimenti fortemente acidi (succo di limone, aceto) o fortemente salati (alici salate, capperi sotto sale)',
+      '• Idonea per alimenti a temperature refrigerate; per alimenti a temperatura ambiente max 24h',
+      '• Idonea per alimenti a temperatura ambiente anche oltre 24h solo per: cioccolato, caffè, spezie, cereali, paste non fresche, prodotti da forno, legumi secchi, frutta secca, funghi/ortaggi secchi, prodotti della confetteria',
+      '• Non riutilizzare mai contenitori monouso (teglie e vaschette)',
+      '• Può essere utilizzata per oltre 24h solo a temperatura di refrigerazione',
+    ].join('\n')),
+    ...(opMocaNote ? [h2('13.3 Note specifiche della struttura'), txt(opMocaNote)] : []),
+
+    // ── SEZ 14: ACRILAMMIDE ───────────────────────────────────
+    new Paragraph({ children: [new PageBreak()] }),
+    h1('14. ACRILAMMIDE — MISURE DI ATTENUAZIONE'),
+    txt("L'acrilammide è una sostanza chimica che si forma naturalmente negli alimenti amidacei durante cotture ad alte temperature (frittura, forno, tostatura) attraverso la reazione di Maillard tra zuccheri e amminoacidi. È classificata come probabile cancerogena. Il Reg. UE 2017/2158 ha istituito misure di attenuazione obbligatorie."),
+    h2('14.1 Prodotti da forno e cereali'),
+    ...textToParagraphs([
+      '• Cuocere i prodotti da forno fino a una colorazione finale più chiara — evitare la doratura eccessiva',
+      '• Utilizzare le guide cromatiche elaborate per i prodotti specifici — esposte in modo visibile nei locali di preparazione',
+      '• Per il pane tostato: preferire tostatura leggera (colore dorato chiaro, non bruno)',
+      '• Qualora si utilizzi pane preconfezionato o prodotti da forno da ultimare in cottura: osservare le istruzioni del produttore incluse le indicazioni cromatiche',
+    ].join('\n')),
+    ...(isCucinaInterna && opFrittura ? [
+      h2('14.2 Frittura di patate e prodotti fritti'),
+      ...textToParagraphs([
+        '• Conservare le patate a temperatura superiore a 6°C — mai in frigorifero (aumenta gli zuccheri)',
+        "• Prima della frittura: lavare e lasciare in ammollo in acqua fredda 30-120 min; asciugare bene",
+        '• Temperatura di frittura: massimo 175°C — più bassa possibile compatibilmente con i requisiti di sicurezza',
+        '• Utilizzare oli con alto punto di fumo (olio di oliva raffinato, olio di arachidi)',
+        "• Non aggiungere mai olio fresco all'olio usato",
+        '• Schiumare frequentemente per eliminare briciole e residui che accelerano la formazione di acrilammide',
+        '• Guida cromatica per il colore finale: dorato chiaro è il limite accettabile',
+        '• Sale e spezie: aggiungere sempre DOPO la frittura, mai prima',
+      ].join('\n')),
+    ] : [
+      h2('14.2 Nota per il modello ' + modello),
+      txt('Il presente manuale riguarda un servizio di ' + (modello === 'distribuzione_veicolata' ? 'distribuzione veicolata' : 'appalto a fornitore esterno') + '. Le fasi di cottura e frittura sono di competenza del centro cottura esterno (' + fornitoreNome + '). Le misure di attenuazione dell\'acrilammide per tostatura pane e prodotti da forno riscaldati rimangono applicabili al personale OSA nelle cucinette di nucleo.'),
+    ]),
 
   ];
 
@@ -1608,7 +1870,7 @@ export async function generaModulisticaHaccp({
 
   // ── Autoc 2A cucina — Frigoriferi cucina (Landscape) ──────────
   function autoc2ACucina() {
-    const W   = W_L;
+    const W   = W_P;
     const nF  = Math.max(frigoCucina.length, 1);
     const cFix = 700 + 700 + 1500 + 1600;
     const tW  = Math.max(Math.floor((W - cFix) / nF), 500);
@@ -1616,7 +1878,7 @@ export async function generaModulisticaHaccp({
     const colWidths = [700, 700, ...tCols, 1500, 1600];
     const noteApp = frigoCucina.length ? frigoCucina.map((r, i) => `${i + 1} = ${getCodice(r)} (${getDesc(r)})`).join(' | ') : '1 = Frigorifero cucina';
     return { properties: { page: pLand }, children: [
-      intestazione('Autoc 2A', 'TEMPERATURE FRIGORIFERI CUCINA', W, true),
+      intestazione('Autoc 2A', 'TEMPERATURE FRIGORIFERI CUCINA', W),
       sp(0.5),
       new Paragraph({ children: [new TextRun({ text: `Apparecchiature: ${noteApp}`, font: 'Arial', size: 17, bold: true, color: V })] }),
       sp(0.5),
@@ -1660,7 +1922,7 @@ export async function generaModulisticaHaccp({
   function autoc2B() {
     if (congelatori.length === 0 && congelatoriR.length === 0) return null;
     const all = [...congelatori, ...congelatoriR];
-    const W   = W_L;
+    const W   = W_P;
     const nC  = Math.max(all.length, 1);
     const cFix = 700 + 700 + 1500 + 1600;
     const tW  = Math.max(Math.floor((W - cFix) / nC), 500);
@@ -1668,7 +1930,7 @@ export async function generaModulisticaHaccp({
     const colWidths = [700, 700, ...tCols, 1500, 1600];
     const noteApp = all.length ? all.map((r, i) => `${i + 1} = ${getCodice(r)} (${getDesc(r)})`).join(' | ') : '1 = Congelatore';
     return { properties: { page: pLand }, children: [
-      intestazione('Autoc 2B', 'TEMPERATURE CONGELATORI / SURGELATORI', W, true),
+      intestazione('Autoc 2B', 'TEMPERATURE CONGELATORI / SURGELATORI', W),
       sp(0.5),
       new Paragraph({ children: [new TextRun({ text: `Apparecchiature: ${noteApp}`, font: 'Arial', size: 17, bold: true, color: V })] }),
       sp(0.5),
@@ -1677,7 +1939,7 @@ export async function generaModulisticaHaccp({
         rows: [
           new TableRow({ children: [hC('Giorno', 700), hC('Ora', 700), hC('Temperatura (°C)', tW * nC, nC), hC('Anomalia / Guasto', 1500), hC('Firma', 1600)] }),
           new TableRow({ children: [eC(700), eC(700), ...tCols.map((w, i) => cell(all[i] ? getCodice(all[i]) : String(i + 1), w, { bold: true, align: AlignmentType.CENTER, size: 16, fill: VL, bc: 'DDDDDD' })), eC(1500), cell('Apporre firma →', 1600, { size: 14, italic: true, color: GS })] }),
-          ...righeGiornaliere(colWidths, W, true),
+          ...righeGiornaliere(colWidths, W, false),
         ],
       }),
       sp(),
@@ -2060,77 +2322,143 @@ export async function generaModulisticaHaccp({
     ]};
   }
 
-  // ── Autoc 5A — Distributore acqua (Portrait) ─────────────────
+  // ── Autoc 5A — Distributore acqua (Landscape, formato Quinzano) ──
   function autoc5A() {
     if (!op_distributore_acqua) return null;
-    const W = W_P;
+    const W = W_L;
     const nota = op_distributore_acqua_note || '';
     const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
     const attivita = [
-      ['Pulizia esterna erogatori', 'Settimanale', 'Firma'],
-      ['Sostituzione filtri (secondo scheda tecnica)', 'Semestrale', 'Firma + n° lotto filtro'],
-      ['Disinfezione circuito interno', 'Semestrale', 'Firma + prodotto usato'],
-      ['Analisi acqua erogata (laboratorio)', 'Annuale', 'Allegare rapporto'],
+      { att: 'Pulizia esterna erogatori e vassoio raccogligocce', freq: 'Settimanale' },
+      { att: 'Pulizia bocchetta erogazione', freq: 'Settimanale' },
+      { att: 'Sostituzione filtri (secondo scheda tecnica fornitore)', freq: 'Semestrale' },
+      { att: 'Disinfezione circuito interno', freq: 'Semestrale' },
+      { att: 'Verifica parametri erogazione (portata, T°)', freq: 'Trimestrale' },
+      { att: 'Analisi acqua erogata (laboratorio accreditato)', freq: 'Annuale' },
+      { att: 'Manutenzione tecnica completa (assistenza fornitore)', freq: 'Annuale' },
     ];
-    const c0 = Math.floor(W * 0.42); const c1 = Math.floor(W * 0.18); const cM = Math.floor((W - c0 - c1) / 12);
-    const colWidths = [c0, c1, ...Array.from({ length: 12 }, (_, i) => i === 11 ? W - c0 - c1 - cM * 11 : cM)];
-    return { properties: { page: pPort }, children: [
-      intestazione('Autoc 5A', `MANUTENZIONE DISTRIBUTORE ACQUA POTABILE${nota ? ' — ' + nota : ''}`, W),
+
+    // Tabella annuale: P = programmato, V = verificato — una colonna per mese
+    const cAtt = Math.floor(W * 0.35);
+    const cFreq = Math.floor(W * 0.12);
+    const cM = Math.floor((W - cAtt - cFreq) / 12);
+    const cLast = W - cAtt - cFreq - cM * 11;
+    const colsAnn = [cAtt, cFreq, ...Array.from({length:12},(_,i) => i===11?cLast:cM)];
+
+    // Tabella mensile: 31 giorni — righe per attività settimanale
+    const attivitaSet = attivita.filter(a => a.freq === 'Settimanale');
+    const c0m = Math.floor(W * 0.35);
+    const cGm = Math.floor((W - c0m) / 31);
+    const cLm = W - c0m - cGm * 30;
+    const colsMens = [c0m, ...Array.from({length:31},(_,i) => i===30?cLm:cGm)];
+
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 5A', `MANUTENZIONE DISTRIBUTORE ACQUA POTABILE${nota?' — '+nota:''}`, W, true),
       sp(0.5),
+      // Tabella annuale P/V
+      p([r('PIANO ANNUALE — P = Programmato · V = Verificato (apporre firma)', {bold:true, size:17, color:V})], {after:60}),
       new Table({
-        width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
-        rows: [
-          new TableRow({ children: [hC('Attività', c0), hC('Frequenza', c1), ...mesi.map((m, i) => hC(m, i === 11 ? W - c0 - c1 - cM * 11 : cM))] }),
-          ...attivita.map(([att, freq], i) => new TableRow({
-            height: { value: 520, rule: 'exact' },
-            children: [
-              cell(att, c0, { size: 16, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
-              cell(freq, c1, { size: 15, italic: true, color: GS, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
-              ...Array.from({ length: 12 }, (_, j) => eC(j === 11 ? W - c0 - c1 - cM * 11 : cM, i % 2 === 0 ? VL : W_)),
+        width:{size:W,type:WidthType.DXA}, columnWidths:colsAnn,
+        rows:[
+          new TableRow({children:[hC('Attività',cAtt), hC('Frequenza',cFreq), ...mesi.map((m,i)=>hC(m,i===11?cLast:cM))]}),
+          ...attivita.map(({att,freq},i)=>new TableRow({
+            height:{value:500,rule:'exact'},
+            children:[
+              cell(att,cAtt,{size:15,fill:i%2===0?W_:VL,bc:'DDDDDD'}),
+              cell(freq,cFreq,{size:14,italic:true,color:GS,fill:i%2===0?W_:VL,bc:'DDDDDD',align:AlignmentType.CENTER}),
+              ...Array.from({length:12},(_,j)=>eC(j===11?cLast:cM,i%2===0?W_:VL)),
+            ],
+          })),
+        ],
+      }),
+      sp(1),
+      // Tabella mensile per attività settimanali
+      p([r('MONITORAGGIO MENSILE — attività settimanali (firma per conferma esecuzione)', {bold:true, size:17, color:V})], {after:60}),
+      new Table({
+        width:{size:W,type:WidthType.DXA}, columnWidths:colsMens,
+        rows:[
+          new TableRow({children:[hC('Attività settimanale',c0m), ...Array.from({length:31},(_,i)=>hC(String(i+1),i===30?cLm:cGm))]}),
+          ...attivitaSet.map(({att},i)=>new TableRow({
+            height:{value:480,rule:'exact'},
+            children:[
+              cell(att,c0m,{size:15,fill:i%2===0?W_:VL,bc:'DDDDDD'}),
+              ...Array.from({length:31},(_,j)=>eC(j===30?cLm:cGm,i%2===0?W_:VL)),
             ],
           })),
         ],
       }),
       sp(),
-      noteFooter('P = programmato (apporre X) · V = verificato (apporre firma alla data di esecuzione effettiva). Conservare rapporti analisi acqua per 5 anni. NC → Autoc 6.', W),
+      noteFooter('Conservare rapporti analisi acqua per 5 anni. NC → Autoc 6. Manutenzione tecnica: richiedere rapporto scritto al fornitore.', W),
     ]};
   }
 
-  // ── Autoc 5B — Macchinetta bevande calde (Portrait) ───────────
+  // ── Autoc 5B — Macchinetta bevande (Landscape, formato Quinzano) ─
   function autoc5B() {
     if (!op_macchinetta_caffe) return null;
-    const W = W_P;
+    const W = W_L;
     const nota = op_macchinetta_caffe_note || '';
     const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
     const attivita = [
-      ['Pulizia esterna macchina e vassoio raccogligocce', 'Giornaliera'],
-      ['Pulizia cappuccino/schiuma latte', 'Dopo ogni uso'],
-      ['Decalcificazione circuito', 'Mensile (o secondo display)'],
-      ['Pulizia circuito interno (risciacquo)', 'Settimanale'],
-      ['Sostituzione filtro acqua', 'Semestrale'],
-      ['Manutenzione tecnica completa (assistenza)', 'Annuale'],
+      { att: 'Pulizia esterna macchina e vassoio raccogligocce', freq: 'Giornaliera' },
+      { att: 'Pulizia cappuccino/schiuma latte (dopo ogni uso con latte)', freq: 'Giornaliera' },
+      { att: 'Pulizia circuito interno (risciacquo)', freq: 'Settimanale' },
+      { att: 'Decalcificazione circuito (o secondo display macchina)', freq: 'Mensile' },
+      { att: 'Sostituzione filtro acqua', freq: 'Semestrale' },
+      { att: 'Manutenzione tecnica completa (assistenza fornitore)', freq: 'Annuale' },
     ];
-    const c0 = Math.floor(W * 0.42); const c1 = Math.floor(W * 0.18); const cM = Math.floor((W - c0 - c1) / 12);
-    const colWidths = [c0, c1, ...Array.from({ length: 12 }, (_, i) => i === 11 ? W - c0 - c1 - cM * 11 : cM)];
-    return { properties: { page: pPort }, children: [
-      intestazione('Autoc 5B', `MANUTENZIONE MACCHINETTA BEVANDE CALDE${nota ? ' — ' + nota : ''}`, W),
+
+    const attivitaGiorn = attivita.filter(a => a.freq === 'Giornaliera');
+    const attivitaSet   = attivita.filter(a => a.freq === 'Settimanale');
+
+    // Tabella annuale
+    const cAtt = Math.floor(W * 0.35);
+    const cFreq = Math.floor(W * 0.12);
+    const cM = Math.floor((W - cAtt - cFreq) / 12);
+    const cLast = W - cAtt - cFreq - cM * 11;
+    const colsAnn = [cAtt, cFreq, ...Array.from({length:12},(_,i)=>i===11?cLast:cM)];
+
+    // Tabella mensile giorni (per attività giornaliere e settimanali)
+    const attivitaMens = [...attivitaGiorn, ...attivitaSet];
+    const c0m = Math.floor(W * 0.35);
+    const cGm = Math.floor((W - c0m) / 31);
+    const cLm = W - c0m - cGm * 30;
+    const colsMens = [c0m, ...Array.from({length:31},(_,i)=>i===30?cLm:cGm)];
+
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 5B', `MANUTENZIONE MACCHINETTA BEVANDE CALDE${nota?' — '+nota:''}`, W, true),
       sp(0.5),
+      p([r('PIANO ANNUALE — P = Programmato · V = Verificato (apporre firma)', {bold:true, size:17, color:V})], {after:60}),
       new Table({
-        width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
-        rows: [
-          new TableRow({ children: [hC('Attività', c0), hC('Frequenza', c1), ...mesi.map((m, i) => hC(m, i === 11 ? W - c0 - c1 - cM * 11 : cM))] }),
-          ...attivita.map(([att, freq], i) => new TableRow({
-            height: { value: 520, rule: 'exact' },
-            children: [
-              cell(att, c0, { size: 16, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
-              cell(freq, c1, { size: 15, italic: true, color: GS, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
-              ...Array.from({ length: 12 }, (_, j) => eC(j === 11 ? W - c0 - c1 - cM * 11 : cM, i % 2 === 0 ? VL : W_)),
+        width:{size:W,type:WidthType.DXA}, columnWidths:colsAnn,
+        rows:[
+          new TableRow({children:[hC('Attività',cAtt), hC('Frequenza',cFreq), ...mesi.map((m,i)=>hC(m,i===11?cLast:cM))]}),
+          ...attivita.map(({att,freq},i)=>new TableRow({
+            height:{value:500,rule:'exact'},
+            children:[
+              cell(att,cAtt,{size:15,fill:i%2===0?W_:VL,bc:'DDDDDD'}),
+              cell(freq,cFreq,{size:14,italic:true,color:GS,fill:i%2===0?W_:VL,bc:'DDDDDD',align:AlignmentType.CENTER}),
+              ...Array.from({length:12},(_,j)=>eC(j===11?cLast:cM,i%2===0?W_:VL)),
+            ],
+          })),
+        ],
+      }),
+      sp(1),
+      p([r('MONITORAGGIO MENSILE — attività giornaliere e settimanali (firma per conferma)', {bold:true, size:17, color:V})], {after:60}),
+      new Table({
+        width:{size:W,type:WidthType.DXA}, columnWidths:colsMens,
+        rows:[
+          new TableRow({children:[hC('Attività',c0m), ...Array.from({length:31},(_,i)=>hC(String(i+1),i===30?cLm:cGm))]}),
+          ...attivitaMens.map(({att,freq},i)=>new TableRow({
+            height:{value:480,rule:'exact'},
+            children:[
+              cell(att+' ('+freq+')',c0m,{size:14,fill:i%2===0?W_:VL,bc:'DDDDDD'}),
+              ...Array.from({length:31},(_,j)=>eC(j===30?cLm:cGm,i%2===0?W_:VL)),
             ],
           })),
         ],
       }),
       sp(),
-      noteFooter('P = programmato · V = verificato con firma. Acqua con calcare elevato: aumentare frequenza decalcificazione. NC → Autoc 6.', W),
+      noteFooter('Acqua con calcare elevato: aumentare frequenza decalcificazione. Conservare rapporti manutenzione. NC → Autoc 6.', W),
     ]};
   }
 

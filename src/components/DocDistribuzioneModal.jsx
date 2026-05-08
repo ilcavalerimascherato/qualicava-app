@@ -122,14 +122,14 @@ export default function DocDistribuzioneModal({ master, onClose, onDistributed }
 
       for (const fac of selectedFacilities) {
         try {
+          // 1. Compila documento con dati struttura
           const blob = await compileDocumento(fileBuffer, fac, master, storico);
-          const path = await uploadCompiledIstanza(
+          // 2. Upload file compilato + aggiorna path in DB
+          await uploadCompiledIstanza(
             master.id, fac.id, master.revisione_corrente ?? '1', blob
           );
-          // Crea o aggiorna istanza con path del file compilato
+          // 3. Crea istanza (upsert — se già esiste la aggiorna)
           await generateIstanzaMassiva(master.id, [fac.id], profile.id);
-          // Aggiorna path compilato sull'istanza appena creata
-          void path; // usato per il tipo, DB update separato se necessario
         } catch (e) {
           errors.push({ facilityId: fac.id, name: fac.name, error: e.message });
         }
@@ -138,7 +138,8 @@ export default function DocDistribuzioneModal({ master, onClose, onDistributed }
       }
 
       setRisultati({ total: selected.size, errors });
-      if (errors.length === 0) onDistributed?.();
+      // NON chiudere qui — mostra la schermata risultati e lascia chiudere all'utente
+      if (errors.length === 0) onDistributed?.();  // notifica il padre SENZA chiudere
     } catch (e) {
       setError(e.message);
     } finally {
@@ -223,6 +224,11 @@ export default function DocDistribuzioneModal({ master, onClose, onDistributed }
                   <p className="text-xl font-black text-slate-800">
                     {risultati.total} document{risultati.total === 1 ? 'o generato' : 'i generati'} con successo
                   </p>
+                  <div className="w-full max-w-md bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-left space-y-2">
+                    <p className="text-xs font-bold text-indigo-800">✓ Documenti disponibili nell'area personale di ogni struttura</p>
+                    <p className="text-xs text-indigo-600">Le strutture troveranno i documenti nella sezione <strong>I miei documenti</strong> del loro portale.</p>
+                    <p className="text-xs text-slate-400 italic">Notifica email: non attiva in questa versione.</p>
+                  </div>
                 </>
               ) : (
                 <>

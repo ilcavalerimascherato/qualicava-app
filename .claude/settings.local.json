@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(npm install *)",
-      "Bash(npx react-scripts *)"
+      "Bash(npx react-scripts *)",
+      "Bash(node -e \"const lr = require\\('lucide-react'\\); console.log\\('Stethoscope:', typeof lr.Stethoscope\\); console.log\\('HardHat:', typeof lr.HardHat\\); console.log\\('Star:', typeof lr.Star\\); console.log\\('BookOpen:', typeof lr.BookOpen\\);\")",
+      "Bash(node -e \"const lr = require\\('lucide-react'\\); ['Tag','Calendar','ChevronDown','Upload','X','FileText','Loader2','CheckCircle2','Send','Download','Pencil','Shield'].forEach\\(n => console.log\\(n+':', typeof lr[n]\\)\\);\")",
+      "Bash(node -e \"try { require\\('./src/views/DocMyDocumentiView.jsx'\\); console.log\\('OK'\\); } catch\\(e\\) { console.error\\('ERROR:', e.message\\); }\")",
+      "Bash(node -e \"const lr = require\\('lucide-react'\\); ['Pill','Apple','Droplets','Stethoscope','HardHat'].forEach\\(n => console.log\\(n+':', typeof lr[n]\\)\\);\")",
+      "Bash(node -e \"const pkg = require\\('./node_modules/lucide-react/package.json'\\); console.log\\('version:', pkg.version\\);\")",
+      "Bash(node -e \"const lr = require\\('lucide-react'\\); const star = lr.Star; console.log\\('Star typeof:', typeof star\\); console.log\\('Star is function?', typeof star === 'function'\\); console.log\\('Star name?', star && star.name\\);\")",
+      "Bash(node -e \"const lr = require\\('lucide-react'\\); const star = lr.Star; console.log\\(JSON.stringify\\(star\\)\\); console.log\\(Object.keys\\(star || {}\\)\\);\")",
+      "Bash(ls node_modules/lucide-react/dist/)",
+      "Bash(dir node_modules\\\\\\\\lucide-react\\\\\\\\dist)"
     ]
   }
 }

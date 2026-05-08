@@ -14,6 +14,7 @@ import { useNavigate }         from 'react-router-dom';
 import { PawPrint, LogOut, Building2, Activity, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 import { useAuth }               from '../contexts/AuthContext';
 import { useDirectorData }       from '../hooks/useDirectorData';
+import { useBadgeCounts }        from '../hooks/useBadgeCounts';
 import { enrichFacilitiesData }  from '../utils/statusCalculator';
 
 export default function DirectorApp() {
@@ -23,6 +24,7 @@ export default function DirectorApp() {
 
   const facilityIds = profile?.accessibleFacilityIds ?? [];
   const { data, loading, errors } = useDirectorData(facilityIds, year);
+  const { perFacility: badgePerFacility } = useBadgeCounts(facilityIds);
 
   const myFacilities = useMemo(() =>
     enrichFacilitiesData(data.facilities, data.surveys, data.kpiRecords, year, data.udos),
@@ -97,6 +99,7 @@ export default function DirectorApp() {
                 key={f.id}
                 facility={f}
                 onClick={() => navigate(`/facility/${f.id}`)}
+                badge={badgePerFacility[f.id]}
               />
             ))}
           </div>
@@ -106,7 +109,7 @@ export default function DirectorApp() {
   );
 }
 
-function FacilitySelectionCard({ facility: f, onClick }) {
+function FacilitySelectionCard({ facility: f, onClick, badge }) {
   const statusConfig = f.isGreen
     ? { Icon: CheckCircle2, color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'In regola' }
     : f.isRed
@@ -115,12 +118,22 @@ function FacilitySelectionCard({ facility: f, onClick }) {
 
   const { Icon } = statusConfig;
 
+  const badgeTotal = badge?.total ?? 0;
+  const badgeBg    = badge?.haccpRossi > 0 ? 'bg-rose-500'
+    : badge?.haccp > 0 ? 'bg-amber-500'
+    : 'bg-blue-500';
+
   return (
     <button
       onClick={onClick}
-      className="bg-white rounded-2xl border border-slate-200 p-5 text-left hover:shadow-md hover:border-indigo-300 transition-all group"
+      className="relative bg-white rounded-2xl border border-slate-200 p-5 text-left hover:shadow-md hover:border-indigo-300 transition-all group"
       style={{ borderTopWidth: '4px', borderTopColor: f.udo_color || '#cbd5e1' }}
     >
+      {badgeTotal > 0 && (
+        <span className={`absolute -top-2 -right-2 min-w-[22px] h-[22px] ${badgeBg} text-white text-[11px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow-md z-10`}>
+          {badgeTotal > 99 ? '99+' : badgeTotal}
+        </span>
+      )}
       <div className="flex justify-between items-start mb-3">
         <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${statusConfig.bg} ${statusConfig.color} ${statusConfig.border} border`}>
           <Icon size={12} />

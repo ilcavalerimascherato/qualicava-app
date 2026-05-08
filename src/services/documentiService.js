@@ -132,7 +132,7 @@ export async function logAccesso(istanzaId) {
   // Leggo prima per sapere se è il primo accesso
   const { data: existing } = await supabase
     .from('doc_istanze')
-    .select('accesso_count, primo_accesso_il, facility_id, master_id, facilities(user_id)')
+    .select('accesso_count, primo_accesso_il, facility_id, master_id')
     .eq('id', istanzaId)
     .single();
 
@@ -154,7 +154,7 @@ export async function logAccesso(istanzaId) {
     existing?.master_id ?? null,
     'accesso_download',
     { facility_id: existing?.facility_id ?? null, istanza_id: istanzaId },
-    existing?.facilities?.user_id ?? null,
+    null, // user_id non disponibile da facilities
   );
   return data;
 }

@@ -25,6 +25,7 @@ import { useAuth }                           from '../contexts/AuthContext';
 import { useModals }                         from '../contexts/ModalContext';
 import { useDirectorData, useDirectorInvalidate } from '../hooks/useDirectorData';
 import { useDashboardData, useInvalidate }   from '../hooks/useDashboardData';
+import { useBadgeCounts }                    from '../hooks/useBadgeCounts';
 import { enrichFacilitiesData }              from '../utils/statusCalculator';
 import { createUserDirect }                  from '../utils/createUserDirect';
 import { supabase }                          from '../supabaseClient';
@@ -42,6 +43,21 @@ import KpiManagerModal      from '../components/KpiManagerModal';
 import DataImportModal      from '../components/DataImportModal';
 import AnalyticsModal       from '../components/AnalyticsModal';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
+
+// Mappa tab → conteggio badge e colore
+function getTabBadge(tabId, fBadge) {
+  if (!fBadge) return { count: 0, bg: 'bg-rose-500' };
+  switch (tabId) {
+    case 'haccp':
+      return { count: fBadge.haccp, bg: fBadge.haccpRossi > 0 ? 'bg-rose-500' : 'bg-amber-500' };
+    case 'kpi':
+      return { count: fBadge.kpi, bg: 'bg-blue-500' };
+    case 'non_conformities':
+      return { count: fBadge.nc, bg: 'bg-rose-500' };
+    default:
+      return { count: 0, bg: 'bg-rose-500' };
+  }
+}
 
 const TABS = [
   { id: 'overview',         label: 'Panoramica',     Icon: Activity      },
@@ -92,6 +108,10 @@ export default function DirectorFacility() {
   const [dataTarget, setDataTarget]       = useState(null);
   const [documentiTabStatus, setDocumentiTabStatus] = useState(null);
   const year = new Date().getFullYear();
+
+  const numericFacilityId = Number(facilityId);
+  const { perFacility: badgePerFacility } = useBadgeCounts([numericFacilityId], year);
+  const fBadge = badgePerFacility[numericFacilityId];
 
   // FIX v3: admin → useDashboardData (accesso globale)
   //         director → useDirectorData (solo strutture assegnate)
@@ -201,24 +221,32 @@ export default function DirectorFacility() {
 
         {/* Tab nav */}
         <nav className="flex gap-1 overflow-x-auto pb-1">
-          {TABS.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === id
-                  ? 'bg-indigo-600 text-white shadow'
-                  : 'text-slate-500 hover:bg-slate-100'
-              }`}
-            >
-              <Icon size={13} /> {label}
-              {id === 'haccp' && documentiTabStatus && (
-                <span className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
-                  documentiTabStatus === 'red' ? 'bg-red-500' : 'bg-amber-400'
-                }`} />
-              )}
-            </button>
-          ))}
+          {TABS.map(({ id, label, Icon }) => {
+            const tabBadge = getTabBadge(id, fBadge);
+            return (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                  activeTab === id
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                <Icon size={13} /> {label}
+                {tabBadge.count > 0 && (
+                  <span className={`min-w-[18px] h-[18px] ${tabBadge.bg} text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none`}>
+                    {tabBadge.count > 99 ? '99+' : tabBadge.count}
+                  </span>
+                )}
+                {id === 'haccp' && documentiTabStatus && (
+                  <span className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
+                    documentiTabStatus === 'red' ? 'bg-red-500' : 'bg-amber-400'
+                  }`} />
+                )}
+              </button>
+            );
+          })}
         </nav>
       </header>
 
@@ -502,7 +530,10 @@ function OverviewTab({ facility: f, surveys, year }) {
     if (!emails.length) return;
     supabase.from('user_profiles').select('email,last_sign_in_at,created_at,updated_at')
       .in('email', emails)
-      .then(({ data }) => { if (data) setUserProfiles(data); });
+      .then(({ data, error }) => {
+        if (error) { console.warn('user_profiles non accessibile:', error.message); return; }
+        if (data) setUserProfiles(data);
+      });
   }, [f]);
 
   const handleSaveOrg = async () => {
@@ -1248,7 +1279,7 @@ function HaccpTab({ facility, onStatusChange }) {
     supabase
       .from('haccp_scadenzario')
       .select('*')
-      .eq('facility_id', facility.id)
+      .eq('struttura_id', facility.id)
       .single()
       .then(({ data }) => { setHaccpStatus(data || null); setHaccpLoading(false); });
   }, [facility?.id, facility?.haccp_obbligatorio]);

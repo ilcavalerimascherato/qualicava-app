@@ -919,7 +919,8 @@ export default function DocumentiPage() {
           master={distribModal.master}
           onClose={() => setDistribModal({ open: false, master: null })}
           onDistributed={() => {
-            setDistribModal({ open: false, master: null });
+            // Non chiudiamo: il modal mostra la schermata risultati con pulsante Chiudi
+            // Aggiorniamo solo la lista in background
             getDocMaster().then(setDocMasterList).catch(console.error);
           }}
         />
