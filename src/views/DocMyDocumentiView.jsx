@@ -152,10 +152,10 @@ function DocCard({ istanza, facilityData, onDownload }) {
 
 // ─── view principale ──────────────────────────────────────────
 
-export default function DocMyDocumentiView() {
+export default function DocMyDocumentiView({ facilityId: propFacilityId = null }) {
   const { profile } = useAuth();
 
-  const [facilityId,       setFacilityId]       = useState(null);
+  const [facilityId,       setFacilityId]       = useState(propFacilityId);
   const [facilityData,     setFacilityData]     = useState(null);
   const [istanze,          setIstanze]          = useState([]);
   const [facilities,       setFacilities]       = useState([]);
@@ -166,19 +166,21 @@ export default function DocMyDocumentiView() {
   const [strutturaModal,   setStrutturaModal]   = useState({ open: false, doc: null, isNew: false });
   const [confermaElimina,  setConfermaElimina]  = useState(null);
 
-  // Determina la struttura dell'utente
+  // Determina la struttura dell'utente (ignorato se facilityId passato come prop)
   useEffect(() => {
+    if (propFacilityId != null) return;
     const ids = profile?.accessibleFacilityIds ?? [];
     if (ids.length > 0) setFacilityId(ids[0]);
-  }, [profile]);
+  }, [profile, propFacilityId]);
 
-  // Se ha più strutture, le carica per il selettore
+  // Carica selettore strutture (ignorato se facilityId passato come prop)
   useEffect(() => {
+    if (propFacilityId != null) return;
     const ids = profile?.accessibleFacilityIds ?? [];
     if (ids.length <= 1) return;
     supabase.from('facilities').select('id, name').in('id', ids).order('name')
       .then(({ data }) => setFacilities(data ?? []));
-  }, [profile]);
+  }, [profile, propFacilityId]);
 
   // Carica istanze + dati struttura
   useEffect(() => {
@@ -350,8 +352,8 @@ export default function DocMyDocumentiView() {
 
   return (
     <div className="space-y-8">
-      {/* Struttura selector (solo se multi-struttura) */}
-      {facilities.length > 1 && (
+      {/* Struttura selector (solo se multi-struttura e nessun prop facilityId) */}
+      {facilities.length > 1 && propFacilityId == null && (
         <div className="flex items-center gap-3">
           <span className="text-sm font-bold text-slate-600">Struttura:</span>
           <select
@@ -367,8 +369,8 @@ export default function DocMyDocumentiView() {
         </div>
       )}
 
-      {/* Intestazione struttura */}
-      {facilityData && (
+      {/* Intestazione struttura — nascosta quando incorporata nella vista direttore (header già visibile) */}
+      {facilityData && propFacilityId == null && (
         <div className="flex items-center gap-3 pb-2 border-b border-slate-200">
           <div className="p-2 bg-indigo-100 rounded-xl">
             <FileText size={18} className="text-indigo-600" />
@@ -393,12 +395,23 @@ export default function DocMyDocumentiView() {
         Object.entries(byCategoria).map(([cat, docs]) => {
           const style = CAT_STYLE[cat] ?? CAT_DEFAULT;
           const Icon  = style.icon;
+          const nuoviOAggiornati = docs.filter(ist => {
+            const isNew = !ist.primo_accesso_il;
+            const isUpd = ist.generato_il && ist.primo_accesso_il &&
+              new Date(ist.generato_il) > new Date(ist.primo_accesso_il);
+            return isNew || isUpd;
+          }).length;
           return (
             <div key={cat}>
               <div className="flex items-center gap-2 mb-4">
                 <Icon size={16} className={style.iconColor} />
                 <h3 className="font-black text-slate-700 uppercase tracking-wide text-sm">{cat}</h3>
                 <span className="text-xs text-slate-400">({docs.length})</span>
+                {nuoviOAggiornati > 0 && (
+                  <span className="min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none">
+                    {nuoviOAggiornati}
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {docs.map(ist => (

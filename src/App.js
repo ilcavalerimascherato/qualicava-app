@@ -73,8 +73,11 @@ export default function App() {
     return { list: withHaccp, ...stats };
   }, [data.facilities, data.surveys, data.kpiRecords, data.udos, year, haccpSemafori]);
 
-  const allFacilityIds = useMemo(() => processedData.list.map(f => f.id), [processedData.list]);
-  const { totals: badgeTotals } = useBadgeCounts(allFacilityIds);
+  const allFacilityIds = useMemo(
+    () => processedData.list.filter(f => !f.is_suspended).map(f => f.id),
+    [processedData.list],
+  );
+  const { totals: badgeTotals } = useBadgeCounts(allFacilityIds, year, isAdmin);
 
   const filteredFacilities = useMemo(() => {
     return processedData.list.filter(f => {
@@ -206,7 +209,10 @@ export default function App() {
               <ChefHat size={14} /> HACCP
               {badgeTotals.haccp > 0 && (
                 <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] ${badgeTotals.haccpRossi > 0 ? 'bg-rose-500' : 'bg-amber-500'} text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow`}>
-                  {badgeTotals.haccp > 99 ? '99+' : badgeTotals.haccp}
+                  {badgeTotals.haccpRossi > 0
+                    ? (badgeTotals.haccpRossi > 99 ? '99+' : badgeTotals.haccpRossi)
+                    : (badgeTotals.haccp      > 99 ? '99+' : badgeTotals.haccp)
+                  }
                 </span>
               )}
             </button>

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
 const POLL_MS   = 60_000;
-const QUERY_CAP = 50; // limite per admin/superadmin con molte strutture
+const QUERY_CAP = 500;
 
 const EMPTY_TOTALS  = { documenti: 0, haccp: 0, haccpRossi: 0, nc: 0, kpi: 0, grand: 0 };
 const emptyFacility = () => ({ documenti: 0, haccp: 0, haccpRossi: 0, nc: 0, kpi: 0, total: 0 });
@@ -12,17 +12,22 @@ const emptyFacility = () => ({ documenti: 0, haccp: 0, haccpRossi: 0, nc: 0, kpi
  * Aggrega conteggi badge per struttura da 4 sorgenti dati in parallelo.
  * Esegue il polling ogni 60 secondi.
  *
- * @param {number[]} facilityIds   - Array di ID struttura da monitorare
- * @param {number}   currentYear   - Anno corrente (default: anno corrente)
+ * Per admin/superadmin (isAdmin=true) il badge Documenti conta:
+ *   A) doc_master pubblicati (non obsoleto/bozza) senza alcuna istanza distribuita
+ *   D) doc_master con istanze distribuite e data_scadenza scaduta
  *
- * @returns {{ loading: boolean, perFacility: Object, totals: Object }}
+ * Per director/sede (isAdmin=false) il badge Documenti conta le istanze
+ * non ancora consultate o aggiornate dopo il primo accesso.
+ *
+ * @param {number[]} facilityIds - Array di ID struttura da monitorare
+ * @param {number}   currentYear - Anno corrente
+ * @param {boolean}  isAdmin     - true per ruoli admin/superadmin
  */
-export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFullYear()) {
+export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFullYear(), isAdmin = false) {
   const [loading,     setLoading]     = useState(true);
   const [perFacility, setPerFacility] = useState({});
   const [totals,      setTotals]      = useState(EMPTY_TOTALS);
 
-  // Chiave stabile per evitare ricreazione del callback ad ogni render
   const idsKey = [...facilityIds]
     .sort((a, b) => a - b)
     .slice(0, QUERY_CAP)
@@ -31,52 +36,50 @@ export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFul
   const fetchAll = useCallback(async () => {
     const ids = idsKey.split(',').map(Number).filter(Boolean);
 
-    if (!ids.length) {
+    if (!ids.length && !isAdmin) {
       setPerFacility({});
       setTotals(EMPTY_TOTALS);
       setLoading(false);
       return;
     }
 
-    // ── 4 query in parallelo ──────────────────────────────────────
-    const [docsRes, haccpRes, ncRes, kpiRes] = await Promise.all([
+    // ── 6 query in parallelo ──────────────────────────────────────
+    const docsQ = ids.length
+      ? supabase.from('doc_istanze').select('facility_id, primo_accesso_il, generato_il').in('facility_id', ids)
+      : Promise.resolve({ data: [], error: null });
 
-      // 1. Documenti non ancora visti o aggiornati dopo primo accesso
-      supabase
-        .from('doc_istanze')
-        .select('facility_id, primo_accesso_il, generato_il')
-        .in('facility_id', ids),
+    const haccpQ = ids.length
+      ? supabase.from('haccp_scadenzario').select('struttura_id, semaforo').in('struttura_id', ids).in('semaforo', ['rosso', 'giallo'])
+      : Promise.resolve({ data: [], error: null });
 
-      // 2. Scadenzario HACCP — solo semafori rosso/giallo
-      supabase
-        .from('haccp_scadenzario')
-        .select('struttura_id, semaforo')
-        .in('struttura_id', ids)
-        .in('semaforo', ['rosso', 'giallo']),
+    const ncQ = ids.length
+      ? supabase.from('non_conformities').select('facility_id, stato').in('facility_id', ids).in('stato', ['Aperto', 'Pending']).eq('year', currentYear)
+      : Promise.resolve({ data: [], error: null });
 
-      // 3. Non conformità aperte
-      supabase
-        .from('non_conformities')
-        .select('facility_id, stato')
-        .in('facility_id', ids)
-        .in('stato', ['Aperto', 'Pending']),
+    const kpiQ = ids.length
+      ? supabase.from('fact_kpi_monthly').select('facility_id, month').in('facility_id', ids).eq('year', currentYear)
+      : Promise.resolve({ data: [], error: null });
 
-      // 4. Mesi KPI registrati nell'anno corrente
-      supabase
-        .from('fact_kpi_monthly')
-        .select('facility_id, month')
-        .in('facility_id', ids)
-        .eq('year', currentYear),
-    ]);
+    // Admin: doc_master pubblicati e master_id distribuiti (no-op se non admin)
+    const mastersQ = isAdmin
+      ? supabase.from('doc_master').select('id, data_scadenza').neq('stato', 'obsoleto').neq('stato', 'bozza')
+      : Promise.resolve({ data: null, error: null });
+
+    const distQ = isAdmin
+      ? supabase.from('doc_istanze').select('master_id')
+      : Promise.resolve({ data: null, error: null });
+
+    const [docsRes, haccpRes, ncRes, kpiRes, mastersRes, distRes] =
+      await Promise.all([docsQ, haccpQ, ncQ, kpiQ, mastersQ, distQ]);
 
     // ── Mesi attesi: da gennaio al mese precedente al corrente ────
-    const nowMonth       = new Date().getMonth() + 1; // 1-based
+    const nowMonth       = new Date().getMonth() + 1;
     const expectedMonths = Array.from({ length: nowMonth - 1 }, (_, i) => i + 1);
 
     // ── Inizializza accumulatori per struttura ────────────────────
     const result = Object.fromEntries(ids.map(id => [id, emptyFacility()]));
 
-    // ── Documenti ─────────────────────────────────────────────────
+    // ── Documenti (logica director/sede: primo_accesso_il) ────────
     if (!docsRes.error) {
       for (const row of docsRes.data ?? []) {
         const r = result[row.facility_id];
@@ -136,10 +139,26 @@ export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFul
       tots.grand      += r.total;
     }
 
+    // ── Admin: badge Documenti = A (non distribuiti) + D (scaduti) ─
+    if (isAdmin && !mastersRes.error && !distRes.error) {
+      const today = new Date().toISOString().split('T')[0];
+      const distributedIds = new Set((distRes.data ?? []).map(r => r.master_id).filter(Boolean));
+      let adminDocCount = 0;
+      for (const m of mastersRes.data ?? []) {
+        if (!distributedIds.has(m.id)) {
+          adminDocCount++; // A: pubblicato ma non ancora distribuito
+        } else if (m.data_scadenza && m.data_scadenza < today) {
+          adminDocCount++; // D: distribuito ma con scadenza superata
+        }
+      }
+      tots.documenti = adminDocCount;
+      tots.grand     = tots.grand - Object.values(result).reduce((s, r) => s + r.documenti, 0) + adminDocCount;
+    }
+
     setPerFacility(result);
     setTotals(tots);
     setLoading(false);
-  }, [idsKey, currentYear]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [idsKey, currentYear, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchAll();

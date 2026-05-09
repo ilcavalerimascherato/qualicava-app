@@ -16,6 +16,7 @@ import DocAnteprimaModal       from '../components/DocAnteprimaModal';
 import DocStrutturaPanel          from '../components/DocStrutturaPanel';
 import DocStrutturaProprioModal   from '../components/DocStrutturaProprioModal';
 import DocMyDocumentiView         from './DocMyDocumentiView';
+import { supabase } from '../supabaseClient';
 import {
   getDocMaster,
   setObsoleto,
@@ -84,14 +85,19 @@ function scadenzaBadge(dateStr) {
 
 // ─── card categoria (Libreria) ────────────────────────────────
 
-function CategoriaCard({ cat, docCount = 0, onClick }) {
+function CategoriaCard({ cat, docCount = 0, unreadCount = 0, onClick }) {
   const { Icon, label, description, bg, iconBg, iconColor, border, badge, codice, id } = cat;
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left rounded-2xl p-5 border-2 ${bg} ${border}
+      className={`relative w-full text-left rounded-2xl p-5 border-2 ${bg} ${border}
         hover:shadow-md transition-all duration-200 group flex flex-col gap-3`}
     >
+      {unreadCount > 0 && (
+        <span className="absolute -top-2 -right-2 min-w-[20px] h-[20px] bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow z-50">
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
       <div className="flex items-start justify-between">
         <div className={`p-2.5 rounded-xl ${iconBg}`}>
           <Icon size={22} className={iconColor} />
@@ -116,12 +122,18 @@ function CategoriaCard({ cat, docCount = 0, onClick }) {
 
 // ─── card documento (Libreria / Distribuzione) ────────────────
 
-function DocMasterCard({ doc, onDistribuisci, onAccessi, onAnteprima, onNuovaRevisione, onModifica, onObsoleto }) {
+function DocMasterCard({ doc, unreadCount = 0, onDistribuisci, onAccessi, onAnteprima, onNuovaRevisione, onModifica, onObsoleto }) {
   const cat  = CAT_MAP[doc.categoria];
   const scad = scadenzaBadge(doc.data_scadenza);
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all">
+    <div className="relative bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all">
+      {unreadCount > 0 && (
+        <span className="absolute -top-2 -right-2 min-w-[20px] h-[20px] bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow z-50"
+          title={`${unreadCount} struttur${unreadCount === 1 ? 'a' : 'e'} non ha ancora consultato questo documento`}>
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2.5">
           {cat && (
@@ -328,6 +340,7 @@ export default function DocumentiPage() {
   const [pendingStruttura, setPendingStruttura] = useState([]);
   const [loadingPending,   setLoadingPending]   = useState(false);
   const [strutturaModal,   setStrutturaModal]   = useState({ open: false, doc: null });
+  const [unreadByMaster,   setUnreadByMaster]   = useState({});
 
   const ricaricaDocMaster = useCallback(() => {
     setLoadingDocs(true);
@@ -357,6 +370,31 @@ export default function DocumentiPage() {
     ricaricaPending();
   }, [ricaricaPending]);
 
+  // Documenti attivi e obsoleti (split su stato)
+  const docAttivi   = useMemo(() => docMasterList.filter(d => d.stato !== 'obsoleto'), [docMasterList]);
+  const docObsoleti = useMemo(() => docMasterList.filter(d => d.stato === 'obsoleto'),  [docMasterList]);
+
+  // Badge doc admin: A (pubblicati non distribuiti) + D (distribuiti con scadenza superata)
+  useEffect(() => {
+    if (!isAdminRole) return;
+    const today = new Date().toISOString().split('T')[0];
+    supabase
+      .from('doc_istanze')
+      .select('master_id')
+      .then(({ data, error }) => {
+        if (error) return;
+        const distributedIds = new Set((data ?? []).map(r => r.master_id).filter(Boolean));
+        const badge = {};
+        for (const doc of docAttivi) {
+          const isDistributed = distributedIds.has(doc.id);
+          const isExpired     = doc.data_scadenza && doc.data_scadenza < today;
+          if (!isDistributed || isExpired) badge[doc.id] = 1;
+        }
+        setUnreadByMaster(badge);
+      })
+      .catch(console.error);
+  }, [isAdminRole, docAttivi]);
+
   const handleUploadSuccess = useCallback(() => {
     setShowUploadModal(false);
     ricaricaDocMaster();
@@ -385,10 +423,6 @@ export default function DocumentiPage() {
     }
   }, [profile?.id, ricaricaDocMaster]);
 
-  // Documenti attivi e obsoleti (split su stato)
-  const docAttivi   = useMemo(() => docMasterList.filter(d => d.stato !== 'obsoleto'), [docMasterList]);
-  const docObsoleti = useMemo(() => docMasterList.filter(d => d.stato === 'obsoleto'),  [docMasterList]);
-
   // Conteggi per categoria (solo attivi)
   const docCounts = useMemo(() => {
     const counts = {};
@@ -399,6 +433,15 @@ export default function DocumentiPage() {
   }, [docAttivi]);
 
   const isLibraryEmpty = docAttivi.length === 0;
+
+  // Badge per categoria: conta i master che richiedono attenzione (A o D)
+  const unreadByCategoria = useMemo(() => {
+    const catCounts = {};
+    for (const doc of docAttivi) {
+      if (unreadByMaster[doc.id]) catCounts[doc.categoria] = (catCounts[doc.categoria] ?? 0) + 1;
+    }
+    return catCounts;
+  }, [docAttivi, unreadByMaster]);
 
   // Filtro distribuzione (solo attivi)
   const docMasterFiltrati = useMemo(() => {
@@ -653,6 +696,7 @@ export default function DocumentiPage() {
                       <DocMasterCard
                         key={doc.id}
                         doc={doc}
+                        unreadCount={unreadByMaster[doc.id] ?? 0}
                         onAnteprima={m => setAnteprimaModal({ open: true, master: m })}
                         onDistribuisci={m => setDistribModal({ open: true, master: m })}
                         onAccessi={m => setAccessiModal({ open: true, master: m })}
@@ -689,6 +733,7 @@ export default function DocumentiPage() {
                           key={cat.id}
                           cat={CAT_MAP[cat.id]}
                           docCount={docCounts[cat.id] ?? 0}
+                          unreadCount={unreadByCategoria[cat.id] ?? 0}
                           onClick={() => setSelectedCategoria(cat.id)}
                         />
                       ))}
@@ -804,6 +849,7 @@ export default function DocumentiPage() {
                   <DocMasterCard
                     key={doc.id}
                     doc={doc}
+                    unreadCount={unreadByMaster[doc.id] ?? 0}
                     onAnteprima={m => setAnteprimaModal({ open: true, master: m })}
                     onDistribuisci={m => setDistribModal({ open: true, master: m })}
                     onAccessi={m => setAccessiModal({ open: true, master: m })}

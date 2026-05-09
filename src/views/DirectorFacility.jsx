@@ -43,13 +43,17 @@ import KpiManagerModal      from '../components/KpiManagerModal';
 import DataImportModal      from '../components/DataImportModal';
 import AnalyticsModal       from '../components/AnalyticsModal';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
+import DocMyDocumentiView   from './DocMyDocumentiView';
 
 // Mappa tab → conteggio badge e colore
 function getTabBadge(tabId, fBadge) {
   if (!fBadge) return { count: 0, bg: 'bg-rose-500' };
   switch (tabId) {
     case 'haccp':
-      return { count: fBadge.haccp, bg: fBadge.haccpRossi > 0 ? 'bg-rose-500' : 'bg-amber-500' };
+      return {
+        count: (fBadge.haccp || 0) + (fBadge.documenti || 0),
+        bg: (fBadge.haccpRossi > 0 || fBadge.documenti > 0) ? 'bg-rose-500' : 'bg-amber-500',
+      };
     case 'kpi':
       return { count: fBadge.kpi, bg: 'bg-blue-500' };
     case 'non_conformities':
@@ -202,6 +206,16 @@ export default function DirectorFacility() {
             <StatusPill label="KPI"    isOk={facility.isKpiGreen} />
           </div>
 
+          {(profile?.full_name || profile?.email) && (
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+              <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-white font-black text-[10px]">
+                {(profile.full_name || profile.email)[0].toUpperCase()}
+              </div>
+              <span className="text-xs font-bold text-slate-700 max-w-[120px] truncate">
+                {profile.full_name || profile.email}
+              </span>
+            </div>
+          )}
           <button
             onClick={signOut}
             className="flex items-center gap-2 text-sm text-rose-500 hover:bg-rose-50 px-3 py-2 rounded-xl transition-colors"
@@ -286,7 +300,7 @@ export default function DirectorFacility() {
           <BenchmarkTab facility={facility} kpiRecords={data.kpiRecords} year={year} />
         )}
         {activeTab === 'haccp' && (
-          <HaccpTab facility={facility} onStatusChange={setDocumentiTabStatus} />
+          <HaccpTab facility={facility} onStatusChange={setDocumentiTabStatus} fBadge={fBadge} />
         )}
       </main>
 
@@ -1267,8 +1281,7 @@ function SurveyAnalysisTab({ facility, surveys }) {
 }
 
 // ── Tab HACCP/Documenti ────────────────────────────────────────
-function HaccpTab({ facility, onStatusChange }) {
-  const navigate = useNavigate();
+function HaccpTab({ facility, onStatusChange, fBadge }) {
   const [showModal, setShowModal]     = useState(false);
   const [haccpStatus, setHaccpStatus] = useState(null);
   const [haccpLoading, setHaccpLoading] = useState(true);
@@ -1364,6 +1377,13 @@ function HaccpTab({ facility, onStatusChange }) {
             ⚠ Verificare
           </span>
         )}
+        {(fBadge?.haccp ?? 0) > 0 && (
+          <span className={`absolute top-0 right-4 min-w-[22px] h-[22px] ${
+            (fBadge?.haccpRossi ?? 0) > 0 ? 'bg-rose-500' : 'bg-amber-500'
+          } text-white text-[11px] font-black rounded-full flex items-center justify-center px-1.5 leading-none shadow-md z-10`}>
+            {(fBadge?.haccp ?? 0) > 99 ? '99+' : fBadge?.haccp}
+          </span>
+        )}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
           <div className="flex items-center gap-5">
             <div className="bg-amber-50 p-4 rounded-2xl">
@@ -1427,6 +1447,11 @@ function HaccpTab({ facility, onStatusChange }) {
             ✓ Tutto aggiornato
           </span>
         )}
+        {(fBadge?.documenti ?? 0) > 0 && (
+          <span className="absolute top-0 right-4 min-w-[22px] h-[22px] bg-rose-500 text-white text-[11px] font-black rounded-full flex items-center justify-center px-1.5 leading-none shadow-md z-10">
+            {(fBadge?.documenti ?? 0) > 99 ? '99+' : fBadge?.documenti}
+          </span>
+        )}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
           <div className="flex items-center gap-5">
             <div className="bg-blue-50 p-4 rounded-2xl">
@@ -1442,6 +1467,11 @@ function HaccpTab({ facility, onStatusChange }) {
                   <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
                     {docStatus.totale} disponibili
                   </span>
+                  {(fBadge?.documenti ?? 0) > 0 && (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-700">
+                      {fBadge.documenti} {fBadge.documenti === 1 ? 'non consultato' : 'non consultati'}
+                    </span>
+                  )}
                   {docStatus.daAggiornare > 0 && (
                     <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
                       {docStatus.daAggiornare} da aggiornare
@@ -1458,13 +1488,12 @@ function HaccpTab({ facility, onStatusChange }) {
               )}
             </div>
           </div>
-          <button
-            onClick={() => navigate('/documenti')}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-wider shadow transition-all whitespace-nowrap"
-          >
-            Vai ai documenti
-          </button>
         </div>
+      </div>
+
+      {/* Documenti inline — header DirectorFacility rimane visibile, nessun navigate */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <DocMyDocumentiView facilityId={facility.id} />
       </div>
 
       {showModal && (
