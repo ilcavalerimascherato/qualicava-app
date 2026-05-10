@@ -16,12 +16,14 @@
 //     dalla query Supabase (incompatibile con alcune configurazioni)
 //   - Aggiunto log di errore per diagnostica futura
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   X, Mail, AlertTriangle, BarChart2, Download, CheckCircle2,
   Search, Bell, Send, AlertCircle, Users, Edit2, Plus
 } from 'lucide-react';
-import { supabase } from '../supabaseClient';
+import { supabase }    from '../supabaseClient';
+import NcFormModal     from './NcFormModal';
+import { useAuth }     from '../contexts/AuthContext';
 
 const TABS = [
   { id: 'nc_list',   label: 'Non Conformità',  Icon: AlertTriangle },
@@ -66,6 +68,7 @@ const MONTH_NAMES_FULL = [
 export default function QualityDashboardModal({
   isOpen, onClose, facilities, udos, kpiRecords = [], surveys = [], year, isSuperAdmin = false
 }) {
+  const { profile }                           = useAuth();
   const [activeTab, setActiveTab]             = useState('nc_list');
   const [ncs, setNcs]                         = useState([]);
   const [loadingNc, setLoadingNc]             = useState(true);
@@ -78,9 +81,10 @@ export default function QualityDashboardModal({
   const [hqNoteText, setHqNoteText]           = useState('');
   const [savingNote, setSavingNote]           = useState(false);
   const [expandedNc, setExpandedNc]           = useState(null);
+  const [ncEditId, setNcEditId]               = useState(null);
+  const [ncEditFacility, setNcEditFacility]   = useState(null);
 
-  useEffect(() => {
-    if (!isOpen) return;
+  const reloadNcs = useCallback(() => {
     setLoadingNc(true);
     supabase
       .from('non_conformities')
@@ -91,7 +95,12 @@ export default function QualityDashboardModal({
         if (!error) setNcs(data || []);
         setLoadingNc(false);
       });
-  }, [isOpen, year]);
+  }, [year]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    reloadNcs();
+  }, [isOpen, reloadNcs]);
 
   // ── Mailing list ─────────────────────────────────────────────
   const currentRole = ROLE_FIELDS.find(r => r.role === selectedMailRole);
@@ -137,7 +146,7 @@ export default function QualityDashboardModal({
     const fname   = nc.facilities?.name?.toLowerCase() || '';
     const fudo    = nc.facilities?.udo_id;
     const udoName = udos.find(u => u.id === fudo)?.name || '';
-    const titleLc = (nc.title || nc.classificazione || '').toLowerCase();
+    const titleLc = (nc.titolo || nc.classificazione || '').toLowerCase();
     if (ncSearch   && !fname.includes(ncSearch.toLowerCase()) && !titleLc.includes(ncSearch.toLowerCase())) return false;
     if (ncStatus   !== 'all' && nc.stato   !== ncStatus)   return false;
     if (ncSeverity !== 'all' && nc.gravita !== ncSeverity) return false;
@@ -338,10 +347,9 @@ export default function QualityDashboardModal({
                     const isExpanded = expandedNc === nc.id;
                     const isNoteOpen = hqNoteId   === nc.id;
 
-                    // FIX 1: titolo = "Struttura · Titolo NC"
                     const cardTitle = [
                       nc.facilities?.name,
-                      nc.title || nc.classificazione,
+                      nc.titolo || nc.classificazione,
                     ].filter(Boolean).join(' · ');
 
                     return (
@@ -376,9 +384,8 @@ export default function QualityDashboardModal({
                               {/* FIX 1: Titolo sempre "Struttura · NC title" */}
                               <h4 className="font-black text-slate-800 text-sm leading-snug mb-2">{cardTitle}</h4>
 
-                              {/* FIX 1: Descrizione sempre visibile per intero */}
-                              {nc.description && (
-                                <p className="text-sm text-slate-600 leading-relaxed">{nc.description}</p>
+                              {nc.analisi_dinamica && (
+                                <p className="text-sm text-slate-600 leading-relaxed">{nc.analisi_dinamica}</p>
                               )}
 
                               {/* Nota HQ compatta (solo se presente e pannello nota chiuso) */}
@@ -443,6 +450,18 @@ export default function QualityDashboardModal({
                                 <span className="col-span-2 text-sm text-slate-700 font-medium whitespace-pre-wrap">{value}</span>
                               </div>
                             ))}
+                            <div className="pt-3 flex justify-end">
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  const fac = facilities.find(f => String(f.id) === String(nc.facility_id));
+                                  if (fac) { setNcEditFacility(fac); setNcEditId(nc.id); }
+                                }}
+                                className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-200"
+                              >
+                                <Edit2 size={12} /> Modifica completa
+                              </button>
+                            </div>
                           </div>
                         )}
 
@@ -511,6 +530,18 @@ export default function QualityDashboardModal({
 
         </div>
       </div>
+
+      {ncEditId && ncEditFacility && (
+        <NcFormModal
+          isOpen={true}
+          facility={ncEditFacility}
+          year={year}
+          profile={profile}
+          ncId={ncEditId}
+          onClose={() => { setNcEditId(null); setNcEditFacility(null); }}
+          onSaved={() => { setNcEditId(null); setNcEditFacility(null); reloadNcs(); }}
+        />
+      )}
     </div>
   );
 }

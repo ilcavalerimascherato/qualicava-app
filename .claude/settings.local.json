@@ -16,7 +16,8 @@
       "Bash(Select-Object -First 20)",
       "Bash(Get-ChildItem -Path \"C:\\\\primo\\\\QualiCAVA\" -Recurse -Filter \"*.js\")",
       "Bash(Select-Object FullName)",
-      "Bash(xargs grep -l \"master\\\\|HACCP\")"
+      "Bash(xargs grep -l \"master\\\\|HACCP\")",
+      "PowerShell(ls *)"
     ]
   }
 }

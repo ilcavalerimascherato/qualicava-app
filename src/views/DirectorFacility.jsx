@@ -109,6 +109,7 @@ export default function DirectorFacility() {
   const { modals, open, close }       = useModals();
   const [activeTab, setActiveTab]         = useState('overview');
   const [ncEditId, setNcEditId]           = useState(null);
+  const [ncRefreshKey, setNcRefreshKey]   = useState(0);
   const [dataTarget, setDataTarget]       = useState(null);
   const [documentiTabStatus, setDocumentiTabStatus] = useState(null);
   const year = new Date().getFullYear();
@@ -292,6 +293,7 @@ export default function DirectorFacility() {
             facility={facility}
             year={year}
             profile={profile}
+            refreshKey={ncRefreshKey}
             onNew={() => { setNcEditId(null); open('nonConformity'); }}
             onEdit={(id) => { setNcEditId(id); open('nonConformity'); }}
           />
@@ -350,6 +352,7 @@ export default function DirectorFacility() {
           onSaved={(stato) => {
             close('nonConformity');
             setNcEditId(null);
+            setNcRefreshKey(k => k + 1);
             invalidate.kpiRecords();
             toast.success(
               stato === 'Chiuso'  ? 'NC chiusa' :
@@ -527,6 +530,7 @@ function OverviewTab({ facility: f, surveys, year }) {
   const [userProfiles, setUserProfiles] = useState([]);
   const [showInvito, setShowInvito]     = useState(null);
   const [editingOrg, setEditingOrg]     = useState(false);
+  const [companyData, setCompanyData]   = useState(null);
   const [orgForm, setOrgForm]           = useState({
     director:                  f.director                      || '',
     email_direzione:           f.email_direzione               || '',
@@ -550,6 +554,16 @@ function OverviewTab({ facility: f, surveys, year }) {
       });
   }, [f]);
 
+  useEffect(() => {
+    if (!f.company_id) return;
+    supabase
+      .from('companies')
+      .select('id, name, piva, sede_legale')
+      .eq('id', f.company_id)
+      .single()
+      .then(({ data }) => { if (data) setCompanyData(data); });
+  }, [f.company_id]);
+
   const handleSaveOrg = async () => {
     setSavingOrg(true);
     try {
@@ -571,9 +585,6 @@ function OverviewTab({ facility: f, surveys, year }) {
       setSavingOrg(false);
     }
   };
-
-  const latestClient   = surveys.filter(s => s.type === 'client').sort((a,b) => b.calendar_id.localeCompare(a.calendar_id))[0];
-  const latestOperator = surveys.filter(s => s.type === 'operator').sort((a,b) => b.calendar_id.localeCompare(a.calendar_id))[0];
 
   return (
     <div className="space-y-6">
@@ -667,28 +678,47 @@ function OverviewTab({ facility: f, surveys, year }) {
         </div>
       </div>
 
-      {/* Stato survey */}
+      {/* Società e Struttura */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {[
-          { label: 'Survey Clienti / Ospiti', survey: latestClient, type: 'client', color: 'indigo' },
-          { label: 'Survey Operatori / Staff', survey: latestOperator, type: 'operator', color: 'purple' },
-        ].map(({ label, survey, type, color }) => (
-          <div key={type} className={`bg-white rounded-2xl border border-slate-200 p-5`}>
-            <p className={`text-[10px] font-black uppercase tracking-widest text-${color}-600 mb-3`}>{label}</p>
-            {survey ? (
-              <>
-                <p className="text-sm font-black text-slate-800 mb-1">
-                  {survey.ai_report_direzione ? '✅ Relazione generata' : '⏳ Dati caricati, relazione mancante'}
+
+        {/* Box Società */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4">Società</p>
+          <div className="space-y-3">
+            {[
+              { label: 'Denominazione', value: companyData?.name },
+              { label: 'P.IVA',         value: companyData?.piva },
+              { label: 'Sede Legale',   value: companyData?.sede_legale },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
+                <p className={`text-sm font-bold ${value ? 'text-slate-800' : 'text-slate-300'}`}>
+                  {value || '—'}
                 </p>
-                <p className="text-xs text-slate-400">
-                  Ultimo aggiornamento: {new Date(survey.updated_at || survey.created_at).toLocaleDateString('it')}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-slate-400 font-medium">Nessun dato caricato</p>
-            )}
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+
+        {/* Box Struttura */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4">Struttura</p>
+          <div className="space-y-3">
+            {[
+              { label: 'Posti letto', value: f.bed_count > 0 ? String(f.bed_count) : null },
+              { label: 'Indirizzo',   value: f.address },
+              { label: 'Regione',     value: f.region },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
+                <p className={`text-sm font-bold ${value ? 'text-slate-800' : 'text-slate-300'}`}>
+                  {value || '—'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
     </div>
   );
@@ -735,7 +765,7 @@ function SurveysTab({ facility, surveys, onDataClick }) {
   );
 }
 
-function NonConformitiesTab({ facility, year, profile, onNew, onEdit }) {
+function NonConformitiesTab({ facility, year, profile, refreshKey = 0, onNew, onEdit }) {
   const [ncs, setNcs]   = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -750,7 +780,7 @@ function NonConformitiesTab({ facility, year, profile, onNew, onEdit }) {
         if (!error && data) setNcs(data);
         setLoading(false);
       });
-  }, [facility.id, year]);
+  }, [facility.id, year, refreshKey]);
 
   const statusColor = {
     'Aperto':  'bg-rose-100 text-rose-700 border-rose-200',
@@ -786,8 +816,10 @@ function NonConformitiesTab({ facility, year, profile, onNew, onEdit }) {
                 {nc.stato}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-black text-slate-800 truncate">{nc.titolo}</p>
-                <p className="text-xs text-slate-400 mt-0.5 truncate">{nc.descrizione}</p>
+                <p className="text-sm font-black text-slate-800 truncate">
+                  {nc.titolo || nc.classificazione || '—'}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5 truncate">{nc.classificazione}</p>
               </div>
               <div className="text-right shrink-0">
                 <p className="text-xs text-slate-400">{new Date(nc.created_at).toLocaleDateString('it')}</p>

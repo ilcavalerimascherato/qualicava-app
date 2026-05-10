@@ -570,6 +570,7 @@ export default function App() {
         isOpen={modals.ranking}
         onClose={() => close('ranking')}
         facilities={processedData.list}
+        kpiRecords={data.kpiRecords}
       />
     </div>
   );

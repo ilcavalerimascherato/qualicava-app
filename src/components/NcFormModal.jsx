@@ -91,6 +91,7 @@ function validateForStato(form, targetStato) {
     form.classificazione === 'Verbale Ente Vigilanza';
 
   // Campi sempre obbligatori
+  if (!form.titolo?.trim())    errors.titolo            = 'Obbligatorio';
   if (!form.classificazione)   errors.classificazione   = 'Obbligatorio';
   if (!form.gravita)           errors.gravita           = 'Obbligatorio';
   if (!form.data_ricezione)    errors.data_ricezione    = 'Obbligatorio';
@@ -130,6 +131,7 @@ function validateForStato(form, targetStato) {
 }
 
 const EMPTY = {
+  titolo: '',
   data_ricezione: new Date().toISOString().split('T')[0],
   classificazione: '', segnalazione_da: '', ambito: '',
   gravita: 'Media', analisi_dinamica: '', cause_evento: '',
@@ -141,6 +143,35 @@ const EMPTY = {
   data_riscontro_segnalante: '', note: '',
   stato: 'Aperto',
 };
+
+function Section({ title, isOpen: open, toggle, children, badge }) {
+  return (
+    <div className={`border rounded-2xl overflow-hidden ${open ? 'border-indigo-200' : 'border-slate-200'}`}>
+      <button
+        type="button"
+        onClick={toggle}
+        className={`w-full flex items-center justify-between px-5 py-3 text-left transition-colors ${open ? 'bg-indigo-50' : 'bg-slate-50 hover:bg-slate-100'}`}
+      >
+        <div className="flex items-center gap-3">
+          <span className={`text-xs font-black uppercase tracking-widest ${open ? 'text-indigo-700' : 'text-slate-600'}`}>{title}</span>
+          {badge && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-lg font-bold">{badge}</span>}
+        </div>
+        {open ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+      </button>
+      {open && <div className="p-5 space-y-4 bg-white">{children}</div>}
+    </div>
+  );
+}
+
+function Field({ label, error, required, children }) {
+  return (
+    <div>
+      <label className={LBL}>{label}{required && <span className={REQ}>*</span>}</label>
+      {children}
+      {error && <p className="text-xs text-red-600 mt-1 font-medium">{error}</p>}
+    </div>
+  );
+}
 
 export default function NcFormModal({ isOpen, facility, year, profile, ncId = null, onClose, onSaved }) {
   const [form, setForm]         = useState(EMPTY);
@@ -219,6 +250,7 @@ export default function NcFormModal({ isOpen, facility, year, profile, ncId = nu
         opened_by:                 profile?.id,
         opened_by_role:            profile?.role || 'director',
         stato:                     targetStato,
+        titolo:                    form.titolo || null,
         data_ricezione:            form.data_ricezione || null,
         classificazione:           form.classificazione || null,
         segnalazione_da:           form.segnalazione_da || null,
@@ -264,32 +296,6 @@ export default function NcFormModal({ isOpen, facility, year, profile, ncId = nu
     Pending: 'bg-amber-50 text-amber-700 border-amber-200',
     Chiuso:  'bg-emerald-50 text-emerald-700 border-emerald-200',
   };
-
-  // Componente sezione collassabile
-  const Section = ({ title, id, isOpen: open, toggle, children, badge }) => (
-    <div className={`border rounded-2xl overflow-hidden ${open ? 'border-indigo-200' : 'border-slate-200'}`}>
-      <button
-        type="button"
-        onClick={toggle}
-        className={`w-full flex items-center justify-between px-5 py-3 text-left transition-colors ${open ? 'bg-indigo-50' : 'bg-slate-50 hover:bg-slate-100'}`}
-      >
-        <div className="flex items-center gap-3">
-          <span className={`text-xs font-black uppercase tracking-widest ${open ? 'text-indigo-700' : 'text-slate-600'}`}>{title}</span>
-          {badge && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-lg font-bold">{badge}</span>}
-        </div>
-        {open ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
-      </button>
-      {open && <div className="p-5 space-y-4 bg-white">{children}</div>}
-    </div>
-  );
-
-  const Field = ({ label, error, required, children }) => (
-    <div>
-      <label className={LBL}>{label}{required && <span className={REQ}>*</span>}</label>
-      {children}
-      {error && <p className="text-xs text-red-600 mt-1 font-medium">{error}</p>}
-    </div>
-  );
 
   const errCount = (fields) => fields.filter(f => errors[f]).length;
 
@@ -343,6 +349,17 @@ export default function NcFormModal({ isOpen, facility, year, profile, ncId = nu
                 </span>
               </div>
               <div className="p-5 space-y-4 bg-white">
+
+                <Field label="Titolo" required error={errors.titolo}>
+                  <input
+                    type="text"
+                    value={form.titolo}
+                    onChange={set('titolo')}
+                    maxLength={100}
+                    placeholder="Descrizione sintetica della segnalazione"
+                    className={INP}
+                  />
+                </Field>
 
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Data ricezione" required error={errors.data_ricezione}>

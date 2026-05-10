@@ -1,11 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, Trophy, Users, Briefcase, BarChart2, ChefHat } from 'lucide-react';
+import { calcFacilityRiskScore } from '../utils/riskScoreEngine';
 
-function computeScore(f) {
+function computeScore(f, kpiPoints) {
   let score = 0;
   if (f.clientCompleted) score += 25;
   if (f.staffCompleted)  score += 25;
-  if (f.isKpiGreen)      score += 30;
+  score += kpiPoints;
   if (f.haccp_semaforo === 'verde')  score += 20;
   else if (f.haccp_semaforo === 'giallo') score += 10;
   return score;
@@ -28,13 +29,55 @@ function HaccpDot({ semaforo }) {
   return <span className={`inline-block w-2.5 h-2.5 rounded-full ${map[semaforo] ?? 'bg-slate-300'} flex-shrink-0`} title={`HACCP: ${semaforo}`} />;
 }
 
-export default function RankingModal({ isOpen, onClose, facilities = [] }) {
-  const ranked = useMemo(() => {
-    return facilities
-      .filter(f => !f.is_suspended)
-      .map(f => ({ ...f, score: computeScore(f) }))
-      .sort((a, b) => a.score - b.score);
+export default function RankingModal({ isOpen, onClose, facilities = [], kpiRecords = [] }) {
+  const [udoFilter, setUdoFilter] = useState('all');
+
+  const udoList = useMemo(() => {
+    const names = [...new Set(
+      facilities
+        .filter(f => !f.is_suspended && f.udo_name)
+        .map(f => f.udo_name)
+    )].sort((a, b) => a.localeCompare(b));
+    return names;
   }, [facilities]);
+
+  const ranked = useMemo(() => {
+    const active = facilities.filter(f => !f.is_suspended);
+
+    // Pass 1: risk score per struttura (null = nessun dato KPI)
+    const withRisk = active.map(f => {
+      const rs = calcFacilityRiskScore(f, kpiRecords);
+      return { ...f, _risk: rs.score };
+    });
+
+    // Massimo risk score tra strutture con dati KPI
+    const maxRisk = withRisk.reduce(
+      (max, f) => (f._risk !== null ? Math.max(max, f._risk) : max),
+      0
+    );
+
+    // Pass 2: kpiPoints e score totale
+    return withRisk
+      .map(f => {
+        const kpiPoints = f._risk === null ? 0
+                        : f._risk === 0   ? 30
+                        : Math.round(30 - (f._risk / maxRisk * 30));
+        return {
+          ...f,
+          kpiPoints,
+          score:     computeScore(f, kpiPoints),
+          riskScore: f._risk ?? Infinity,
+        };
+      })
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.riskScore - b.riskScore;
+      });
+  }, [facilities, kpiRecords]);
+
+  const filtered = udoFilter === 'all'
+    ? ranked
+    : ranked.filter(f => f.udo_name === udoFilter);
 
   if (!isOpen) return null;
 
@@ -50,7 +93,7 @@ export default function RankingModal({ isOpen, onClose, facilities = [] }) {
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none">Ranking Strutture</h2>
-              <p className="text-xs text-slate-400 font-bold mt-0.5">Ordinate dal punteggio più basso al più alto · {ranked.length} strutture</p>
+              <p className="text-xs text-slate-400 font-bold mt-0.5">Ordinate dal punteggio più alto al più basso · {filtered.length} strutture</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-800 rounded-full transition-colors bg-slate-100 hover:bg-slate-200">
@@ -65,7 +108,7 @@ export default function RankingModal({ isOpen, onClose, facilities = [] }) {
             {[
               { Icon: Users,     label: 'Clienti',   pts: '+25', color: 'text-indigo-600' },
               { Icon: Briefcase, label: 'Staff',      pts: '+25', color: 'text-indigo-600' },
-              { Icon: BarChart2, label: 'KPI',        pts: '+30', color: 'text-indigo-600' },
+              { Icon: BarChart2, label: 'KPI',        pts: '0–30', color: 'text-indigo-600' },
               { Icon: ChefHat,   label: 'HACCP verde',pts: '+20', color: 'text-emerald-600' },
               { Icon: ChefHat,   label: 'HACCP giallo',pts: '+10', color: 'text-amber-500' },
             ].map(({ Icon, label, pts, color }) => (
@@ -76,12 +119,26 @@ export default function RankingModal({ isOpen, onClose, facilities = [] }) {
           </div>
         </div>
 
+        {/* Filter UDO */}
+        {udoList.length > 1 && (
+          <div className="px-8 py-3 border-b border-slate-100 flex-shrink-0">
+            <select
+              value={udoFilter}
+              onChange={e => setUdoFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none"
+            >
+              <option value="all">Tutti gli UDO</option>
+              {udoList.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+        )}
+
         {/* List */}
         <div className="overflow-y-auto flex-1 px-6 py-4 space-y-2">
-          {ranked.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="text-center py-16 text-slate-400 font-bold">Nessuna struttura attiva.</div>
           ) : (
-            ranked.map((f, i) => {
+            filtered.map((f, i) => {
               const band = getBand(f.score);
               return (
                 <div
