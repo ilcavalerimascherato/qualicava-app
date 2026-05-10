@@ -35,13 +35,23 @@ export default function Login() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) navigate('/', { replace: true });
     });
+
+    // Naviga verso '/' quando la sessione è confermata da Supabase,
+    // evitando la race condition tra signInWithPassword e AuthContext.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session) {
+        navigate('/', { replace: true });
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
+    const { error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
@@ -50,10 +60,9 @@ export default function Login() {
       setLoading(false);
       return;
     }
-    if (data?.session) {
-      navigate('/', { replace: true });
-    }
-    setLoading(false);
+    // Non navigare qui: onAuthStateChange (nel useEffect) gestisce il redirect
+    // quando la sessione è effettivamente confermata nel context.
+    // Lo spinner resta visibile finché la navigazione non avviene.
   };
 
   const handleSetNewPassword = async (e) => {
