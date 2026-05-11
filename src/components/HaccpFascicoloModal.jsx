@@ -32,6 +32,7 @@ const MODELLI = [
   { value: 'cucina_interna',        label: 'Cucina interna' },
   { value: 'appalto_fresco_caldo',  label: 'Appalto fresco-caldo in struttura' },
   { value: 'distribuzione_veicolata', label: 'Distribuzione veicolata (pasti da esterno)' },
+  { value: 'non_osa',               label: 'Operatore non OSA (global service / fornitore esterno)' },
 ];
 
 const STATI_SCIA = [
@@ -330,7 +331,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
 
   const set = f => e => setForm(p => ({ ...p, [f]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
 
-  const hasFornitore = ['appalto_fresco_caldo', 'distribuzione_veicolata'].includes(form.modello_ristorazione);
+  const hasFornitore = ['appalto_fresco_caldo', 'distribuzione_veicolata', 'non_osa'].includes(form.modello_ristorazione);
 
   const handleSave = async () => {
     setSaving(true);
@@ -1971,6 +1972,7 @@ function NoteOperativeSection({ form, set, setForm, modello }) {
   const isCucinaInterna = modello === 'cucina_interna';
   const isAppalto       = modello === 'appalto_fresco_caldo';
   const isVeicolato     = modello === 'distribuzione_veicolata';
+  const isNonOsa        = modello === 'non_osa';
 
   return (
     <section className="space-y-6">
@@ -1985,6 +1987,7 @@ function NoteOperativeSection({ form, set, setForm, modello }) {
           <label className={LBL}>
             {isCucinaInterna ? 'Descrizione cucina (ubicazione, layout, flussi, zone)' :
              isAppalto       ? 'Descrizione cucina e locali (chi gestisce cosa, layout, flussi)' :
+             isNonOsa        ? 'Descrizione del servizio fornitore (modalità, flussi, locali di pertinenza OSA)' :
                                'Descrizione locali di distribuzione (dove avviene, layout)'}
           </label>
           <textarea

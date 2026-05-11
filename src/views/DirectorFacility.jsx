@@ -1314,10 +1314,21 @@ function SurveyAnalysisTab({ facility, surveys }) {
 
 // ── Tab HACCP/Documenti ────────────────────────────────────────
 function HaccpTab({ facility, onStatusChange, fBadge }) {
-  const [showModal, setShowModal]     = useState(false);
-  const [haccpStatus, setHaccpStatus] = useState(null);
-  const [haccpLoading, setHaccpLoading] = useState(true);
-  const [docStatus, setDocStatus]     = useState(null);
+  const [showModal, setShowModal]                     = useState(false);
+  const [haccpStatus, setHaccpStatus]                 = useState(null);
+  const [haccpLoading, setHaccpLoading]               = useState(true);
+  const [docStatus, setDocStatus]                     = useState(null);
+  const [modelloRistorazione, setModelloRistorazione] = useState(null);
+
+  useEffect(() => {
+    if (!facility?.id || !facility?.haccp_obbligatorio) return;
+    supabase
+      .from('haccp_profili')
+      .select('modello_ristorazione')
+      .eq('struttura_id', facility.id)
+      .maybeSingle()
+      .then(({ data }) => setModelloRistorazione(data?.modello_ristorazione ?? null));
+  }, [facility?.id, facility?.haccp_obbligatorio]);
 
   useEffect(() => {
     if (!facility?.haccp_obbligatorio) { setHaccpLoading(false); return; }
@@ -1369,12 +1380,178 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
     else onStatusChange(null);
   }, [haccpStatus, docStatus, onStatusChange]);
 
+  const docBadgeLevel = (docStatus?.scaduti ?? 0) > 0 ? 'red'
+    : (docStatus?.daAggiornare ?? 0) > 0 ? 'amber'
+    : (docStatus?.totale ?? 0) > 0 ? 'green'
+    : null;
+
   if (!facility?.haccp_obbligatorio) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <ChefHat size={48} className="text-slate-200 mb-4" />
-        <p className="font-black text-slate-400 text-lg">Struttura non soggetta a HACCP</p>
-        <p className="text-sm text-slate-300 mt-1">Questa struttura non ha l'obbligo di autocontrollo alimentare.</p>
+      <div className="space-y-4">
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <ChefHat size={48} className="text-slate-200 mb-4" />
+          <p className="font-black text-slate-400 text-lg">Struttura non soggetta a HACCP</p>
+          <p className="text-sm text-slate-300 mt-1">Questa struttura non ha l'obbligo di autocontrollo alimentare.</p>
+        </div>
+        {/* BOX 2 — Documenti */}
+        <div className="relative pt-3">
+          {docBadgeLevel === 'red' && (
+            <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+              ⚠ Documenti scaduti
+            </span>
+          )}
+          {docBadgeLevel === 'amber' && (
+            <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+              ↑ Aggiornamenti disponibili
+            </span>
+          )}
+          {docBadgeLevel === 'green' && (
+            <span className="absolute top-0 left-4 bg-emerald-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+              ✓ Tutto aggiornato
+            </span>
+          )}
+          {(fBadge?.documenti ?? 0) > 0 && (
+            <span className="absolute top-0 right-4 min-w-[22px] h-[22px] bg-rose-500 text-white text-[11px] font-black rounded-full flex items-center justify-center px-1.5 leading-none shadow-md z-10">
+              {(fBadge?.documenti ?? 0) > 99 ? '99+' : fBadge?.documenti}
+            </span>
+          )}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="bg-blue-50 p-4 rounded-2xl">
+                <FileText size={32} className="text-blue-500" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-800">Documenti di struttura</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Protocolli, procedure e documenti operativi.</p>
+                {docStatus && docStatus.totale > 0 ? (
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">{docStatus.totale} disponibili</span>
+                    {(fBadge?.documenti ?? 0) > 0 && (
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-700">
+                        {fBadge.documenti} {fBadge.documenti === 1 ? 'non consultato' : 'non consultati'}
+                      </span>
+                    )}
+                    {docStatus.daAggiornare > 0 && (
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">{docStatus.daAggiornare} da aggiornare</span>
+                    )}
+                    {docStatus.scaduti > 0 && (
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">{docStatus.scaduti} scaduti</span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 mt-2">Nessun documento distribuito</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Documenti inline */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <DocMyDocumentiView facilityId={facility.id} />
+        </div>
+      </div>
+    );
+  }
+
+  if (modelloRistorazione === 'non_osa') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+          <div className="flex items-center gap-5 mb-5">
+            <div className="bg-emerald-50 p-4 rounded-2xl">
+              <ChefHat size={32} className="text-emerald-500" />
+            </div>
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <h2 className="text-lg font-black text-slate-800">Operatore non OSA — documentazione fornitore</h2>
+                <span className="text-xs font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">Non OSA</span>
+              </div>
+              <p className="text-sm text-slate-500">
+                Gestione alimentare affidata interamente al fornitore. Verificare SCIA e documenti del fornitore.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between bg-slate-50 rounded-xl p-5 border border-slate-200">
+            <div>
+              <p className="text-sm font-black text-slate-700">SCIA e documentazione fornitore</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {haccpStatus?.stato_scia === 'ok'
+                  ? '✅ SCIA fornitore aggiornata'
+                  : haccpStatus?.stato_scia
+                  ? '⚠️ Verificare stato SCIA fornitore'
+                  : 'Nessun dato — aprire il fascicolo per configurare'}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl font-black text-sm uppercase tracking-wider shadow transition-all whitespace-nowrap"
+            >
+              <ChefHat size={15} /> Gestisci SCIA
+            </button>
+          </div>
+        </div>
+        {showModal && (
+          <HaccpFascicoloModal
+            facility={facility}
+            onClose={() => setShowModal(false)}
+          />
+        )}
+        {/* BOX 2 — Documenti */}
+        <div className="relative pt-3">
+          {docBadgeLevel === 'red' && (
+            <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+              ⚠ Documenti scaduti
+            </span>
+          )}
+          {docBadgeLevel === 'amber' && (
+            <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+              ↑ Aggiornamenti disponibili
+            </span>
+          )}
+          {docBadgeLevel === 'green' && (
+            <span className="absolute top-0 left-4 bg-emerald-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
+              ✓ Tutto aggiornato
+            </span>
+          )}
+          {(fBadge?.documenti ?? 0) > 0 && (
+            <span className="absolute top-0 right-4 min-w-[22px] h-[22px] bg-rose-500 text-white text-[11px] font-black rounded-full flex items-center justify-center px-1.5 leading-none shadow-md z-10">
+              {(fBadge?.documenti ?? 0) > 99 ? '99+' : fBadge?.documenti}
+            </span>
+          )}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="bg-blue-50 p-4 rounded-2xl">
+                <FileText size={32} className="text-blue-500" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-800">Documenti di struttura</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Protocolli, procedure e documenti operativi.</p>
+                {docStatus && docStatus.totale > 0 ? (
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">{docStatus.totale} disponibili</span>
+                    {(fBadge?.documenti ?? 0) > 0 && (
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-700">
+                        {fBadge.documenti} {fBadge.documenti === 1 ? 'non consultato' : 'non consultati'}
+                      </span>
+                    )}
+                    {docStatus.daAggiornare > 0 && (
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">{docStatus.daAggiornare} da aggiornare</span>
+                    )}
+                    {docStatus.scaduti > 0 && (
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">{docStatus.scaduti} scaduti</span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 mt-2">Nessun documento distribuito</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Documenti inline */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <DocMyDocumentiView facilityId={facility.id} />
+        </div>
       </div>
     );
   }
@@ -1388,11 +1565,6 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
     haccpStatus.analisi_status === 'amber' ||
     haccpStatus.formazione_status === 'amber'
   );
-
-  const docBadgeLevel = (docStatus?.scaduti ?? 0) > 0 ? 'red'
-    : (docStatus?.daAggiornare ?? 0) > 0 ? 'amber'
-    : (docStatus?.totale ?? 0) > 0 ? 'green'
-    : null;
 
   return (
     <div className="space-y-4">
