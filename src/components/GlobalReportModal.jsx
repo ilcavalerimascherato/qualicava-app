@@ -13,7 +13,6 @@ import {
   X, ChevronLeft, FileSignature, BrainCircuit, FileDown,
   Layers, Building2, BarChart2, Calendar, TrendingUp
 } from 'lucide-react';
-import { GoogleGenerativeAI }       from '@google/generative-ai';
 import { buildPromptGlobaleBoard, buildPromptKpiMensile, buildPromptKpiPeriodo } from '../config/aiPrompts';
 import { KPI_RULES, getKpiStatus }  from '../config/kpiRules';
 import { evaluateKpiFormula }       from '../utils/kpiFormulaEngine';
@@ -230,29 +229,39 @@ export default function GlobalReportModal({
 
   // ── Survey: genera relazione AI ───────────────────────────
   const generateSurveyReport = async () => {
-    if (!process.env.REACT_APP_GEMINI_API_KEY) { alert('Manca la chiave API Gemini'); return; }
+    if (!process.env.REACT_APP_ANTHROPIC_API_KEY) { alert('Manca la chiave API Anthropic'); return; }
     if (aggregatedData.chartData.length === 0) { alert('Nessun dato disponibile per questa selezione.'); return; }
     setIsGenerating(true);
     try {
-      const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const dataPayload = aggregatedData.chartData.map(d => `${d.subject}: ${d.score}/100`).join('\n');
       const prompt = buildPromptGlobaleBoard({ scopeName, typeName, facilitiesIncluded: aggregatedData.facilitiesIncluded, totalResponses: aggregatedData.totalResponses, averageScore: aggregatedData.averageScore, dataPayload });
-      const result = await model.generateContent(prompt);
-      setAiReport(result.response.text());
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const data = await response.json();
+      const text = data.content.map(b => b.type === 'text' ? b.text : '').join('');
+      setAiReport(text);
     } catch (error) { alert('Errore generazione: ' + error.message); }
     finally { setIsGenerating(false); }
   };
 
   // ── KPI: genera relazione AI ──────────────────────────────
   const generateKpiReport = async () => {
-    if (!process.env.REACT_APP_GEMINI_API_KEY) { alert('Manca la chiave API Gemini'); return; }
+    if (!process.env.REACT_APP_ANTHROPIC_API_KEY) { alert('Manca la chiave API Anthropic'); return; }
     if (kpiAggregated.length === 0) { alert('Nessun dato KPI disponibile per la selezione corrente.'); return; }
     setKpiGenerating(true);
     try {
-      const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
       let prompt;
       if (kpiMode === 'month') {
         // Payload mensile: Nome KPI | Valore medio | Target verde | Target rosso | Stato aggregato
@@ -294,8 +303,23 @@ export default function GlobalReportModal({
         });
       }
 
-      const result = await model.generateContent(prompt);
-      setKpiAiReport(result.response.text());
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const data = await response.json();
+      const text = data.content.map(b => b.type === 'text' ? b.text : '').join('');
+      setKpiAiReport(text);
     } catch (error) { alert('Errore generazione KPI: ' + error.message); }
     finally { setKpiGenerating(false); }
   };
