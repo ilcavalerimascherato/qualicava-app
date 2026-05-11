@@ -287,3 +287,14 @@ export const buildPromptKpiMensile       = (p) => buildPrompt('kpiMensile',     
 export const buildPromptKpiPeriodo       = (p) => buildPrompt('kpiPeriodo',       p);
 
 export const docMasterAnalisi = PROMPT_REGISTRY.docMasterAnalisi;
+
+// ── KPI ANALISI COMPARATIVA — prompt preset ────────────────────
+export const kpiAnalisiComparativa = {
+  completa: (data) => `Sei un esperto di qualità nelle strutture residenziali sociosanitarie (RSA) italiane. Analizza questi dati KPI mensili per ${data.count} strutture di un gruppo LTC e fornisci: 1) i 3 pattern più preoccupanti con spiegazione clinica 2) correlazioni significative tra KPI diversi 3) raccomandazioni prioritarie di intervento. Sii diretto e pratico, usa terminologia del settore LTC italiano. Anomalie rilevate: ${data.critical} critiche, ${data.warnings} avvisi. Dati: ${JSON.stringify(data.summary)}`,
+
+  cadute: (data) => `Analizza il profilo di sicurezza e cadute di queste RSA italiane. Considera: tasso cadute/ospiti, presenza di contenzioni, rilevazione parametri, invii al PS. Commenta il rischio reale, le best practice da applicare secondo le linee guida AGENAS e i KPI sentinella da monitorare. Dati: ${JSON.stringify(data.summary)}`,
+
+  formazione: (data) => `Analizza la situazione della formazione del personale in queste RSA. Valuta la copertura formazione HACCP e sicurezza, identifica strutture a rischio compliance normativa (D.Lgs 81/2008, Reg. CE 852/2004), segnala possibili errori di inserimento dati. Dati: ${JSON.stringify(data.summary)}`,
+
+  outlier: (data) => `Identifica le strutture outlier in questo gruppo LTC italiano. Distingui tra anomalie da dimensione struttura (numero ospiti) e anomalie reali di qualità. Per ogni outlier: causa probabile, rischio associato, azione raccomandata. Dati: ${JSON.stringify(data.summary)}`,
+};

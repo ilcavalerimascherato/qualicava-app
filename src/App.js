@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
   Settings, LogOut, ShieldCheck, ChefHat,
-  Search, Grid2X2, Grid3X3, LayoutGrid, FileSignature, BarChart2, PawPrint, FileText, Trophy
+  Search, Grid2X2, Grid3X3, LayoutGrid, BarChart2, PawPrint, FileText
 } from 'lucide-react';
 
 import { useAuth }                                           from './contexts/AuthContext';
@@ -32,6 +32,7 @@ import KpiLaserModal      from './components/KpiLaserModal';
 import KpiXrayModal           from './components/KpiXrayModal';
 import QualityDashboardModal  from './components/QualityDashboardModal';
 import RankingModal           from './components/RankingModal';
+import ReportHubModal         from './components/ReportHubModal';
 import NotificheDropdown      from './components/NotificheDropdown';
 
 export default function App() {
@@ -230,17 +231,10 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => open('globalReport')}
+              onClick={() => open('reportHub')}
               className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
             >
-              <FileSignature size={14} /> Report
-            </button>
-
-            <button
-              onClick={() => open('ranking')}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
-            >
-              <Trophy size={14} /> Ranking
+              <BarChart2 size={14} /> Report
             </button>
 
             <button
@@ -251,18 +245,6 @@ export default function App() {
               {badgeTotals.nc > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow">
                   {badgeTotals.nc > 99 ? '99+' : badgeTotals.nc}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => open('kpiHub')}
-              className="relative bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
-            >
-              <BarChart2 size={14} /> KPI
-              {badgeTotals.kpi > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-blue-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow">
-                  {badgeTotals.kpi > 99 ? '99+' : badgeTotals.kpi}
                 </span>
               )}
             </button>
@@ -570,6 +552,14 @@ export default function App() {
         isOpen={modals.ranking}
         onClose={() => close('ranking')}
         facilities={processedData.list}
+        kpiRecords={data.kpiRecords}
+      />
+      <ReportHubModal
+        isOpen={modals.reportHub ?? false}
+        onClose={() => close('reportHub')}
+        facilities={processedData.list}
+        udos={data.udos}
+        surveys={data.surveys}
         kpiRecords={data.kpiRecords}
       />
     </div>

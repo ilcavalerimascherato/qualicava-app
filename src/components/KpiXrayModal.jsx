@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { X, ActivitySquare } from 'lucide-react';
+import { X, ChevronLeft, ActivitySquare } from 'lucide-react';
 import { LineChart, Line, YAxis, ResponsiveContainer, Tooltip, ReferenceArea } from 'recharts';
 import { KPI_RULES, isNumericSettore } from '../config/kpiRules';
 import { computeKpiValue } from '../utils/kpiFormulaEngine';
 import { getTimeHorizon } from '../utils/kpiTimeHorizon';
 
-export default function KpiXrayModal({ isOpen, onClose, facilities, kpiRecords, year }) {
+export default function KpiXrayModal({ isOpen, onClose, onBack = null, facilities, kpiRecords, year }) {
   const [selectedFacilityId, setSelectedFacilityId] = useState('');
 
   const activeFacilities = useMemo(() => facilities.filter(f => !f.is_suspended).sort((a,b) => a.name.localeCompare(b.name)), [facilities]);
@@ -120,7 +120,14 @@ export default function KpiXrayModal({ isOpen, onClose, facilities, kpiRecords, 
               <p className="text-xs text-indigo-400 font-bold uppercase tracking-widest">Elettrocardiogramma Struttura (Trend 12 Mesi)</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition-colors"><X size={26} /></button>
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-black uppercase tracking-widest transition-colors px-3 py-2 rounded-lg hover:bg-white/10">
+                <ChevronLeft size={14} /> Hub
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition-colors"><X size={26} /></button>
+          </div>
         </div>
 
         {/* TOOLBAR */}

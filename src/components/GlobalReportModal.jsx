@@ -10,7 +10,7 @@
  */
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  X, FileSignature, BrainCircuit, FileDown,
+  X, ChevronLeft, FileSignature, BrainCircuit, FileDown,
   Layers, Building2, BarChart2, Calendar, TrendingUp
 } from 'lucide-react';
 import { GoogleGenerativeAI }       from '@google/generative-ai';
@@ -125,7 +125,7 @@ function aggregateKpiForPeriod(rules, facilities, kpiRecords, months) {
 
 // ── Componente principale ─────────────────────────────────────
 export default function GlobalReportModal({
-  isOpen, onClose, facilities = [], udos = [], surveys = [], kpiRecords = []
+  isOpen, onClose, onBack = null, facilities = [], udos = [], surveys = [], kpiRecords = []
 }) {
   const [activeTab, setActiveTab] = useState('survey'); // 'survey' | 'kpi'
 
@@ -428,7 +428,14 @@ export default function GlobalReportModal({
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Analisi aggregata Survey e KPI di Gruppo / UDO / Struttura</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition-colors"><X size={26} /></button>
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-black uppercase tracking-widest transition-colors px-3 py-2 rounded-lg hover:bg-white/10">
+                <ChevronLeft size={14} /> Hub
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition-colors"><X size={26} /></button>
+          </div>
         </div>
 
         {/* Tab nav */}

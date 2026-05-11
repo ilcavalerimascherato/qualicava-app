@@ -17,7 +17,13 @@
       "Bash(Get-ChildItem -Path \"C:\\\\primo\\\\QualiCAVA\" -Recurse -Filter \"*.js\")",
       "Bash(Select-Object FullName)",
       "Bash(xargs grep -l \"master\\\\|HACCP\")",
-      "PowerShell(ls *)"
+      "PowerShell(ls *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\primo\\\\QualiCAVA\\\\src\" -Directory)",
+      "Bash(Select-Object -First 15)",
+      "Bash(npm run *)",
+      "Bash(Get-Content \"C:\\\\Users\\\\CLAUDI~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--primo-QualiCAVA\\\\c43fbcd4-b04e-4320-8ccb-74d1e1e764ae\\\\tasks\\\\byuz753zz.output\" -Wait -Tail 40 -ErrorAction SilentlyContinue)",
+      "Bash(Start-Sleep -Seconds 2)",
+      "Bash(xargs cat)"
     ]
   }
 }

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { X, Trophy, Users, Briefcase, BarChart2, ChefHat } from 'lucide-react';
+import { X, ChevronLeft, Trophy, Users, Briefcase, BarChart2, ChefHat } from 'lucide-react';
 import { calcFacilityRiskScore } from '../utils/riskScoreEngine';
 
 function computeScore(f, kpiPoints) {
@@ -29,7 +29,7 @@ function HaccpDot({ semaforo }) {
   return <span className={`inline-block w-2.5 h-2.5 rounded-full ${map[semaforo] ?? 'bg-slate-300'} flex-shrink-0`} title={`HACCP: ${semaforo}`} />;
 }
 
-export default function RankingModal({ isOpen, onClose, facilities = [], kpiRecords = [] }) {
+export default function RankingModal({ isOpen, onClose, onBack = null, facilities = [], kpiRecords = [] }) {
   const [udoFilter, setUdoFilter] = useState('all');
 
   const udoList = useMemo(() => {
@@ -96,9 +96,16 @@ export default function RankingModal({ isOpen, onClose, facilities = [], kpiReco
               <p className="text-xs text-slate-400 font-bold mt-0.5">Ordinate dal punteggio più alto al più basso · {filtered.length} strutture</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-800 rounded-full transition-colors bg-slate-100 hover:bg-slate-200">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-slate-700 text-xs font-black uppercase tracking-widest transition-colors px-3 py-2 rounded-lg hover:bg-slate-100">
+                <ChevronLeft size={14} /> Hub
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-800 rounded-full transition-colors bg-slate-100 hover:bg-slate-200">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Legend */}

@@ -18,13 +18,13 @@ import { createContext, useContext, useReducer, useCallback, useMemo } from 'rea
  * @typedef {'udo'|'facility'|'questionnaire'|'dataImport'|'analytics'|
  *   'kpiManager'|'kpiDashboard'|'kpiCharts'|'kpiHub'|'kpiLaser'|
  *   'kpiXray'|'globalReport'|'userManager'|'nonConformity'|'qualityDashboard'|
- *   'ranking'} ModalId
+ *   'ranking'|'reportHub'} ModalId
  */
 export const MODAL_IDS = /** @type {const} */ ([
   'udo', 'facility', 'questionnaire', 'dataImport', 'analytics',
   'kpiManager', 'kpiDashboard', 'kpiCharts', 'kpiHub', 'kpiLaser',
   'kpiXray', 'globalReport', 'userManager', 'nonConformity', 'qualityDashboard',
-  'ranking'
+  'ranking', 'reportHub'
 ]);
 
 const initialState = {

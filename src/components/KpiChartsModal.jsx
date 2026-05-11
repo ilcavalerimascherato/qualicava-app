@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, LayoutGrid, Filter, PieChart as PieIcon, BarChart2 } from 'lucide-react';
+import { X, ChevronLeft, LayoutGrid, Filter, PieChart as PieIcon, BarChart2 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { KPI_RULES, KPI_SECTORS, isNumericSettore } from '../config/kpiRules';
 import { computeKpiValue } from '../utils/kpiFormulaEngine';
@@ -8,7 +8,7 @@ import { MONTHS } from '../config/constants';
 const MONTH_NAMES = MONTHS.map(m => m.name);
 const PALETTE = ['#0D3B66', '#A8DADC', '#457B9D', '#2A9D8F', '#136F63', '#1D3557', '#e76f51', '#f4a261', '#e9c46a', '#264653'];
 
-export default function KpiChartsModal({ isOpen, onClose, facilities, udos = [], kpiRecords, year }) {
+export default function KpiChartsModal({ isOpen, onClose, onBack = null, facilities, udos = [], kpiRecords, year }) {
   const [selectedMonth, setSelectedMonth] = useState((new Date().getMonth() === 0 ? 12 : new Date().getMonth()));
   const [selectedUdos, setSelectedUdos] = useState([]);
   const [selectedRegions, setSelectedRegions] = useState([]);
@@ -123,7 +123,14 @@ export default function KpiChartsModal({ isOpen, onClose, facilities, udos = [],
               <p className="text-xs text-sky-400 font-bold uppercase tracking-widest">Confronto Performance tra Strutture</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition-colors"><X size={26} /></button>
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-black uppercase tracking-widest transition-colors px-3 py-2 rounded-lg hover:bg-white/10">
+                <ChevronLeft size={14} /> Hub
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition-colors"><X size={26} /></button>
+          </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">

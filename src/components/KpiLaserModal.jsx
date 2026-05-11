@@ -11,7 +11,7 @@
  *    identificare le strutture senza ingombrare il grafico.
  */
 import React, { useState, useMemo } from 'react';
-import { X, TrendingUp } from 'lucide-react';
+import { X, ChevronLeft, TrendingUp } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceArea
@@ -40,7 +40,7 @@ function CustomTooltip({ active, payload, label, isPerc }) {
   );
 }
 
-export default function KpiLaserModal({ isOpen, onClose, facilities, udos = [], kpiRecords, year }) {
+export default function KpiLaserModal({ isOpen, onClose, onBack = null, facilities, udos = [], kpiRecords, year }) {
   const [selectedKpiTarget, setSelectedKpiTarget] = useState('Turn Over');
   const [selectedUdos, setSelectedUdos]           = useState([]);
   const [hiddenSeries, setHiddenSeries]           = useState({});
@@ -156,7 +156,14 @@ export default function KpiLaserModal({ isOpen, onClose, facilities, udos = [], 
               <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest">Trend Mobile 12 Mesi (Rolling Window)</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition-colors"><X size={26} /></button>
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-black uppercase tracking-widest transition-colors px-3 py-2 rounded-lg hover:bg-white/10">
+                <ChevronLeft size={14} /> Hub
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition-colors"><X size={26} /></button>
+          </div>
         </div>
 
         {/* Toolbar */}
