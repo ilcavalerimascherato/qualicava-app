@@ -18,6 +18,7 @@ import { enrichFacilitiesData, calculateDashboardStats }     from './utils/statu
 
 import Login              from './Login';
 import FacilityCard       from './components/FacilityCard';
+import CompaniesView     from './components/CompaniesView';
 import GlobalReportModal  from './components/GlobalReportModal';
 import UdoManagerModal    from './components/UdoManagerModal';
 import FacilityModal      from './components/FacilityModal';
@@ -45,7 +46,7 @@ export default function App() {
   const [showSuspended, setShowSuspended]       = useState(false);
   const [gridCols, setGridCols]                 = useState('lg:grid-cols-4');
   const [filterUdo, setFilterUdo]               = useState('all');
-  const [filterStatus, setFilterStatus]         = useState('all');
+  const [showSocieta, setShowSocieta]           = useState(false);
   const [searchQuery, setSearchQuery]           = useState('');
   const [selectedFacility, setSelectedFacility] = useState(null);
   const [dataTarget, setDataTarget]             = useState(null);
@@ -85,12 +86,9 @@ export default function App() {
       if (!showSuspended && f.is_suspended) { return false; }
       const q = searchQuery.toLowerCase(); if (!f.name.toLowerCase().includes(q) && !(f.address || '').toLowerCase().includes(q)) { return false; }
       if (filterUdo !== 'all' && String(f.udo_id) !== String(filterUdo)) { return false; }
-      if (filterStatus === 'completed' && !f.isGreen)  { return false; }
-      if (filterStatus === 'progress'  && !f.isYellow) { return false; }
-      if (filterStatus === 'todo'      && !f.isRed)    { return false; }
       return true;
     });
-  }, [processedData.list, filterUdo, filterStatus, searchQuery, showSuspended]);
+  }, [processedData.list, filterUdo, searchQuery, showSuspended]);
 
   const handleSuspendToggle = async (facility) => {
     try {
@@ -315,16 +313,16 @@ export default function App() {
                 <option key={u.id} value={String(u.id)}>{u.name}</option>
               ))}
             </select>
-            <select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              className="text-sm font-black bg-slate-800 text-white px-4 py-3 rounded-2xl border-2 border-slate-700 uppercase outline-none cursor-pointer"
+            <button
+              onClick={() => setShowSocieta(prev => !prev)}
+              className={`px-4 py-2 rounded-lg text-sm font-bold border transition-all duration-200 ${
+                showSocieta
+                  ? 'bg-green-500 text-black border-green-500'
+                  : 'bg-white text-slate-600 border-slate-300 hover:border-green-400'
+              }`}
             >
-              <option value="all">Tutti ({processedData.counts.all})</option>
-              <option value="todo">⚪ Da iniziare ({processedData.counts.todo})</option>
-              <option value="progress">🟣 In corso ({processedData.counts.progress})</option>
-              <option value="completed">🟢 Completati ({processedData.counts.completed})</option>
-            </select>
+              SOCIETÀ
+            </button>
           </div>
 
           {/* Progress bar report — ora nella barra filtri, responsive */}
@@ -413,6 +411,11 @@ export default function App() {
           <div className="flex items-center justify-center py-32 text-slate-400 font-black uppercase tracking-widest">
             Caricamento strutture...
           </div>
+        ) : showSocieta ? (
+          <CompaniesView
+            companies={data.companies}
+            facilities={data.facilities}
+          />
         ) : (
           <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 ${gridCols} gap-10`}>
             {filteredFacilities.map(f => (

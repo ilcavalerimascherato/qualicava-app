@@ -403,7 +403,7 @@ function diagramma55() {
     flowBox('Notifica isolamento da Infermiere/Medico', 'Modulo "Avviso Isolamento Infettivo" · Cucinetta + bacheca + email', C.red),
     arrow(),
     flowRow2(
-      { label: 'Magazzino: scorta monouso ≥5gg', sub: 'Vassoi, piatti, posate, contenitori rossi biohazard', clr: C.amber },
+      { label: 'Magazzino: scorta monouso ≥5gg', sub: 'Vassoi, piatti, posate, contenitori rifiuti infetti', clr: C.amber },
       { label: 'ASA/OSS: indossa DPI', sub: 'Guanti nitrile nuovi · Mascherina · Grembiule monouso', clr: C.red }
     ),
     arrowDouble(),
@@ -413,7 +413,7 @@ function diagramma55() {
     arrow(),
     flowBox('Consegna in stanza — cambio guanti prima ingresso', 'Nessun contatto con stoviglie riutilizzabili', C.red),
     arrow(),
-    flowBox('Raccolta vassoio con DPI · Sacchetto "BIOHAZARD"', 'Mai misto a rifiuti ordinari', C.red),
+    flowBox('Raccolta vassoio con DPI · Sacchetto "RIFIUTI INFETTI"', 'Mai misto a rifiuti ordinari', C.red),
     arrow(),
     flowRow2(
       { label: 'Smaltimento rifiuti speciali', sub: 'Ditta autorizzata · Registrazione', clr: C.amber },
@@ -498,7 +498,7 @@ function tabellaCCP() {
       row('Isolamento','Trasmissione patogeno infettivo','B','DPI obbligatori; vassoio monouso','Verifica DPI; registrazione isolamento','PCC'),
       sezRow('Raccolta e lavaggio', 6, W),
       row('Raccolta','Contaminazione da rifiuti','B','DPI (guanti, grembiule); lavaggio mani','Controllo uso DPI; formazione continua','PCC'),
-      row('Isolamento','Rifiuti speciali non separati','B','Sacchetti "BIOHAZARD"; smaltimento giornaliero','Ispezione sacchetti; registrazione','PCC'),
+      row('Isolamento','Rifiuti speciali non separati','B','Sacchetti "RIFIUTI INFETTI"; smaltimento giornaliero','Ispezione sacchetti; registrazione','PCC'),
     ],
   });
 }
@@ -707,7 +707,7 @@ function tabellaRevisioniCopertina(numRev, dataRev, redattore, noteRev, lr, revS
 // INDICE — costruito staticamente (struttura fissa del manuale)
 // ═══════════════════════════════════════════════════════════════
 
-function indice() {
+function indice(sezioniManuale = null) {
   const voci = [
     { l:1, n:'1', t:'Introduzione' },
     { l:2, n:'', t:'1.1 Scopo del manuale' },
@@ -754,15 +754,15 @@ function indice() {
     { l:2, n:'', t:'9.2 Approvvigionamento monouso' },
     { l:2, n:'', t:'9.3 Preparazione e consegna pasto' },
     { l:2, n:'', t:'9.4 Smaltimento e sanificazione' },
-    { l:1, n:'10', t:'Piano Analisi Microbiologiche' },
-    { l:1, n:'11', t:'Piano di Formazione del Personale' },
-    { l:1, n:'12', t:'Manutenzione e Taratura Attrezzature' },
-    { l:1, n:'13', t:'M.O.C.A. — Materiali e Oggetti a Contatto con Alimenti' },
-    { l:2, n:'',   t:'13.1 Obblighi operativi' },
-    { l:2, n:'',   t:'13.2 Carta di alluminio — precauzioni specifiche' },
-    { l:1, n:'14', t:'Acrilammide — Misure di Attenuazione' },
-    { l:2, n:'',   t:'14.1 Prodotti da forno e cereali' },
-    { l:2, n:'',   t:'14.2 Frittura e prodotti fritti' },
+    ...(!sezioniManuale || sezioniManuale.includes('microbio') ? [{ l:1, n:'10', t:'Piano Analisi Microbiologiche' }] : []),
+    ...(!sezioniManuale || sezioniManuale.includes('formazione') ? [{ l:1, n:'', t:'Piano di Formazione del Personale' }] : []),
+    ...(!sezioniManuale || sezioniManuale.includes('manutenzione') ? [{ l:1, n:'', t:'Manutenzione e Taratura Attrezzature' }] : []),
+    { l:1, n:'', t:'M.O.C.A. — Materiali e Oggetti a Contatto con Alimenti' },
+    { l:2, n:'', t:'Obblighi operativi' },
+    { l:2, n:'', t:'Carta di alluminio — precauzioni specifiche' },
+    { l:1, n:'', t:'Acrilammide — Misure di Attenuazione' },
+    { l:2, n:'', t:'Prodotti da forno e cereali' },
+    { l:2, n:'', t:'Frittura e prodotti fritti' },
   ];
 
   return voci.map(v => {
@@ -770,7 +770,7 @@ function indice() {
       return new Paragraph({
         spacing: { before: 180, after: 60 },
         children: [
-          r(v.n + '.  ', { size: 22, bold: true, color: VERDE }),
+          ...(v.n ? [r(v.n + '.  ', { size: 22, bold: true, color: VERDE })] : [r('◆  ', { size: 18, bold: true, color: VERDE })]),
           r(v.t, { size: 22, bold: true, color: NERO }),
         ],
       });
@@ -822,13 +822,12 @@ export async function generaManualeHaccp(params) {
     rHaccp           = '—',
     teamHaccp        = [],
     numRev           = '1',
-    versioneInterna  = 0,
     dataRev          = new Date().toLocaleDateString('it-IT'),
     redattore        = 'Ufficio Qualità OVER',
     noteRevisione    = 'Prima emissione',
     revStorico       = [],
     testoManuale     = '',   // testo AI puro, senza markdown strutturale
-    logoVariante     = 'A',
+    logoVariante     = 'B',
     // Dati dal profilo HACCP
     fornitoreNome              = '',  // haccp_profili.fornitore_nome
     apparecchiatureFrigorifere = '',  // haccp_profili.apparecchiature_frigorifere
@@ -847,6 +846,10 @@ export async function generaManualeHaccp(params) {
     analisiProblemiRecenti     = false,
     analisiAcquaBottiglia      = null,
     analisiFrequenze           = { superfici:'annuale', mani:'annuale', stoviglie:'annuale', acqua:'annuale' },
+    // Sezioni manuale attive (array di chiavi da profilo)
+    sezioniManuale             = null,
+    // Normativa regionale dal DB (array di { riferimento, oggetto, prescrizione, note })
+    normativaRegionale         = null,
   } = params;
 
   // Inietta variabili modulo per funzioni top-level
@@ -854,9 +857,9 @@ export async function generaManualeHaccp(params) {
   _params        = params;
   const isCucinaInterna = modello === 'cucina_interna';
 
-  const logoCfg  = LOGOS[logoVariante] || LOGOS.A;
+  const logoCfg  = LOGOS[logoVariante] || LOGOS.B;
   const logoData = logoCfg.data();
-  const revLabel = versioneInterna > 0 ? `${numRev}_${versioneInterna}` : numRev;
+  const revLabel = numRev;
 
   // ── HEADER ────────────────────────────────────────────────────
   const header = new Header({
@@ -936,7 +939,7 @@ export async function generaManualeHaccp(params) {
   // ── INDICE (PAG 2) ────────────────────────────────────────────
   const paginaIndice = [
     p([r('INDICE DEL MANUALE', { size: 28, bold: true, color: VERDE })], { borderBottom: true, borderSize: 8, after: 200 }),
-    ...indice(),
+    ...indice(sezioniManuale),
     new Paragraph({ children: [new PageBreak()] }),
   ];
 
@@ -949,31 +952,10 @@ export async function generaManualeHaccp(params) {
   }
 
 
-  // ── Mappa normativa regionale per §10.4 ──────────────────────
-  const NORMATIVA_REGIONALE = {
-    'Lombardia':         { dgr: 'DGR 2569/2014 + Circolari ATS', note: 'Tamponi superfici: Enterobatteri <10 UFC/cm², Listeria assente. Piano Legionella obbligatorio RSA (DGR 7/19087/2016).' },
-    'Veneto':            { dgr: 'DGRV 2145/2018', note: 'Piano Legionella obbligatorio strutture sanitarie. Tamponi ambientali trimestrali su indicazione ULSS.' },
-    'Piemonte':          { dgr: 'DGR 25-8835/2008', note: 'Linee guida RSA con piano analitico semestrale per superfici e attrezzature.' },
-    'Lazio':             { dgr: 'DGR 2264/2002 + Circ. Reg. 2019', note: 'Criteri microbiologici per superfici e aria nelle strutture socio-sanitarie.' },
-    'Toscana':           { dgr: 'DGRT 647/2019', note: 'Piano sorveglianza Legionella obbligatorio RSA. Campionamenti ambientali secondo protocollo ISS 2015.' },
-    'Emilia-Romagna':    { dgr: 'DGR 2774/2004 + aggiornamenti ASL', note: 'Tamponi superfici trimestrali per cucine RSA. Criteri ISS 2015 per valutazione risultati.' },
-    'Umbria':            { dgr: 'DGR 1729/2012', note: 'Adozione Linee Guida nazionali ISS 2015. Piano campionamenti concordato con ASL locale.' },
-    'Sardegna':          { dgr: 'DGR 35/7/2016', note: 'Piano regionale sicurezza alimentare. Campionamenti secondo indicazioni ASSL competente.' },
-    'Liguria':           { dgr: 'DGR 1376/2011', note: 'Protocollo RSA con criteri microbiologici superfici. Coordinamento con ASL per frequenze.' },
-    'Marche':            { dgr: 'DGR 1337/2013', note: 'Piano campionamenti strutture socio-sanitarie. Tamponi ambientali semestrali superfici cucina.' },
-    'Sicilia':           { dgr: 'Decreto DASOE 2019', note: 'Piano regionale Legionella. Criteri ARPA Sicilia per valutazione tamponi ambientali.' },
-    'Campania':          { dgr: 'DGRC 460/2007 + aggiornamenti', note: 'Piano autocontrollo RSA. Tamponi mensili cucina su indicazione ASL competente.' },
-    'Puglia':            { dgr: 'DGR 2328/2012', note: 'Linee guida igiene alimenti strutture di assistenza. Protocollo concordato con Dipartimento Prevenzione.' },
-    'Calabria':          { dgr: 'DGR 787/2019', note: 'Adozione linee guida nazionali ISS. Piano campionamenti su indicazione ASPCA competente.' },
-    'Basilicata':        { dgr: 'DGR 1079/2013', note: 'Piano regionale sicurezza alimentare. Frequenze concordate con Dipartimento Prevenzione ASP.' },
-    'Molise':            { dgr: 'DGR 562/2015', note: 'Adozione linee guida ISS 2015. Campionamenti su indicazione ASREM competente.' },
-    'Abruzzo':           { dgr: 'DGR 461/2014', note: 'Piano campionamenti ASL. Tamponi ambientali semestrali strutture socio-sanitarie.' },
-    "Valle d'Aosta":   { dgr: "DGR 1892/2014", note: "Criteri nazionali + sorveglianza ARPA VdA. Piano concordato con Azienda USL della Valle d'Aosta." },
-    'Trentino-Alto Adige': { dgr: 'LP 7/2001 + DGP', note: 'Normativa provinciale autonoma. Piano campionamenti APSS (Trento) o SABES (Bolzano).' },
-    'Friuli-Venezia Giulia': { dgr: 'DGR 2042/2012', note: 'Piano regionale sicurezza alimentare. Tamponi ambientali secondo protocollo ASUGI/ASFO.' },
-    'PA Bolzano':        { dgr: 'LP 7/2001 + normativa autonoma', note: 'Normativa provinciale autonoma. Riferimento SABES per piano campionamenti.' },
-  };
-  const normReg = NORMATIVA_REGIONALE[nomestruttura] || null;
+  // ── Normativa regionale per §10.4 — viene dal DB (array righe) o null ──
+  // normativaRegionale: array di { riferimento, oggetto, prescrizione, note } dal DB
+  // normReg alias per compatibilità con il corpo del documento
+  const normReg = (normativaRegionale && normativaRegionale.length > 0) ? normativaRegionale : null;
 
   // ── CORPO ─────────────────────────────────────────────────────
   const corpo = [
@@ -1323,6 +1305,7 @@ export async function generaManualeHaccp(params) {
     ] : []),  // fine §9 condizionale
 
     // ── SEZ 10: Piano analisi microbiologiche ────────────────────
+    ...(!sezioniManuale || sezioniManuale.includes('microbio') ? [
     h1('10. PIANO ANALISI MICROBIOLOGICHE'),
     h2('10.1 Responsabilità e perimetri'),
     ...(() => {
@@ -1407,17 +1390,33 @@ export async function generaManualeHaccp(params) {
     ...spacer(1),
     h2('10.4 Normativa regionale applicabile'),
     ...(() => {
-      if (!normReg) return [txt('Per la normativa regionale specifica fare riferimento al Dipartimento di Prevenzione ASL competente per territorio.')];
-      const c0=Math.round(CONTENT_W*0.30),c1=CONTENT_W-c0;
+      if (!normReg || normReg.length === 0) {
+        return [
+          txt('La normativa regionale specifica applicabile alla struttura ' + nomestruttura + ' è in corso di definizione. Fare riferimento al Dipartimento di Prevenzione ATS/ASL competente per territorio.'),
+          ...spacer(0.5),
+          p([r('⚠️ Dato mancante: inserire la normativa regionale applicabile tramite il pannello di amministrazione QualiCAVA → HACCP → Normative Regionali.',{size:17,italic:true,color:'A32D2D'})]),
+        ];
+      }
+      const c0=Math.round(CONTENT_W*0.22);
+      const c1=Math.round(CONTENT_W*0.22);
+      const c2=Math.round(CONTENT_W*0.28);
+      const c3=CONTENT_W-c0-c1-c2;
       return [
         new Table({
-          width:{size:CONTENT_W,type:WidthType.DXA},columnWidths:[c0,c1],
+          width:{size:CONTENT_W,type:WidthType.DXA},columnWidths:[c0,c1,c2,c3],
           rows:[
-            new TableRow({children:[hCell('Riferimento normativo regionale',c0),hCell('Note operative per RSA',c1)]}),
             new TableRow({children:[
-              cell(normReg.dgr,c0,{fill:VERDE_LIGHT,bold:true,color:VERDE,bc:'C8E6D0'}),
-              cell(normReg.note,c1,{fill:VERDE_LIGHT,bc:'C8E6D0'}),
+              hCell('Riferimento normativo',c0),
+              hCell('Oggetto',c1),
+              hCell('Prescrizione specifica RSA',c2),
+              hCell('Note / Applicabilità',c3),
             ]}),
+            ...normReg.map((nr, i) => new TableRow({children:[
+              cell(nr.riferimento||'—', c0, {fill: i%2===0?VERDE_LIGHT:'FFFFFF', bold:true, color:VERDE, bc:'C8E6D0'}),
+              cell(nr.oggetto||'—',    c1, {fill: i%2===0?VERDE_LIGHT:'FFFFFF', bc:'C8E6D0'}),
+              cell(nr.prescrizione||'—',c2,{fill: i%2===0?VERDE_LIGHT:'FFFFFF', bc:'C8E6D0'}),
+              cell(nr.note||'—',       c3, {fill: i%2===0?VERDE_LIGHT:'FFFFFF', bc:'C8E6D0', size:16}),
+            ]})),
           ],
         }),
         ...spacer(0.5),
@@ -1425,8 +1424,10 @@ export async function generaManualeHaccp(params) {
       ];
     })(),
     new Paragraph({ children: [new PageBreak()] }),
+    ] : []),  // fine SEZ 10 condizionale (microbio)
 
     // ── SEZ 11: Piano formazione ─────────────────────────────
+    ...(!sezioniManuale || sezioniManuale.includes('formazione') ? [
     h1('11. PIANO DI FORMAZIONE DEL PERSONALE'),
     txt('La formazione continua del personale ASA/OSS è requisito fondamentale del sistema HACCP. Il R-HACCP pianifica e documenta tutte le attività formative secondo il seguente schema:'),
     ...spacer(1),
@@ -1434,20 +1435,24 @@ export async function generaManualeHaccp(params) {
     ...spacer(1),
     txt('La documentazione di ogni corso (registro presenze, attestati, test di valutazione) è archiviata nel fascicolo formazione individuale conservato presso il R-HACCP. L\'idoneità sanitaria del personale a contatto con alimenti è verificata annualmente secondo D.Lgs 81/2008.'),
     new Paragraph({ children: [new PageBreak()] }),
+    ] : []),  // fine SEZ 11 condizionale (formazione)
 
     // ── SEZ 12: Manutenzione e taratura ─────────────────────
+    ...(!sezioniManuale || sezioniManuale.includes('manutenzione') ? [
     h1('12. MANUTENZIONE E TARATURA ATTREZZATURE'),
     txt('La manutenzione preventiva e la taratura periodica delle attrezzature è essenziale per garantire l\'efficacia del sistema HACCP, in particolare per le attrezzature che influenzano direttamente i CCP (frigoriferi, termometri a sonda, forni, scaldavivande).'),
     ...spacer(1),
     tabellaManutenzione(apparecchiatureFrigorifere),
     ...spacer(1),
     txt('I rapporti di manutenzione e i certificati di taratura sono conservati dal R-HACCP per almeno 5 anni. Le attrezzature fuori tolleranza vengono messe fuori servizio fino a riparazione/sostituzione e sostituite con attrezzature di riserva documentate.'),
-
-    // ── SEZ 13: MOCA ─────────────────────────────────────────
     new Paragraph({ children: [new PageBreak()] }),
-    h1('13. M.O.C.A. — MATERIALI E OGGETTI A CONTATTO CON ALIMENTI'),
+    ] : []),  // fine SEZ 12 condizionale (manutenzione)
+
+    // ── MOCA ─────────────────────────────────────────────────
+    new Paragraph({ children: [new PageBreak()] }),
+    h1('M.O.C.A. — MATERIALI E OGGETTI A CONTATTO CON ALIMENTI'),
     txt('I materiali e oggetti a contatto con gli alimenti (MOCA) sono regolamentati dal Reg. CE 1935/2004 e dai regolamenti specifici per ogni tipologia di materiale. Scopo: garantire che i MOCA non trasferiscano sostanze agli alimenti in quantità tali da rappresentare un pericolo per la salute umana.'),
-    h2('13.1 Obblighi operativi'),
+    h2('Obblighi operativi'),
     ...textToParagraphs([
       "• Tutti i materiali e oggetti a contatto con alimenti devono essere dichiarati idonei — verificare la presenza della dicitura -idoneo al contatto con alimenti- o simbolo calice+forchetta sull'etichetta o scheda tecnica",
       '• Non solo gli imballaggi ma anche tutti gli utensili e le attrezzature usate per preparare, cuocere e servire gli alimenti rientrano nella previsione normativa',
@@ -1455,7 +1460,7 @@ export async function generaManualeHaccp(params) {
       "• Durante l'attività: verificare il buono stato di conservazione dei MOCA — non utilizzare utensili scheggiati, graffiati o deteriorati",
       '• Eventuali anomalie → registrare sul modulo Non Conformità',
     ].join('\n')),
-    h2('13.2 Carta di alluminio — precauzioni specifiche'),
+    h2('Carta di alluminio — precauzioni specifiche'),
     txt('La carta di alluminio a contatto con determinati cibi può cedere ioni di alluminio agli alimenti. I fattori che influiscono: tempo di conservazione, temperatura, composizione dell\'alimento.'),
     ...textToParagraphs([
       '• **NON idonea** al contatto con alimenti fortemente acidi (succo di limone, aceto) o fortemente salati (alici salate, capperi sotto sale)',
@@ -1464,13 +1469,13 @@ export async function generaManualeHaccp(params) {
       '• Non riutilizzare mai contenitori monouso (teglie e vaschette)',
       '• Può essere utilizzata per oltre 24h solo a temperatura di refrigerazione',
     ].join('\n')),
-    ...(opMocaNote ? [h2('13.3 Note specifiche della struttura'), txt(opMocaNote)] : []),
+    ...(opMocaNote ? [h2('Note specifiche della struttura'), txt(opMocaNote)] : []),
 
     // ── SEZ 14: ACRILAMMIDE ───────────────────────────────────
     new Paragraph({ children: [new PageBreak()] }),
-    h1('14. ACRILAMMIDE — MISURE DI ATTENUAZIONE'),
+    h1('ACRILAMMIDE — MISURE DI ATTENUAZIONE'),
     txt("L'acrilammide è una sostanza chimica che si forma naturalmente negli alimenti amidacei durante cotture ad alte temperature (frittura, forno, tostatura) attraverso la reazione di Maillard tra zuccheri e amminoacidi. È classificata come probabile cancerogena. Il Reg. UE 2017/2158 ha istituito misure di attenuazione obbligatorie."),
-    h2('14.1 Prodotti da forno e cereali'),
+    h2('Prodotti da forno e cereali'),
     ...textToParagraphs([
       '• Cuocere i prodotti da forno fino a una colorazione finale più chiara — evitare la doratura eccessiva',
       '• Utilizzare le guide cromatiche elaborate per i prodotti specifici — esposte in modo visibile nei locali di preparazione',
@@ -1478,7 +1483,7 @@ export async function generaManualeHaccp(params) {
       '• Qualora si utilizzi pane preconfezionato o prodotti da forno da ultimare in cottura: osservare le istruzioni del produttore incluse le indicazioni cromatiche',
     ].join('\n')),
     ...(isCucinaInterna && opFrittura ? [
-      h2('14.2 Frittura di patate e prodotti fritti'),
+      h2('Frittura di patate e prodotti fritti'),
       ...textToParagraphs([
         '• Conservare le patate a temperatura superiore a 6°C — mai in frigorifero (aumenta gli zuccheri)',
         "• Prima della frittura: lavare e lasciare in ammollo in acqua fredda 30-120 min; asciugare bene",
@@ -1490,7 +1495,7 @@ export async function generaManualeHaccp(params) {
         '• Sale e spezie: aggiungere sempre DOPO la frittura, mai prima',
       ].join('\n')),
     ] : [
-      h2('14.2 Nota per il modello ' + modello),
+      h2('Nota per il modello ' + modello),
       txt('Il presente manuale riguarda un servizio di ' + (modello === 'distribuzione_veicolata' ? 'distribuzione veicolata' : 'appalto a fornitore esterno') + '. Le fasi di cottura e frittura sono di competenza del centro cottura esterno (' + fornitoreNome + '). Le misure di attenuazione dell\'acrilammide per tostatura pane e prodotti da forno riscaldati rimangono applicabili al personale OSA nelle cucinette di nucleo.'),
     ]),
 
@@ -1526,12 +1531,14 @@ export async function generaModulisticaHaccp({
   op_distributore_acqua_note  = '',
   op_macchinetta_caffe        = false,
   op_macchinetta_caffe_note   = '',
+  op_macchina_colazioni       = false,
+  op_macchina_colazioni_note  = '',
   op_cena_abbattuta           = false,
   op_disfagici                = false,
   op_monouso_infetti          = false,
   op_srtr                     = false,
   op_riabilitazione           = false,
-  logoVariante                = 'A',
+  logoVariante                = 'B',
 }) {
   const isCucinaInterna = modello === 'cucina_interna';
   const isAppalto       = modello === 'appalto_fresco_caldo';
@@ -1546,6 +1553,31 @@ export async function generaModulisticaHaccp({
   const congelatori  = righeApp.filter(r => /^C\d*$/.test(getCodice(r)));
   const frigoReparti = righeApp.filter(r => /^FR\d+$/.test(getCodice(r)) || /^FD$/.test(getCodice(r)));
   const congelatoriR = righeApp.filter(r => /^CR\d+$/.test(getCodice(r)));
+
+  // ── Parse apparecchi 5A (distributori acqua) e 5B (macchinette) ──
+  // Stessa logica frigoriferi: una riga per apparecchio nel campo note
+  // Se il campo è valorizzato con righe → una sezione per apparecchio
+  // Se il campo è una nota generica (nessun codice) → un apparecchio senza codice
+  function parseApparecchiSemplici(testoNote, flagAttivo) {
+    if (!flagAttivo) return [];
+    if (!testoNote || !testoNote.trim()) return [{ codice: '', desc: '' }];
+    const righe = testoNote.split('\n').map(r => r.trim()).filter(Boolean);
+    // Se c'è almeno una riga che assomiglia a "CODICE – descrizione", usa il parser
+    const hasCodice = righe.some(r => /^[A-Z]{1,4}\d*\s*[–\-:]/.test(r));
+    if (hasCodice) {
+      return righe.map(r => ({ codice: getCodice(r), desc: getDesc(r) }));
+    }
+    // Altrimenti: tratta ogni riga come una descrizione senza codice
+    if (righe.length > 1) {
+      return righe.map(r => ({ codice: '', desc: r }));
+    }
+    // Singola riga generica → un apparecchio con nota
+    return [{ codice: '', desc: righe[0] }];
+  }
+
+  const distributoriAcqua  = parseApparecchiSemplici(op_distributore_acqua_note, op_distributore_acqua);
+  const macchinetteCaffe   = parseApparecchiSemplici(op_macchinetta_caffe_note,  op_macchinetta_caffe);
+  const macchineColazioni  = parseApparecchiSemplici(op_macchina_colazioni_note, op_macchina_colazioni);
 
   // ── Dimensioni pagina ────────────────────────────────────────
   const W_P  = 9638;   // Portrait content width  (A4: 11906 - 1134*2)
@@ -1599,7 +1631,7 @@ export async function generaModulisticaHaccp({
   function intestazione(autoc, titolo, W, landscape = false) {
     const logoData = (() => {
       try {
-        const cfg = LOGOS[logoVariante] || LOGOS.A;
+        const cfg = LOGOS[logoVariante] || LOGOS.B;
         return { data: cfg.data(), type: cfg.type, w: cfg.w, h: cfg.h };
       } catch { return null; }
     })();
@@ -1727,7 +1759,7 @@ export async function generaModulisticaHaccp({
   function copertina() {
     const W = W_P;
     const logoData = (() => {
-      try { const cfg = LOGOS[logoVariante] || LOGOS.A; return { data: cfg.data(), type: cfg.type, w: cfg.w, h: cfg.h }; }
+      try { const cfg = LOGOS[logoVariante] || LOGOS.B; return { data: cfg.data(), type: cfg.type, w: cfg.w, h: cfg.h }; }
       catch { return null; }
     })();
 
@@ -1792,6 +1824,7 @@ export async function generaModulisticaHaccp({
           ...(op_monouso_infetti ? [['Autoc 9',  'Registro isolamento infettivo']] : []),
           ...(op_distributore_acqua ? [['Autoc 5A', 'Manutenzione distributore acqua potabile']] : []),
           ...(op_macchinetta_caffe ? [['Autoc 5B', 'Manutenzione macchinetta bevande calde']] : []),
+          ...(op_macchina_colazioni ? [['Autoc 5C', 'Manutenzione macchina colazioni']] : []),
           ['Autoc 4',  'Comunicazione variazioni menù'],
           ['Autoc 7',  'Elenco fornitori qualificati'],
           ['Autoc 6',  'Registro generale non conformità'],
@@ -2322,11 +2355,11 @@ export async function generaModulisticaHaccp({
     ]};
   }
 
-  // ── Autoc 5A — Distributore acqua (Landscape, formato Quinzano) ──
-  function autoc5A() {
-    if (!op_distributore_acqua) return null;
+  // ── Autoc 5A — Distributore acqua — una sezione per apparecchio ──
+  function autoc5A({ codice = '', desc = '' } = {}) {
     const W = W_L;
-    const nota = op_distributore_acqua_note || '';
+    const etichetta = [codice, desc].filter(Boolean).join(' – ');
+    const titoloSez = etichetta ? `MANUTENZIONE DISTRIBUTORE ACQUA POTABILE — ${etichetta}` : 'MANUTENZIONE DISTRIBUTORE ACQUA POTABILE';
     const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
     const attivita = [
       { att: 'Pulizia esterna erogatori e vassoio raccogligocce', freq: 'Settimanale' },
@@ -2353,7 +2386,7 @@ export async function generaModulisticaHaccp({
     const colsMens = [c0m, ...Array.from({length:31},(_,i) => i===30?cLm:cGm)];
 
     return { properties: { page: pLand }, children: [
-      intestazione('Autoc 5A', `MANUTENZIONE DISTRIBUTORE ACQUA POTABILE${nota?' — '+nota:''}`, W, true),
+      intestazione('Autoc 5A', titoloSez, W, true),
       sp(0.5),
       // Tabella annuale P/V
       p([r('PIANO ANNUALE — P = Programmato · V = Verificato (apporre firma)', {bold:true, size:17, color:V})], {after:60}),
@@ -2392,19 +2425,17 @@ export async function generaModulisticaHaccp({
     ]};
   }
 
-  // ── Autoc 5B — Macchinetta bevande (Landscape, formato Quinzano) ─
-  function autoc5B() {
-    if (!op_macchinetta_caffe) return null;
+  // ── Autoc 5B — Macchinetta bevande — una sezione per apparecchio ─
+  function autoc5B({ codice = '', desc = '' } = {}) {
     const W = W_L;
-    const nota = op_macchinetta_caffe_note || '';
+    const etichetta = [codice, desc].filter(Boolean).join(' – ');
+    const titoloSez = etichetta ? `MANUTENZIONE MACCHINETTA BEVANDE CALDE — ${etichetta}` : 'MANUTENZIONE MACCHINETTA BEVANDE CALDE';
     const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
     const attivita = [
       { att: 'Pulizia esterna macchina e vassoio raccogligocce', freq: 'Giornaliera' },
-      { att: 'Pulizia cappuccino/schiuma latte (dopo ogni uso con latte)', freq: 'Giornaliera' },
       { att: 'Pulizia circuito interno (risciacquo)', freq: 'Settimanale' },
       { att: 'Decalcificazione circuito (o secondo display macchina)', freq: 'Mensile' },
       { att: 'Sostituzione filtro acqua', freq: 'Semestrale' },
-      { att: 'Manutenzione tecnica completa (assistenza fornitore)', freq: 'Annuale' },
     ];
 
     const attivitaGiorn = attivita.filter(a => a.freq === 'Giornaliera');
@@ -2425,7 +2456,7 @@ export async function generaModulisticaHaccp({
     const colsMens = [c0m, ...Array.from({length:31},(_,i)=>i===30?cLm:cGm)];
 
     return { properties: { page: pLand }, children: [
-      intestazione('Autoc 5B', `MANUTENZIONE MACCHINETTA BEVANDE CALDE${nota?' — '+nota:''}`, W, true),
+      intestazione('Autoc 5B', titoloSez, W, true),
       sp(0.5),
       p([r('PIANO ANNUALE — P = Programmato · V = Verificato (apporre firma)', {bold:true, size:17, color:V})], {after:60}),
       new Table({
@@ -2459,6 +2490,76 @@ export async function generaModulisticaHaccp({
       }),
       sp(),
       noteFooter('Acqua con calcare elevato: aumentare frequenza decalcificazione. Conservare rapporti manutenzione. NC → Autoc 6.', W),
+    ]};
+  }
+
+  // ── Autoc 5C — Macchina colazioni — una sezione per apparecchio ──
+  function autoc5C({ codice = '', desc = '' } = {}) {
+    const W = W_L;
+    const etichetta = [codice, desc].filter(Boolean).join(' – ');
+    const titoloSez = etichetta ? `MANUTENZIONE MACCHINA COLAZIONI — ${etichetta}` : 'MANUTENZIONE MACCHINA COLAZIONI';
+    const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    const attivita = [
+      { att: 'Pulizia esterna macchina e vassoio raccogligocce',          freq: 'Giornaliera' },
+      { att: 'Svuotamento e pulizia cassetto fondi caffè / cialde usate',  freq: 'Giornaliera' },
+      { att: 'Pulizia ugelli erogazione caffè / latte / bevande calde',    freq: 'Settimanale' },
+      { att: 'Risciacquo circuito interno (programma auto-pulizia)',       freq: 'Settimanale' },
+      { att: 'Decalcificazione circuito (o su indicazione display)',       freq: 'Mensile' },
+      { att: 'Sostituzione filtro acqua',                                  freq: 'Semestrale' },
+      { att: 'Verifica data scadenza e rotazione ingredienti (latte, zucchero, polveri)', freq: 'Settimanale' },
+      { att: 'Manutenzione tecnica completa (assistenza fornitore)',       freq: 'Annuale' },
+    ];
+
+    const attivitaGiorn = attivita.filter(a => a.freq === 'Giornaliera');
+    const attivitaSet   = attivita.filter(a => a.freq === 'Settimanale');
+
+    const cAtt  = Math.floor(W * 0.35);
+    const cFreq = Math.floor(W * 0.12);
+    const cM    = Math.floor((W - cAtt - cFreq) / 12);
+    const cLast = W - cAtt - cFreq - cM * 11;
+    const colsAnn = [cAtt, cFreq, ...Array.from({length:12},(_,i) => i===11?cLast:cM)];
+
+    const attivitaMens = [...attivitaGiorn, ...attivitaSet];
+    const c0m = Math.floor(W * 0.35);
+    const cGm = Math.floor((W - c0m) / 31);
+    const cLm = W - c0m - cGm * 30;
+    const colsMens = [c0m, ...Array.from({length:31},(_,i) => i===30?cLm:cGm)];
+
+    return { properties: { page: pLand }, children: [
+      intestazione('Autoc 5C', titoloSez, W, true),
+      sp(0.5),
+      p([r('PIANO ANNUALE — P = Programmato · V = Verificato (apporre firma)', {bold:true, size:17, color:V})], {after:60}),
+      new Table({
+        width:{size:W,type:WidthType.DXA}, columnWidths:colsAnn,
+        rows:[
+          new TableRow({children:[hC('Attività',cAtt), hC('Frequenza',cFreq), ...mesi.map((m,i)=>hC(m,i===11?cLast:cM))]}),
+          ...attivita.map(({att,freq},i)=>new TableRow({
+            height:{value:500,rule:'exact'},
+            children:[
+              cell(att,cAtt,{size:15,fill:i%2===0?W_:VL,bc:'DDDDDD'}),
+              cell(freq,cFreq,{size:14,italic:true,color:GS,fill:i%2===0?W_:VL,bc:'DDDDDD',align:AlignmentType.CENTER}),
+              ...Array.from({length:12},(_,j)=>eC(j===11?cLast:cM,i%2===0?W_:VL)),
+            ],
+          })),
+        ],
+      }),
+      sp(1),
+      p([r('MONITORAGGIO MENSILE — attività giornaliere e settimanali (firma per conferma)', {bold:true, size:17, color:V})], {after:60}),
+      new Table({
+        width:{size:W,type:WidthType.DXA}, columnWidths:colsMens,
+        rows:[
+          new TableRow({children:[hC('Attività',c0m), ...Array.from({length:31},(_,i)=>hC(String(i+1),i===30?cLm:cGm))]}),
+          ...attivitaMens.map(({att,freq},i)=>new TableRow({
+            height:{value:480,rule:'exact'},
+            children:[
+              cell(att+' ('+freq+')',c0m,{size:14,fill:i%2===0?W_:VL,bc:'DDDDDD'}),
+              ...Array.from({length:31},(_,j)=>eC(j===30?cLm:cGm,i%2===0?W_:VL)),
+            ],
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('Verificare scadenze ingredienti prima di ogni utilizzo. Acqua con calcare elevato: aumentare frequenza decalcificazione. NC → Autoc 6.', W),
     ]};
   }
 
@@ -2564,8 +2665,9 @@ export async function generaModulisticaHaccp({
     autoc8(),
     autoc8D(),
     autoc9(),
-    autoc5A(),
-    autoc5B(),
+    ...distributoriAcqua.map(app => autoc5A(app)),
+    ...macchinetteCaffe.map(app  => autoc5B(app)),
+    ...macchineColazioni.map(app => autoc5C(app)),
     autoc4(),
     autoc7(),
     autoc6(),
@@ -2589,13 +2691,18 @@ export async function generaManualeCompleto(params) {
       nomestruttura:               params.nomestruttura,
       modello:                     params.modello || 'distribuzione_veicolata',
       apparecchiature_frigorifere: params.apparecchiatureFrigorifere || '',
-      op_macchinetta_caffe:        params.opMacchinettaCaffe || false,
-      op_disfagici:                params.opDisfagici || false,
-      op_cena_abbattuta:           params.opCenaAbbattuta || false,
-      op_srtr:                     params.opSrtr || false,
-      op_monouso_infetti:          params.opMonousoInfetti || false,
-      op_riabilitazione:           params.opRiabilitazione || false,
-      logoVariante:                params.logoVariante || 'A',
+      op_distributore_acqua:       params.opDistributoreAcqua       || false,
+      op_distributore_acqua_note:  params.opDistributoreNote        || '',
+      op_macchinetta_caffe:        params.opMacchinettaCaffe        || false,
+      op_macchinetta_caffe_note:   params.opMacchinettaCaffeNote    || '',
+      op_macchina_colazioni:       params.opMacchinaColazioni       || false,
+      op_macchina_colazioni_note:  params.opMacchinaColazioniNote   || '',
+      op_disfagici:                params.opDisfagici               || false,
+      op_cena_abbattuta:           params.opCenaAbbattuta           || false,
+      op_srtr:                     params.opSrtr                    || false,
+      op_monouso_infetti:          params.opMonousoInfetti          || false,
+      op_riabilitazione:           params.opRiabilitazione          || false,
+      logoVariante:                params.logoVariante              || 'B',
     }),
   ]);
   return { manuale, modulistica };
