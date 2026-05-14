@@ -233,6 +233,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
     note_operative:              '',
     // Campi specifici per modello — salvati in sezioni_attive jsonb
     op_orari_distribuzione:      '',
+    op_ricevimento_pasti:        '',
     op_nuclei_note:              '',
     op_disfagici:                false,
     op_disfagici_note:           '',
@@ -246,6 +247,8 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
     op_riabilitazione:           false,
     op_macchinetta_caffe:        false,
     op_macchinetta_caffe_note:   '',
+    op_macchina_colazioni:       false,
+    op_macchina_colazioni_note:  '',
     op_distributore_acqua:       false,
     op_distributore_acqua_note:  '',
     op_celiachia_note:           '',
@@ -298,6 +301,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         redattore:                   sa.redattore        || 'Ufficio Qualità OVER',
         note_operative:              profilo.note_operative              || '',
         op_orari_distribuzione:      sa.op_orari_distribuzione           || '',
+        op_ricevimento_pasti:        sa.op_ricevimento_pasti             || '',
         op_nuclei_note:              sa.op_nuclei_note                   || '',
         op_disfagici:                sa.op_disfagici                     || false,
         op_disfagici_note:           sa.op_disfagici_note                || '',
@@ -311,6 +315,8 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_riabilitazione:           sa.op_riabilitazione                || false,
         op_macchinetta_caffe:        sa.op_macchinetta_caffe             || false,
         op_macchinetta_caffe_note:   sa.op_macchinetta_caffe_note        || '',
+        op_macchina_colazioni:       sa.op_macchina_colazioni            || false,
+        op_macchina_colazioni_note:  sa.op_macchina_colazioni_note       || '',
         op_distributore_acqua:       sa.op_distributore_acqua            || false,
         op_distributore_acqua_note:  sa.op_distributore_acqua_note       || '',
         op_celiachia_note:           sa.op_celiachia_note                || '',
@@ -347,6 +353,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         redattore:               form.redattore,
         n_distribuzione:         form.n_distribuzione,
         op_orari_distribuzione:  form.op_orari_distribuzione,
+        op_ricevimento_pasti:    form.op_ricevimento_pasti,
         op_nuclei_note:          form.op_nuclei_note,
         op_disfagici:            form.op_disfagici,
         op_disfagici_note:       form.op_disfagici_note,
@@ -360,6 +367,8 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_riabilitazione:       form.op_riabilitazione,
         op_macchinetta_caffe:    form.op_macchinetta_caffe,
         op_macchinetta_caffe_note: form.op_macchinetta_caffe_note,
+        op_macchina_colazioni:   form.op_macchina_colazioni,
+        op_macchina_colazioni_note: form.op_macchina_colazioni_note,
         op_distributore_acqua:   form.op_distributore_acqua,
         op_distributore_acqua_note: form.op_distributore_acqua_note,
         op_celiachia_note:       form.op_celiachia_note,
@@ -395,6 +404,43 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         ? await supabase.from('haccp_profili').update(payload).eq('struttura_id', facility.id)
         : await supabase.from('haccp_profili').insert([payload]);
       if (error) throw error;
+
+      // ── Notifica in-app se ci sono note/specificità compilate ──────
+      const CAMPI_NOTA = [
+        { chiave: 'op_ricevimento_pasti',  label: 'Modalità ricevimento pasti' },
+        { chiave: 'op_cucinette_note',     label: 'Descrizione cucinette' },
+        { chiave: 'op_cena_abbattuta_note',label: 'Note gestione cena abbattuta' },
+        { chiave: 'op_celiachia_note',     label: 'Allergeni e celiachia' },
+        { chiave: 'descrizione_ambienti',  label: 'Layout struttura / locali OSA' },
+        { chiave: 'op_moca_note',          label: 'Note MOCA' },
+      ];
+      const campiCompilati = CAMPI_NOTA.filter(c => {
+        const val = sezioni_attive[c.chiave];
+        return val && String(val).trim().length > 0;
+      });
+      if (campiCompilati.length > 0) {
+        const { data: destinatari } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .in('role', ['superadmin', 'sede']);
+        if (destinatari && destinatari.length > 0) {
+          const dettaglio = campiCompilati
+            .map(c => `• ${c.label}: "${String(sezioni_attive[c.chiave]).substring(0, 80)}${String(sezioni_attive[c.chiave]).length > 80 ? '…' : ''}"`)
+            .join('\n');
+          await supabase.from('notifications').insert(
+            destinatari.map(u => ({
+              user_id:   u.id,
+              tipo:      'haccp_nota_struttura',
+              titolo:    `HACCP — Note da: ${facility.name}`,
+              messaggio: `${campiCompilati.length} specificità operative da valutare:\n${dettaglio}`,
+              link:      `/qualita/haccp?struttura=${facility.id}`,
+              letta:     false,
+            }))
+          );
+        }
+      }
+      // ──────────────────────────────────────────────────────────────
+
       await invalidate.profilo();
       await invalidate.semafori();
       onSaved?.();
@@ -1191,20 +1237,74 @@ function SciaCard({ scia, facilityId, onUpdateStato, onUploadDone, canEdit }) {
 // ══════════════════════════════════════════════════════════════
 // TAB 3 — MANUALE
 // ══════════════════════════════════════════════════════════════
+function StoricoRevisioni({ manuali }) {
+  const storico = manuali.slice(1).filter(m => !m.richiesta_pending);
+  const [aperto, setAperto]       = useState(false);
+  const [mostraTutti, setMostraTutti] = useState(false);
+  if (storico.length === 0) return null;
+  const visibili = mostraTutti ? storico : storico.slice(0, 3);
+  return (
+    <section className="border border-slate-200 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setAperto(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+      >
+        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
+          Storico revisioni ({storico.length})
+        </span>
+        <span className="text-slate-400 text-xs">{aperto ? '▲' : '▼'}</span>
+      </button>
+      {aperto && (
+        <div className="p-3 space-y-2">
+          {visibili.map(m => (
+            <div key={m.id} className="bg-white border border-slate-100 rounded-lg px-4 py-3 space-y-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-black text-slate-600">Rev. {m.numero_revisione}</span>
+                  <span className="text-xs text-slate-400 ml-3">{m.data_emissione}</span>
+                </div>
+                <div className="flex gap-2">
+                  {m.file_url_manuale && (
+                    <a href={m.file_url_manuale} target="_blank" rel="noreferrer"
+                      className="text-xs text-indigo-500 hover:underline font-bold">Manuale</a>
+                  )}
+                  {m.file_url_modulistica && (
+                    <a href={m.file_url_modulistica} target="_blank" rel="noreferrer"
+                      className="text-xs text-amber-500 hover:underline font-bold">Modulistica</a>
+                  )}
+                </div>
+              </div>
+              {m.note_revisione && (
+                <p className="text-xs text-slate-400 italic">{m.note_revisione}</p>
+              )}
+            </div>
+          ))}
+          {storico.length > 3 && (
+            <button onClick={() => setMostraTutti(v => !v)}
+              className="text-xs text-slate-400 hover:text-slate-600 font-bold mt-1 pl-1">
+              {mostraTutti ? '▲ Mostra solo ultime 3' : `▼ Mostra tutte (${storico.length})`}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRequest, isUdoPsi }) {
   const [revNote, setRevNote]         = useState('');
   const [saving, setSaving]           = useState(false);
   const [savingMod, setSavingMod]     = useState(false);
-  const [logoVariante, setLogoVariante] = useState('A');
+  const [logoVariante, setLogoVariante] = useState('B');
   const [requesting, setRequesting]   = useState(false);
   const ultimo = manuali[0] ?? null;
 
   const profiloCompleto = profilo?.modello_ristorazione && profilo?.r_haccp && profilo?.lr_attuale;
 
   const LOGO_OPTIONS = [
-    { value: 'A', label: 'OVER società consortile' },
     { value: 'B', label: 'Pittogramma gruppo OVER' },
     { value: 'C', label: 'Logo personalizzato struttura' },
+    { value: 'A', label: 'OVER scarl' },
   ];
 
   const handleRichiedi = async () => {
@@ -1245,6 +1345,10 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         modello:                     profilo.modello_ristorazione || 'cucina_interna',
         apparecchiature_frigorifere: profilo.apparecchiature_frigorifere || '',
         op_macchinetta_caffe:        sa.op_macchinetta_caffe   || false,
+        opMacchinettaCaffe:          sa.op_macchinetta_caffe   || false,
+        opMacchinettaCaffeNote:      sa.op_macchinetta_caffe_note || '',
+        opMacchinaColazioni:         sa.op_macchina_colazioni   || false,
+        opMacchinaColazioniNote:     sa.op_macchina_colazioni_note || '',
         op_disfagici:                sa.op_disfagici            || false,
         op_cena_abbattuta:           sa.op_cena_abbattuta       || false,
         op_srtr:                     sa.op_srtr                 || false,
@@ -1279,6 +1383,12 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
   };
 
   const handleSalvaManuale = async () => {
+    if (!revNote.trim()) {
+      const conferma = window.confirm(
+        'Le note di revisione sono vuote.\n\nDi solito è utile motivare la nuova edizione (es. "Prima emissione", "Aggiornamento R-HACCP", "Variazione fornitore").\n\nVuoi procedere comunque senza note?'
+      );
+      if (!conferma) return;
+    }
     setSaving(true);
     try {
       const sa      = profilo?.sezioni_attive || {};
@@ -1298,14 +1408,42 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       const oggi    = new Date().toISOString().split('T')[0];
       // Scadenza a 3 anni
       const scadenza = new Date(new Date().setFullYear(new Date().getFullYear() + 3)).toISOString().split('T')[0];
-      const revStorico = sa.rev_storico || [];
+      // Storico revisioni: prendi le ultime 3 dal DB (escluso il corrente = [0])
+      const revStorico = manuali
+        .filter(m => !m.richiesta_pending)
+        .slice(1, 4)
+        .map(m => ({
+          rev:  String(m.numero_revisione),
+          data: m.data_emissione || '—',
+          note: m.note_revisione || '—',
+        }))
+        .reverse();
+      const { data: companyData } = await supabase
+         .from('facilities')
+         .select('companies(name, piva)')
+         .eq('id', facility.id)
+         .single();
+      const companyName = companyData?.companies?.name;
+      const companyPiva = companyData?.companies?.piva || null;
 
-      // 1. Genera .docx nel browser (nessuna Edge Function)
+      // Fetch normativa regionale dal DB
+      const regione = facility.region || facility.regione || null;
+      let normativaRegionale = null;
+      if (regione) {
+        const { data: normData } = await supabase
+          .from('haccp_normative_regionali')
+          .select('riferimento, oggetto, prescrizione, note')
+          .eq('regione', regione)
+          .eq('attiva', true)
+          .order('ordine', { ascending: true });
+        normativaRegionale = normData && normData.length > 0 ? normData : null;
+      }
+
       const { generaManualeHaccp } = await import('../services/haccpManualeService');
       const docxBuffer = await generaManualeHaccp({
         nomestruttura: facility.name,
-        osa:           facility.name,
-        pivaOsa:       sa.piva_osa            || '—',
+        osa:           companyName || facility.name,
+        pivaOsa:       sa.piva_osa || companyPiva || '—',
         modello:       profilo.modello_ristorazione || 'cucina_interna',
         lr:            profilo.lr_attuale      || '—',
         rHaccp:        profilo.r_haccp         || '—',
@@ -1341,14 +1479,18 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         analisiAcquaBottiglia:     sa.analisi_acqua_bottiglia     ?? null,
         analisiFrequenze:          sa.analisi_frequenze           || { superfici:'annuale', mani:'annuale', stoviglie:'annuale', acqua:'annuale' },
         opCucinetteNote:           sa.op_cucinette_note           || '',
+        opRicevimentoPasti:        sa.op_ricevimento_pasti        || '',
         opDistributoreAcqua:       sa.op_distributore_acqua       || false,
         opDistributoreNote:        sa.op_distributore_acqua_note  || '',
         testoManuale:              '',   // niente AI — tutto dal profilo
         logoVariante:              logoVariante,
+        sezioniManuale:            sa.sezioni_manuale             || null,
+        normativaRegionale:        normativaRegionale,
       });
 
       // 2. Upload .docx manuale in Storage
-      const path = `${facility.id}/manuali/manuale_rev${numRev}_${oggi}.docx`;
+      const nomeFile = facility.name.replace(/[^a-zA-Z0-9À-ÿ\s]/g, '').trim().replace(/\s+/g, '_');
+     const path = `${facility.id}/manuali/${nomeFile}_${oggi}.docx`;
       const { error: upErr } = await supabase.storage
         .from('haccp-documents')
         .upload(path, docxBuffer, {
@@ -1374,10 +1516,12 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
           op_distributore_acqua_note:  sa.op_distributore_acqua_note  || '',
           op_macchinetta_caffe:        sa.op_macchinetta_caffe        || false,
           op_macchinetta_caffe_note:   sa.op_macchinetta_caffe_note   || '',
+          op_macchina_colazioni:       sa.op_macchina_colazioni        || false,
+          op_macchina_colazioni_note:  sa.op_macchina_colazioni_note   || '',
           op_cena_abbattuta:           sa.op_cena_abbattuta           || false,
           op_carrello_termico:         sa.op_carrello_termico         || false,
         });
-        const modPath = `${facility.id}/manuali/modulistica_rev${numRev}_${oggi}.docx`;
+        const modPath = `${facility.id}/manuali/${nomeFile}_modulistica_${oggi}.docx`;
         const { error: modErr } = await supabase.storage
           .from('haccp-documents')
           .upload(modPath, modBuffer, {
@@ -1412,7 +1556,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       await invalidate.manuali();
       await invalidate.semafori();
       setRevNote('');
-      const revLabel = versioneInterna > 0 ? `${numRev}_${versioneInterna}` : numRev;
+      const revLabel = numRev;
       alert(`Manuale Rev. ${revLabel} salvato correttamente.${modulisticaUrl ? ' Modulistica allegata.' : ''}`);
     } catch (err) {
       alert('Errore salvataggio: ' + err.message);
@@ -1529,6 +1673,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
           </div>
         </div>
       )}
+      {canGenerate && (
         <section className="space-y-4">
           {/* Selettore variante logo */}
           <div>
@@ -1545,7 +1690,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
                       : 'bg-slate-100 text-slate-400 border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  {opt.value === 'A' ? '🏢' : opt.value === 'B' ? '💚' : '📎'} {opt.label}
+                  {opt.value === 'B' ? '💚' : opt.value === 'C' ? '📎' : '🏢'} {opt.label}
                 </button>
               ))}
             </div>
@@ -1620,29 +1765,9 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         </section>
       )}
 
-      {/* Storico revisioni */}
+      {/* Storico revisioni — blocco collassabile */}
       {manuali.length > 1 && (
-        <section>
-          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 mb-4">
-            Storico revisioni
-          </h3>
-          <div className="space-y-2">
-            {manuali.slice(1).map(m => (
-              <div key={m.id} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-                <div>
-                  <span className="text-xs font-black text-slate-500">Rev. {m.numero_revisione}</span>
-                  <span className="text-xs text-slate-400 ml-3">{m.data_emissione}</span>
-                </div>
-                <div className="flex gap-2">
-                  {m.file_url_manuale && (
-                    <a href={m.file_url_manuale} target="_blank" rel="noreferrer"
-                      className="text-xs text-indigo-500 hover:underline font-bold">Manuale</a>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+        <StoricoRevisioni manuali={manuali} />
       )}
     </div>
   );
@@ -2069,9 +2194,10 @@ function NoteOperativeSection({ form, set, setForm, modello }) {
             </label>
             {form.op_macchinetta_caffe && (
               <div>
-                <label className={LBL}>N° macchinette e ubicazione</label>
-                <input type="text" value={form.op_macchinetta_caffe_note} onChange={set('op_macchinetta_caffe_note')} className={INP}
-                  placeholder="es. 2 macchinette: 1 al piano terra (sala comune), 1 al piano 1" />
+                <label className={LBL}>Apparecchi (una riga per apparecchio)</label>
+                <textarea rows={3} value={form.op_macchinetta_caffe_note} onChange={set('op_macchinetta_caffe_note')} className={INP}
+                  placeholder={"MB1 – Macchinetta sala comune piano terra\nMB2 – Macchinetta corridoio primo piano"} />
+                <p className="text-[10px] text-slate-400 mt-1">Formato: <strong>Codice – Descrizione</strong> · Una riga = un modulo Autoc 5B</p>
               </div>
             )}
           </div>
@@ -2085,12 +2211,31 @@ function NoteOperativeSection({ form, set, setForm, modello }) {
             </label>
             {form.op_distributore_acqua && (
               <div>
-                <label className={LBL}>N° distributori e ubicazione</label>
-                <input type="text" value={form.op_distributore_acqua_note} onChange={set('op_distributore_acqua_note')} className={INP}
-                  placeholder="es. 1 microfiltratore cucina + 1 distributore sala da pranzo" />
+                <label className={LBL}>Apparecchi (una riga per apparecchio)</label>
+                <textarea rows={3} value={form.op_distributore_acqua_note} onChange={set('op_distributore_acqua_note')} className={INP}
+                  placeholder={"DA1 – Microfiltratore cucina\nDA2 – Distributore sala da pranzo"} />
+                <p className="text-[10px] text-slate-400 mt-1">Formato: <strong>Codice – Descrizione</strong> · Una riga = un modulo Autoc 5A</p>
               </div>
             )}
           </div>
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
+              <input type="checkbox" checked={form.op_macchina_colazioni} onChange={set('op_macchina_colazioni')} className="accent-amber-500 w-4 h-4" />
+              <div>
+                <span className="text-sm font-bold text-slate-700">Macchina colazioni</span>
+                <p className="text-xs text-slate-400">Macchina per colazioni ospiti (tostapane, bollitore, ecc.)</p>
+              </div>
+            </label>
+            {form.op_macchina_colazioni && (
+              <div>
+                <label className={LBL}>Apparecchi (una riga per apparecchio)</label>
+                <textarea rows={3} value={form.op_macchina_colazioni_note} onChange={set('op_macchina_colazioni_note')} className={INP}
+                  placeholder={"DC1 – Macchina colazioni nucleo A\nDC2 – Macchina colazioni nucleo B"} />
+                <p className="text-[10px] text-slate-400 mt-1">Formato: <strong>Codice – Descrizione</strong> · Una riga = un modulo Autoc 5C</p>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 
@@ -2123,7 +2268,7 @@ function NoteOperativeSection({ form, set, setForm, modello }) {
           <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Specificità distribuzione veicolata</p>
           <div>
             <label className={LBL}>Modalità ricevimento pasti (CCP temperatura)</label>
-            <textarea value={form.op_cucinette_note} onChange={set('op_cucinette_note')} rows={2} className={INP}
+            <textarea value={form.op_ricevimento_pasti} onChange={set('op_ricevimento_pasti')} rows={2} className={INP}
               placeholder="es. Pasti consegnati all'ingresso cucina lato cortile tra 11:30 e 12:00. Verifica temperatura: caldi ≥65°C, freddi ≤4°C." />
           </div>
           <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
@@ -2135,7 +2280,7 @@ function NoteOperativeSection({ form, set, setForm, modello }) {
           </label>
           {form.op_cucinette_nuclei && (
             <div>
-              <label className={LBL}>Descrizione cucinette</label>
+              <label className={LBL}>Descrizione cucinette (quante, dove, cosa viene preparato)</label>
               <textarea value={form.op_cucinette_note} onChange={set('op_cucinette_note')} rows={2} className={INP}
                 placeholder="es. 8 cucinette (una per nucleo). Colazione e merenda gestite dall'OSA." />
             </div>

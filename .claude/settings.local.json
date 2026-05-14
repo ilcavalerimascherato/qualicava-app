@@ -23,7 +23,9 @@
       "Bash(npm run *)",
       "Bash(Get-Content \"C:\\\\Users\\\\CLAUDI~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--primo-QualiCAVA\\\\c43fbcd4-b04e-4320-8ccb-74d1e1e764ae\\\\tasks\\\\byuz753zz.output\" -Wait -Tail 40 -ErrorAction SilentlyContinue)",
       "Bash(Start-Sleep -Seconds 2)",
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }

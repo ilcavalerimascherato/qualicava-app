@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 
-export default function CompaniesView({ companies, facilities }) {
+export default function CompaniesView({ companies, facilities, onSelectCompany }) {
   const [ncs, setNcs] = useState([]);
 
   useEffect(() => {
@@ -64,7 +64,8 @@ export default function CompaniesView({ companies, facilities }) {
         return (
           <div
             key={company.id}
-            className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex flex-col gap-3"
+            onClick={() => onSelectCompany(company)}
+            className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex flex-col gap-3 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
           >
             <div className="font-black text-slate-800 text-sm leading-tight">{company.name}</div>
 

@@ -47,6 +47,7 @@ export default function App() {
   const [gridCols, setGridCols]                 = useState('lg:grid-cols-4');
   const [filterUdo, setFilterUdo]               = useState('all');
   const [showSocieta, setShowSocieta]           = useState(false);
+  const [selectedCompany, setSelectedCompany]   = useState(null);
   const [searchQuery, setSearchQuery]           = useState('');
   const [selectedFacility, setSelectedFacility] = useState(null);
   const [dataTarget, setDataTarget]             = useState(null);
@@ -86,9 +87,10 @@ export default function App() {
       if (!showSuspended && f.is_suspended) { return false; }
       const q = searchQuery.toLowerCase(); if (!f.name.toLowerCase().includes(q) && !(f.address || '').toLowerCase().includes(q)) { return false; }
       if (filterUdo !== 'all' && String(f.udo_id) !== String(filterUdo)) { return false; }
+      if (selectedCompany && f.company_id !== selectedCompany.id) { return false; }
       return true;
     });
-  }, [processedData.list, filterUdo, searchQuery, showSuspended]);
+  }, [processedData.list, filterUdo, searchQuery, showSuspended, selectedCompany]);
 
   const handleSuspendToggle = async (facility) => {
     try {
@@ -314,7 +316,10 @@ export default function App() {
               ))}
             </select>
             <button
-              onClick={() => setShowSocieta(prev => !prev)}
+              onClick={() => {
+                if (showSocieta) setSelectedCompany(null);
+                setShowSocieta(prev => !prev);
+              }}
               className={`px-4 py-2 rounded-lg text-sm font-bold border transition-all duration-200 ${
                 showSocieta
                   ? 'bg-green-500 text-black border-green-500'
@@ -323,6 +328,12 @@ export default function App() {
             >
               SOCIETÀ
             </button>
+            {selectedCompany && !showSocieta && (
+              <div className="flex items-center gap-1 px-3 py-1.5 bg-green-100 border border-green-300 rounded-lg text-xs font-bold text-green-800">
+                {selectedCompany.name}
+                <button onClick={() => setSelectedCompany(null)} className="ml-1 hover:text-red-600">✕</button>
+              </div>
+            )}
           </div>
 
           {/* Progress bar report — ora nella barra filtri, responsive */}
@@ -415,6 +426,10 @@ export default function App() {
           <CompaniesView
             companies={data.companies}
             facilities={data.facilities}
+            onSelectCompany={(company) => {
+              setSelectedCompany(company);
+              setShowSocieta(false);
+            }}
           />
         ) : (
           <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 ${gridCols} gap-10`}>
