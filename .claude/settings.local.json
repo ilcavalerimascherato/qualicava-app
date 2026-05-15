@@ -25,7 +25,9 @@
       "Bash(Start-Sleep -Seconds 2)",
       "Bash(xargs cat)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(node -e \"require\\('docx'\\); console.log\\('docx ok'\\)\")",
+      "PowerShell(npm run *)"
     ]
   }
 }

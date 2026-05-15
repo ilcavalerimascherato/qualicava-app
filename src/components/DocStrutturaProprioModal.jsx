@@ -18,13 +18,11 @@ import {
 // ─── costanti ─────────────────────────────────────────────────
 
 const CATEGORIE = [
-  { id: 'PCA', label: 'Protocolli Clinico Assistenziali' },
-  { id: 'CDS', label: 'Carta dei Servizi e Regolamento'  },
-  { id: 'SSL', label: 'Sicurezza sui Luoghi di Lavoro'   },
-  { id: 'ALI', label: 'Alimentazione e Nutrizione'       },
-  { id: 'RDD', label: 'Riesame della Direzione'          },
-  { id: 'QUA', label: 'Qualità e SGQ'                    },
-  { id: 'IST', label: 'Istruzioni Operative'             },
+  { id: 'PCA', label: 'Protocolli, Procedure e Istruzioni Operative' },
+  { id: 'CDS', label: 'Carta dei Servizi e Regolamento'              },
+  { id: 'ALI', label: 'Menù e Ricettari'                             },
+  { id: 'QUA', label: 'Analisi e Miglioramento'                      },
+  { id: 'OBS', label: 'Documenti Obsoleti'                           },
 ];
 
 const STATO_BADGE = {

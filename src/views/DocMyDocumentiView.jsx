@@ -2,9 +2,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   FileText, Download, Loader2, FolderOpen, AlertTriangle,
-  CheckCircle2, Clock, Star, Pill, Shield, Apple, Droplets,
+  CheckCircle2, Clock, Star, Pill, Shield, Droplets,
   FolderPlus, Plus, Pencil, Send, Archive, X,
-  Stethoscope, BookOpen, HardHat, BarChart2,
+  Stethoscope, BookOpen, Utensils, BarChart2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
@@ -21,18 +21,17 @@ import DocStrutturaProprioModal from '../components/DocStrutturaProprioModal';
 // ─── mappa colori categorie (ricalca DocumentiPage) ──────────
 
 const CAT_STYLE = {
-  // legacy
+  // legacy (mantenuti per retrocompatibilità con dati storici)
   ASS: { bg: 'bg-blue-50',    icon: Star,           iconColor: 'text-blue-600',    badge: 'bg-blue-100 text-blue-700'    },
   FAR: { bg: 'bg-violet-50',  icon: Pill,           iconColor: 'text-violet-600',  badge: 'bg-violet-100 text-violet-700'},
   SIC: { bg: 'bg-amber-50',   icon: Shield,         iconColor: 'text-amber-600',   badge: 'bg-amber-100 text-amber-700'  },
-  ALI: { bg: 'bg-orange-50',  icon: Apple,          iconColor: 'text-orange-600',  badge: 'bg-orange-100 text-orange-700'},
   IGI: { bg: 'bg-cyan-50',    icon: Droplets,       iconColor: 'text-cyan-600',    badge: 'bg-cyan-100 text-cyan-700'    },
-  QUA: { bg: 'bg-emerald-50', icon: AlertTriangle,  iconColor: 'text-emerald-600', badge: 'bg-emerald-100 text-emerald-700'},
-  // new
+  // current
   PCA: { bg: 'bg-blue-50',    icon: Stethoscope,    iconColor: 'text-blue-600',    badge: 'bg-blue-100 text-blue-700'    },
   CDS: { bg: 'bg-violet-50',  icon: BookOpen,       iconColor: 'text-violet-600',  badge: 'bg-violet-100 text-violet-700'},
-  SSL: { bg: 'bg-amber-50',   icon: HardHat,        iconColor: 'text-amber-600',   badge: 'bg-amber-100 text-amber-700'  },
-  RDD: { bg: 'bg-cyan-50',    icon: BarChart2,      iconColor: 'text-cyan-600',    badge: 'bg-cyan-100 text-cyan-700'    },
+  ALI: { bg: 'bg-orange-50',  icon: Utensils,       iconColor: 'text-orange-600',  badge: 'bg-orange-100 text-orange-700'},
+  QUA: { bg: 'bg-emerald-50', icon: BarChart2,      iconColor: 'text-emerald-600', badge: 'bg-emerald-100 text-emerald-700'},
+  OBS: { bg: 'bg-slate-50',   icon: Archive,        iconColor: 'text-slate-500',   badge: 'bg-slate-100 text-slate-600'  },
 };
 const CAT_DEFAULT = { bg: 'bg-slate-50', icon: FileText, iconColor: 'text-slate-400', badge: 'bg-slate-100 text-slate-600' };
 

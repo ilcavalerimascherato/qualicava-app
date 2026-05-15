@@ -2362,12 +2362,12 @@ export async function generaModulisticaHaccp({
     const titoloSez = etichetta ? `MANUTENZIONE DISTRIBUTORE ACQUA POTABILE — ${etichetta}` : 'MANUTENZIONE DISTRIBUTORE ACQUA POTABILE';
     const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
     const attivita = [
-      { att: 'Pulizia esterna erogatori e vassoio raccogligocce', freq: 'Settimanale' },
-      { att: 'Pulizia bocchetta erogazione', freq: 'Settimanale' },
+      { att: 'Pulizia esterna erogatori e vassoio raccogligocce', freq: 'Giornaliera' },
+      { att: 'Pulizia bocchetta erogazione', freq: 'Giornaliera' },
+      { att: 'Far scorrere acqua per 3 minuti', freq: 'Settimanale' },
       { att: 'Sostituzione filtri (secondo scheda tecnica fornitore)', freq: 'Semestrale' },
       { att: 'Disinfezione circuito interno', freq: 'Semestrale' },
-      { att: 'Verifica parametri erogazione (portata, T°)', freq: 'Trimestrale' },
-      { att: 'Analisi acqua erogata (laboratorio accreditato)', freq: 'Annuale' },
+      { att: 'Analisi acqua erogata (laboratorio accreditato - fornitore)', freq: 'Annuale' },
       { att: 'Manutenzione tecnica completa (assistenza fornitore)', freq: 'Annuale' },
     ];
 
@@ -2378,8 +2378,10 @@ export async function generaModulisticaHaccp({
     const cLast = W - cAtt - cFreq - cM * 11;
     const colsAnn = [cAtt, cFreq, ...Array.from({length:12},(_,i) => i===11?cLast:cM)];
 
-    // Tabella mensile: 31 giorni — righe per attività settimanale
-    const attivitaSet = attivita.filter(a => a.freq === 'Settimanale');
+    // Tabella mensile: 31 giorni — righe per attività giornaliere e settimanali
+    const attivitaGiorn = attivita.filter(a => a.freq === 'Giornaliera');
+    const attivitaSet   = attivita.filter(a => a.freq === 'Settimanale');
+    const attivitaMens  = [...attivitaGiorn, ...attivitaSet];
     const c0m = Math.floor(W * 0.35);
     const cGm = Math.floor((W - c0m) / 31);
     const cLm = W - c0m - cGm * 30;
@@ -2406,15 +2408,15 @@ export async function generaModulisticaHaccp({
       }),
       sp(1),
       // Tabella mensile per attività settimanali
-      p([r('MONITORAGGIO MENSILE — attività settimanali (firma per conferma esecuzione)', {bold:true, size:17, color:V})], {after:60}),
+      p([r('MONITORAGGIO MENSILE — attività giornaliere e settimanali (firma per conferma)', {bold:true, size:17, color:V})], {after:60}),
       new Table({
         width:{size:W,type:WidthType.DXA}, columnWidths:colsMens,
         rows:[
-          new TableRow({children:[hC('Attività settimanale',c0m), ...Array.from({length:31},(_,i)=>hC(String(i+1),i===30?cLm:cGm))]}),
-          ...attivitaSet.map(({att},i)=>new TableRow({
+          new TableRow({children:[hC('Attività',c0m), ...Array.from({length:31},(_,i)=>hC(String(i+1),i===30?cLm:cGm))]}),
+          ...attivitaMens.map(({att,freq},i)=>new TableRow({
             height:{value:480,rule:'exact'},
             children:[
-              cell(att,c0m,{size:15,fill:i%2===0?W_:VL,bc:'DDDDDD'}),
+              cell(att+' ('+freq+')',c0m,{size:14,fill:i%2===0?W_:VL,bc:'DDDDDD'}),
               ...Array.from({length:31},(_,j)=>eC(j===30?cLm:cGm,i%2===0?W_:VL)),
             ],
           })),
@@ -2433,7 +2435,8 @@ export async function generaModulisticaHaccp({
     const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
     const attivita = [
       { att: 'Pulizia esterna macchina e vassoio raccogligocce', freq: 'Giornaliera' },
-      { att: 'Pulizia circuito interno (risciacquo)', freq: 'Settimanale' },
+      { att: 'Premere tasto WASHING', freq: 'Giornaliera' },
+      { att: 'Estrarre contenitori prodotti, pulizia, pulizia piano appoggio, pulizia bicchierini', freq: 'Settimanale' },
       { att: 'Decalcificazione circuito (o secondo display macchina)', freq: 'Mensile' },
       { att: 'Sostituzione filtro acqua', freq: 'Semestrale' },
     ];

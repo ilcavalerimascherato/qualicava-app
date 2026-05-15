@@ -43,7 +43,7 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
   const [loadingFacility, setLoadingFacility] = useState(false);
   const [saving, setSaving]       = useState(false);
   const [errors, setErrors]       = useState({});
-  const [directorStatus, setDirectorStatus] = useState(null); // null | 'creating' | 'created' | 'exists' | 'error'
+  const [directorStatus, setDirectorStatus] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -82,15 +82,13 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
     return e;
   };
 
-  // Crea o aggiorna l'account direttore dopo aver salvato la struttura
   const provisionDirector = async (facilityId) => {
     const email = form.email_direzione.trim();
     const name  = form.direttore.trim();
-    if (!email) return; // nessuna email → nessun account da creare
+    if (!email) return;
 
     setDirectorStatus('creating');
     try {
-      // 1. Controlla se esiste già un profilo con questa email
       const { data: existing } = await supabase
         .from('user_profiles')
         .select('id, role')
@@ -98,7 +96,6 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
         .maybeSingle();
 
       if (existing) {
-        // Utente già esistente: aggiungi solo l'accesso alla struttura (se non ce l'ha già)
         const { data: hasAccess } = await supabase
           .from('user_facility_access')
           .select('id')
@@ -115,8 +112,6 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
         return;
       }
 
-      // 2. Utente non esiste: usa la Edge Function (se disponibile)
-      //    oppure mostra il fallback SQL
       try {
         const { data: fnData, error: fnError } = await supabase.functions.invoke('invite-user', {
           body: {
@@ -130,7 +125,6 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
         if (fnError || fnData?.error) throw new Error(fnError?.message || fnData?.error);
         setDirectorStatus('created');
       } catch {
-        // Edge Function non disponibile: mostra istruzioni SQL
         setDirectorStatus('sql_fallback');
       }
     } catch (err) {
@@ -163,7 +157,6 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
         email_qualita:             form.email_qualita.trim()  || null,
       };
       const savedFacility = await onSave(payload);
-      // Provisioning account direttore (non blocca il salvataggio)
       const facilityId = savedFacility?.id ?? facility?.id;
       if (facilityId) {
         await provisionDirector(facilityId);
@@ -180,8 +173,6 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
       onDelete(facility.id);
     }
   };
-
-
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
@@ -240,7 +231,7 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
               {/* Logistica */}
               <div className="space-y-4">
                 <h3 className="text-xs font-black text-indigo-600 uppercase tracking-widest border-b pb-2">Logistica e capacità</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className={LABEL}>Regione</label>
                     <select value={form.regione} onChange={set('regione')} className={INPUT}>
@@ -249,19 +240,17 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
                     </select>
                   </div>
                   <div>
-                    <label className={LABEL}>Indirizzo</label>
-                    <input type="text" value={form.indirizzo} onChange={set('indirizzo')} className={INPUT} placeholder="Via Roma 1, Milano" />
-                  </div>
-                  <div>
                     <label className={LABEL}>Posti letto</label>
                     <input type="number" min="0" value={form.posti_letto} onChange={set('posti_letto')} className={INPUT} />
                   </div>
                 </div>
+                <div>
+                  <label className={LABEL}>Indirizzo</label>
+                  <input type="text" value={form.indirizzo} onChange={set('indirizzo')} className={INPUT} placeholder="Via Roma 1, Milano" />
+                </div>
               </div>
 
-              {/* Direttore — unico contatto inserito in sede.
-                   Gli altri 3 (dir. sanitario, ref. struttura, ref. qualità)
-                   vengono compilati dal direttore dal suo pannello. */}
+              {/* Direttore */}
               <div className="space-y-3">
                 <h3 className="text-xs font-black text-emerald-600 uppercase tracking-widest border-b border-emerald-200 pb-2 flex items-center gap-2">
                   <span>Direttore responsabile</span>
@@ -270,23 +259,11 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                   <div>
                     <label className={LABEL_SM}>Nome completo</label>
-                    <input
-                      type="text"
-                      value={form.direttore}
-                      onChange={set('direttore')}
-                      className={INPUT_SM}
-                      placeholder="Mario Rossi"
-                    />
+                    <input type="text" value={form.direttore} onChange={set('direttore')} className={INPUT_SM} placeholder="Mario Rossi" />
                   </div>
                   <div>
                     <label className={LABEL_SM}>Email aziendale</label>
-                    <input
-                      type="email"
-                      value={form.email_direzione}
-                      onChange={set('email_direzione')}
-                      className={INPUT_SM}
-                      placeholder="direttore@gruppover.it"
-                    />
+                    <input type="email" value={form.email_direzione} onChange={set('email_direzione')} className={INPUT_SM} placeholder="direttore@gruppover.it" />
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-400 font-medium px-1">
@@ -317,7 +294,7 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
                     <p className="text-xs">Crea manualmente l'utente da Supabase Dashboard → Authentication → Users, poi assegna ruolo "director" in user_profiles e aggiungi facility_id {facility?.id ?? '(ID struttura)'} in user_facility_access.</p>
                   </div>
                 )}
-                {directorStatus === 'error'        && <><AlertCircle size={16} className="shrink-0" /> Struttura salvata, ma creazione account direttore fallita. Riprova dal pannello Utenti.</>}
+                {directorStatus === 'error' && <><AlertCircle size={16} className="shrink-0" /> Struttura salvata, ma creazione account direttore fallita. Riprova dal pannello Utenti.</>}
               </div>
             )}
 

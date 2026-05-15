@@ -6,7 +6,7 @@ import {
   ChevronRight, Plus, FolderOpen, Shield,
   ArrowLeft, Eye, Loader2, Filter, RefreshCw,
   Archive, Pencil, BookOpen, X,
-  Stethoscope, HardHat, Utensils, BarChart2, ClipboardCheck
+  Stethoscope, Utensils, BarChart2
 } from 'lucide-react';
 import { useAuth }             from '../contexts/AuthContext';
 import DocMasterModal          from '../components/DocMasterModal';
@@ -32,28 +32,39 @@ const COLORI_CLASSI = {
   amber:   { bg: 'bg-amber-50',   iconBg: 'bg-amber-100',   iconColor: 'text-amber-600',   border: 'border-amber-200',   badge: 'bg-amber-100 text-amber-700'   },
   orange:  { bg: 'bg-orange-50',  iconBg: 'bg-orange-100',  iconColor: 'text-orange-600',  border: 'border-orange-200',  badge: 'bg-orange-100 text-orange-700' },
   cyan:    { bg: 'bg-cyan-50',    iconBg: 'bg-cyan-100',    iconColor: 'text-cyan-600',    border: 'border-cyan-200',    badge: 'bg-cyan-100 text-cyan-700'     },
-  emerald: { bg: 'bg-emerald-50', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700'}
+  emerald: { bg: 'bg-emerald-50', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700'},
+  slate:   { bg: 'bg-slate-50',   iconBg: 'bg-slate-200',   iconColor: 'text-slate-500',   border: 'border-slate-300',   badge: 'bg-slate-200 text-slate-600'   }
 };
 
-const ICONE_MAPPA = { Stethoscope, BookOpen, HardHat, Utensils, BarChart2, ClipboardCheck, FileText };
+const ICONE_MAPPA = { Stethoscope, BookOpen, Utensils, BarChart2, Archive, FileText };
 
 const CATEGORIE = [
-  { id: 'PCA', codice: 'PCA', nome: 'Protocolli Clinico Assistenziali', descrizione: 'Protocolli e procedure clinico assistenziali',                     colore: 'blue',    icona: 'Stethoscope'   },
-  { id: 'CDS', codice: 'CDS', nome: 'Carta dei Servizi e Regolamento',  descrizione: 'Carta dei servizi, regolamenti interni e procedure generali',       colore: 'violet',  icona: 'BookOpen'      },
-  { id: 'SSL', codice: 'SSL', nome: 'Sicurezza sui Luoghi di Lavoro',   descrizione: 'DVR, piani di emergenza e sicurezza luoghi di lavoro',              colore: 'amber',   icona: 'HardHat'       },
-  { id: 'ALI', codice: 'ALI', nome: 'Alimentazione e Nutrizione',       descrizione: 'Diete, piani nutrizionali e sicurezza alimentare',                  colore: 'orange',  icona: 'Utensils'      },
-  { id: 'RDD', codice: 'RDD', nome: 'Riesame della Direzione',          descrizione: 'Verbali di riesame, indicatori strategici e piani di miglioramento', colore: 'cyan',    icona: 'BarChart2'     },
-  { id: 'QUA', codice: 'QUA', nome: 'Qualità e SGQ',                    descrizione: 'Procedure SGQ, audit interni e non conformità',                     colore: 'emerald', icona: 'ClipboardCheck' },
-  { id: 'IST', codice: 'IST', nome: 'Istruzioni Operative',             descrizione: 'Istruzioni operative e procedure locali di struttura',              colore: 'cyan',    icona: 'FileText'       },
+  {
+    id: 'PCA', codice: 'PCA', nome: 'Protocolli, Procedure e Istruzioni Operative',
+    descrizione: 'Protocolli clinico-assistenziali, Procedure, Istruzioni Operative, Moduli',
+    colore: 'blue', icona: 'Stethoscope'
+  },
+  {
+    id: 'CDS', codice: 'CDS', nome: 'Carta dei Servizi e Regolamento',
+    descrizione: 'Carta dei Servizi, Regolamento',
+    colore: 'violet', icona: 'BookOpen'
+  },
+  {
+    id: 'ALI', codice: 'ALI', nome: 'Menù e Ricettari',
+    descrizione: 'Menù, Ricettari, Bromatologico, Grammature, Diete Speciali',
+    colore: 'orange', icona: 'Utensils'
+  },
+  {
+    id: 'QUA', codice: 'QUA', nome: 'Analisi e Miglioramento',
+    descrizione: 'Riesame, Relazione Organizzativa, Piano di Miglioramento, Analisi del Contesto/Rischi/Processi, Politica della Qualità',
+    colore: 'emerald', icona: 'BarChart2'
+  },
+  {
+    id: 'OBS', codice: 'OBS', nome: 'Documenti Obsoleti',
+    descrizione: 'Documenti non più in vigore',
+    colore: 'slate', icona: 'Archive'
+  },
 ];
-
-const CATEGORIA_OBSOLETI = {
-  id: 'obsoleti', codice: 'OBS', label: 'Documenti Obsoleti',
-  description: 'Documenti archiviati e fuori uso',
-  Icon: Archive,
-  bg: 'bg-slate-100', iconBg: 'bg-slate-200', iconColor: 'text-slate-500',
-  border: 'border-slate-300', badge: 'bg-slate-200 text-slate-600'
-};
 
 const CAT_MAP = Object.fromEntries(
   CATEGORIE.map(c => [c.id, {
@@ -599,7 +610,7 @@ export default function DocumentiPage() {
         {/* ── Tab Libreria ── */}
         {activeTab === 'libreria' && (
           <div>
-            {selectedCategoria === 'obsoleti' ? (
+            {selectedCategoria === 'OBS' ? (
               /* ── Drill-down documenti obsoleti ── */
               <div>
                 <button
@@ -732,17 +743,11 @@ export default function DocumentiPage() {
                         <CategoriaCard
                           key={cat.id}
                           cat={CAT_MAP[cat.id]}
-                          docCount={docCounts[cat.id] ?? 0}
+                          docCount={cat.id === 'OBS' ? docObsoleti.length : (docCounts[cat.id] ?? 0)}
                           unreadCount={unreadByCategoria[cat.id] ?? 0}
                           onClick={() => setSelectedCategoria(cat.id)}
                         />
                       ))}
-                      {/* Box Documenti Obsoleti */}
-                      <CategoriaCard
-                        cat={CATEGORIA_OBSOLETI}
-                        docCount={docObsoleti.length}
-                        onClick={() => setSelectedCategoria('obsoleti')}
-                      />
                     </div>
 
                     {isLibraryEmpty && (

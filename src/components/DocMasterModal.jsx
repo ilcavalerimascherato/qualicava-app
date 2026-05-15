@@ -3,7 +3,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   X, FileText, Upload, Loader2, CheckCircle2,
   Tag, Calendar, Users, AlertTriangle, ChevronDown, ChevronUp,
-  RefreshCw, Sparkles, History, Pencil, Building2,
+  RefreshCw, Sparkles, History, Pencil, Building2, BookOpen,
 } from 'lucide-react';
 import PizZip from 'pizzip';
 import { useAuth }            from '../contexts/AuthContext';
@@ -16,18 +16,18 @@ import {
   updateDocMaster,
   getAuditLog,
 } from '../services/documentiService';
-import { docMasterAnalisi } from '../config/aiPrompts';
+import { docMasterAnalisi }    from '../config/aiPrompts';
+import { TIPOLOGIA_OPTIONS }   from '../config/docTipologie';
+import DocCopertinaModal       from './DocCopertinaModal';
 
 // ─── costanti ─────────────────────────────────────────────────
 
 const CATEGORIE = [
-  { id: 'PCA', label: 'Protocolli Clinico Assistenziali' },
-  { id: 'CDS', label: 'Carta dei Servizi e Regolamento'  },
-  { id: 'SSL', label: 'Sicurezza sui Luoghi di Lavoro'   },
-  { id: 'ALI', label: 'Alimentazione e Nutrizione'       },
-  { id: 'RDD', label: 'Riesame della Direzione'          },
-  { id: 'QUA', label: 'Qualità e SGQ'                    },
-  { id: 'IST', label: 'Istruzioni Operative'             },
+  { id: 'PCA', label: 'Protocolli, Procedure e Istruzioni Operative' },
+  { id: 'CDS', label: 'Carta dei Servizi e Regolamento'              },
+  { id: 'ALI', label: 'Menù e Ricettari'                             },
+  { id: 'QUA', label: 'Analisi e Miglioramento'                      },
+  { id: 'OBS', label: 'Documenti Obsoleti'                           },
 ];
 
 const UDO_OPTIONS = [
@@ -39,10 +39,7 @@ const UDO_OPTIONS = [
   { id: 'CDD', label: 'CDD' },
 ];
 
-const TIPOLOGIA_OPTIONS = [
-  'Protocollo', 'Procedura', 'Istruzione Operativa', 'Modulo',
-  'Carta dei Servizi', 'Regolamento', 'Piano', 'Policy',
-];
+export { TIPOLOGIA_OPTIONS };
 
 const REGIONI_OPTIONS = [
   'Lombardia', 'Piemonte', 'Veneto', 'Emilia-Romagna', 'Toscana',
@@ -173,6 +170,7 @@ export default function DocMasterModal({
   const [auditLog,          setAuditLog]          = useState([]);
   const [showAuditLog,      setShowAuditLog]      = useState(false);
   const [loadingAuditLog,   setLoadingAuditLog]   = useState(false);
+  const [copertinaModal,    setCopertinaModal]    = useState(false);
 
   const fileRef  = useRef(null);
   const prossRev = isRevMode ? nextRev(masterEsistente.revisione_corrente) : null;
@@ -652,7 +650,7 @@ export default function DocMasterModal({
             <div className={`grid gap-4 ${isRevMode ? 'grid-cols-2' : 'grid-cols-3'}`}>
               <div>
                 <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Calendar size={12} /> Data approvazione
+                  <Calendar size={12} /> Data validazione
                 </label>
                 <input
                   type="date"
@@ -1020,29 +1018,41 @@ export default function DocMasterModal({
           </div>
 
           {/* Footer */}
-          <div className="border-t border-slate-100 px-7 py-4 flex justify-end gap-3 shrink-0 bg-slate-50">
-            <button
-              onClick={onClose}
-              disabled={saving}
-              className="px-5 py-2.5 rounded-xl text-sm font-black uppercase text-slate-500 hover:bg-slate-200 transition-colors"
-            >
-              Annulla
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black uppercase text-white shadow transition-colors disabled:opacity-50
-                ${isRevMode  ? 'bg-amber-600 hover:bg-amber-700'
-                : isEditMode ? 'bg-slate-700 hover:bg-slate-800'
-                : 'bg-indigo-600 hover:bg-indigo-700'}`}
-            >
-              {saving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-              {saving
-                ? 'Salvataggio...'
-                : isRevMode  ? 'Salva revisione'
-                : isEditMode ? 'Modifica documento'
-                : 'Salva documento'}
-            </button>
+          <div className="border-t border-slate-100 px-7 py-4 flex items-center justify-between shrink-0 bg-slate-50">
+            {(isRevMode || isEditMode) ? (
+              <button
+                onClick={() => setCopertinaModal(true)}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black uppercase
+                  text-emerald-700 hover:bg-emerald-50 border border-emerald-200 transition-colors"
+              >
+                <BookOpen size={13} /> Copertina
+              </button>
+            ) : <span />}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                disabled={saving}
+                className="px-5 py-2.5 rounded-xl text-sm font-black uppercase text-slate-500 hover:bg-slate-200 transition-colors"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black uppercase text-white shadow transition-colors disabled:opacity-50
+                  ${isRevMode  ? 'bg-amber-600 hover:bg-amber-700'
+                  : isEditMode ? 'bg-slate-700 hover:bg-slate-800'
+                  : 'bg-indigo-600 hover:bg-indigo-700'}`}
+              >
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                {saving
+                  ? 'Salvataggio...'
+                  : isRevMode  ? 'Salva revisione'
+                  : isEditMode ? 'Modifica documento'
+                  : 'Salva documento'}
+              </button>
+            </div>
           </div>
 
         </div>
@@ -1070,7 +1080,7 @@ export default function DocMasterModal({
             <div className="px-6 pt-5 pb-2 space-y-4">
               <div>
                 <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Calendar size={12} /> Data approvazione
+                  <Calendar size={12} /> Data validazione
                 </label>
                 <input
                   type="date"
@@ -1101,6 +1111,16 @@ export default function DocMasterModal({
 
           </div>
         </div>
+      )}
+
+      {/* Modale copertina */}
+      {copertinaModal && (isRevMode || isEditMode) && (
+        <DocCopertinaModal
+          documento={masterEsistente ?? masterDaModificare}
+          facility={null}
+          company={null}
+          onClose={() => setCopertinaModal(false)}
+        />
       )}
     </>
   );
