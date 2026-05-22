@@ -27,7 +27,8 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(node -e \"require\\('docx'\\); console.log\\('docx ok'\\)\")",
-      "PowerShell(npm run *)"
+      "PowerShell(npm run *)",
+      "Bash(git push *)"
     ]
   }
 }

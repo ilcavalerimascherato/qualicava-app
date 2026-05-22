@@ -143,7 +143,7 @@ export default function DocCopertinaModal({
     } finally {
       setSalvandoDoc(false);
     }
-  }, [documento, supabase]);
+  }, [documento, onClose, onSuccess]);
 
   const handleDragOver  = useCallback((e) => { e.preventDefault(); setIsDragging(true);  }, []);
   const handleDragLeave = useCallback((e) => { e.preventDefault(); setIsDragging(false); }, []);
