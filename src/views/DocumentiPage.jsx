@@ -345,7 +345,7 @@ export default function DocumentiPage() {
   const [ordinamento,     setOrdinamento]     = useState('recenti');
 
   // Modali
-  const [firmeModal,     setFirmeModal]     = useState(false);
+  //const [firmeModal,     setFirmeModal]     = useState(false);'//
   const [distribModal,   setDistribModal]   = useState({ open: false, master: null });
   const [accessiModal,   setAccessiModal]   = useState({ open: false, master: null });
   const [anteprimaModal, setAnteprimaModal] = useState({ open: false, master: null });

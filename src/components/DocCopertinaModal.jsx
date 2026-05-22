@@ -153,7 +153,7 @@ export default function DocCopertinaModal({
     setIsDragging(false);
     const f = e.dataTransfer.files?.[0];
     if (f) doUpload(f);
-  }, []);
+  }, [doUpload]);
 
   // ── render ────────────────────────────────────────────────────
 
