@@ -3,9 +3,8 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   X, FileText, Upload, Loader2, CheckCircle2,
   Tag, Calendar, Users, AlertTriangle, ChevronDown, ChevronUp,
-  RefreshCw, Sparkles, History, Pencil, Building2, BookOpen,
+  RefreshCw, History, Pencil, Building2, BookOpen, PenLine,
 } from 'lucide-react';
-import PizZip from 'pizzip';
 import { useAuth }            from '../contexts/AuthContext';
 import {
   uploadMasterFile,
@@ -16,7 +15,6 @@ import {
   updateDocMaster,
   getAuditLog,
 } from '../services/documentiService';
-import { docMasterAnalisi }    from '../config/aiPrompts';
 import { TIPOLOGIA_OPTIONS }   from '../config/docTipologie';
 import DocCopertinaModal       from './DocCopertinaModal';
 
@@ -49,11 +47,6 @@ const REGIONI_OPTIONS = [
   "Valle d'Aosta",
 ];
 
-const defaultScadenza = () => {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() + 3);
-  return d.toISOString().split('T')[0];
-};
 const today = () => new Date().toISOString().split('T')[0];
 
 const AZIONE_BADGE = {
@@ -75,13 +68,14 @@ const INITIAL_FORM = {
   note:                  '',
   approvato_da:          '',
   data_approvazione:     today(),
-  data_scadenza:         defaultScadenza(),
   udo_applicabilita:     [],
   revisione_corrente:    'Rev. 0',
   tipologia_documento:   '',
   elaborata_da:          'Ufficio Qualità Gruppo OVER',
   verificata_da:         '',
   regioni_applicabilita: [],
+  dataRevisione:         '',
+  noteRevisione:         '',
 };
 
 function formFromMaster(m) {
@@ -92,12 +86,13 @@ function formFromMaster(m) {
     note:                  m.note                  ?? '',
     approvato_da:          m.approvato_da          ?? '',
     data_approvazione:     today(),
-    data_scadenza:         defaultScadenza(),
     udo_applicabilita:     m.udo_applicabilita     ?? [],
     tipologia_documento:   m.tipologia_documento   ?? '',
     elaborata_da:          m.elaborata_da          ?? 'Ufficio Qualità Gruppo OVER',
     verificata_da:         m.verificata_da         ?? '',
     regioni_applicabilita: m.regioni_applicabilita ?? [],
+    dataRevisione:         '',
+    noteRevisione:         '',
   };
 }
 
@@ -109,13 +104,14 @@ function formFromMasterEdit(m) {
     note:                  m.note                  ?? '',
     approvato_da:          m.approvato_da          ?? '',
     data_approvazione:     m.data_approvazione ? m.data_approvazione.split('T')[0] : today(),
-    data_scadenza:         m.data_scadenza     ? m.data_scadenza.split('T')[0]     : defaultScadenza(),
     udo_applicabilita:     m.udo_applicabilita     ?? [],
     revisione_corrente:    m.revisione_corrente    ?? 'Rev. 0',
     tipologia_documento:   m.tipologia_documento   ?? '',
     elaborata_da:          m.elaborata_da          ?? 'Ufficio Qualità Gruppo OVER',
     verificata_da:         m.verificata_da         ?? '',
     regioni_applicabilita: m.regioni_applicabilita ?? [],
+    dataRevisione:         '',
+    noteRevisione:         '',
   };
 }
 
@@ -157,12 +153,6 @@ export default function DocMasterModal({
   const [showRevisioni, setShowRevisioni] = useState(false);
   const [loadingRev,    setLoadingRev]    = useState(false);
 
-  // AI
-  const [aiLoading,   setAiLoading]   = useState(false);
-  const [aiResult,    setAiResult]    = useState('');
-  const [showAiPanel, setShowAiPanel] = useState(false);
-  const [aiError,     setAiError]     = useState('');
-
   // Edit mode
   const [sostituisciFile,   setSostituisciFile]   = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -171,6 +161,7 @@ export default function DocMasterModal({
   const [showAuditLog,      setShowAuditLog]      = useState(false);
   const [loadingAuditLog,   setLoadingAuditLog]   = useState(false);
   const [copertinaModal,    setCopertinaModal]    = useState(false);
+  const [createdDoc,        setCreatedDoc]        = useState(null);
 
   const fileRef  = useRef(null);
   const prossRev = isRevMode ? nextRev(masterEsistente.revisione_corrente) : null;
@@ -230,9 +221,6 @@ export default function DocMasterModal({
     setFile(f);
     setLoadingFile(true);
     setPlaceholders([]);
-    setAiResult('');
-    setShowAiPanel(false);
-    setAiError('');
     try {
       const buffer = await f.arrayBuffer();
       setPlaceholders(await extractPlaceholders(buffer));
@@ -252,52 +240,32 @@ export default function DocMasterModal({
     if (f) handleFileChange({ target: { files: [f] } });
   }, [handleFileChange]);
 
-  // ── AI analysis ───────────────────────────────────────────────
+  // ── salva + apri copertina (solo creation mode) ──────────────
 
-  const handleAnalisiAI = useCallback(async () => {
-    if (!file) return;
-    setAiLoading(true);
-    setAiError('');
-    setAiResult('');
-    setShowAiPanel(true);
+  const handleSalvaEApriCopertina = useCallback(async () => {
+    const errs = validate();
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setSaving(true);
     try {
-      const buffer = await file.arrayBuffer();
-      const zip    = new PizZip(buffer);
-      const xml    = zip.files['word/document.xml']?.asText() ?? '';
-      const testo  = xml.replace(/<[^>]+>/g, '').trim().slice(0, 8000);
-
-      const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error('REACT_APP_ANTHROPIC_API_KEY non configurata nel .env');
-
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type':                              'application/json',
-          'x-api-key':                                apiKey,
-          'anthropic-version':                        '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model:      'claude-haiku-4-5-20251001',
-          max_tokens: 1000,
-          messages:   [{ role: 'user', content: docMasterAnalisi.prompt + '\n\nTESTO DOCUMENTO:\n' + testo }],
-        }),
+      const scadenza = new Date(form.data_approvazione || new Date());
+      scadenza.setFullYear(scadenza.getFullYear() + 3);
+      const { dataRevisione: _dr, noteRevisione: _nr, ...formDb } = form;
+      const newDoc = await createDocMaster({
+        ...formDb,
+        file_url_master:  '',
+        placeholder_list: [],
+        stato:            'attivo',
+        data_scadenza:    scadenza.toISOString(),
       });
-
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Errore API ${res.status}: ${err}`);
-      }
-      const data   = await res.json();
-      const result = data.content?.map(b => b.text || '').join('') || '';
-      if (!result) throw new Error('Risposta vuota dall\'API');
-      setAiResult(result);
+      setCreatedDoc(newDoc);
+      setCopertinaModal(true);
     } catch (err) {
-      setAiError(`Analisi non riuscita: ${err.message}`);
+      setErrors({ submit: err.message });
     } finally {
-      setAiLoading(false);
+      setSaving(false);
     }
-  }, [file]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
 
   // ── validate + save ───────────────────────────────────────────
 
@@ -306,7 +274,7 @@ export default function DocMasterModal({
     if (!form.titolo.trim())           errs.titolo           = 'Campo obbligatorio';
     if (!form.codice_documento.trim()) errs.codice_documento = 'Campo obbligatorio';
     if (!form.categoria)               errs.categoria        = 'Seleziona una categoria';
-    if (!isEditMode && !file)          errs.file             = 'Carica un file .docx';
+    if (isRevMode  && !file)            errs.file             = 'Carica un file .docx';
     if (isEditMode && sostituisciFile && !file)
                                        errs.file             = 'Seleziona un file .docx da sostituire';
     if (isRevMode && !noteRevisione.trim()) errs.noteRevisione = 'Note di revisione obbligatorie';
@@ -327,17 +295,18 @@ export default function DocMasterModal({
     setSaving(true);
     try {
       const { path } = await uploadMasterFile(file, form.codice_documento);
+      const { dataRevisione: _dr, noteRevisione: _nr, ...formDb } = form;
       if (isRevMode) {
         const { success, error: revErr } = await creaNuovaRevisione(
           masterEsistente.id,
-          { ...form, file_url_master: path, placeholder_list: placeholders, revisione_corrente: prossRev },
+          { ...formDb, file_url_master: path, placeholder_list: placeholders, revisione_corrente: prossRev },
           noteRevisione,
           profile?.id
         );
         if (!success) throw new Error(revErr);
       } else {
         await createDocMaster({
-          ...form,
+          ...formDb,
           file_url_master:  path,
           placeholder_list: placeholders,
           stato:            'attivo',
@@ -362,8 +331,9 @@ export default function DocMasterModal({
         fileUrlMaster     = path;
         nuoviPlaceholders = placeholders;
       }
+      const { dataRevisione: _dr, noteRevisione: _nr, ...formDb } = form;
       const datiNuovi = {
-        ...form,
+        ...formDb,
         data_approvazione: confirmFields.data_approvazione,
         file_url_master:   fileUrlMaster,
         placeholder_list:  nuoviPlaceholders,
@@ -646,8 +616,8 @@ export default function DocMasterModal({
               </div>
             </div>
 
-            {/* RIGA 8 — Date approvazione | scadenza | revisione */}
-            <div className={`grid gap-4 ${isRevMode ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            {/* RIGA 8 — Data validazione | revisione */}
+            <div className={`grid gap-4 ${isRevMode ? 'grid-cols-1' : 'grid-cols-2'}`}>
               <div>
                 <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                   <Calendar size={12} /> Data validazione
@@ -656,17 +626,6 @@ export default function DocMasterModal({
                   type="date"
                   value={form.data_approvazione}
                   onChange={e => setField('data_approvazione', e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-400 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Calendar size={12} /> Data scadenza
-                </label>
-                <input
-                  type="date"
-                  value={form.data_scadenza}
-                  onChange={e => setField('data_scadenza', e.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-400 transition-all"
                 />
               </div>
@@ -691,11 +650,11 @@ export default function DocMasterModal({
               )}
             </div>
 
-            {/* RIGA 9 — Note di revisione / note documento */}
+            {/* Note documento / Note di revisione */}
             <div>
               <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                 {isRevMode && <RefreshCw size={12} />}
-                {isRevMode ? 'Note di revisione *' : 'Note di revisione (modifiche apportate)'}
+                {isRevMode ? 'Note di revisione *' : 'Note documento'}
               </label>
               <textarea
                 value={isRevMode ? noteRevisione : form.note}
@@ -720,8 +679,37 @@ export default function DocMasterModal({
               {errors.noteRevisione && <p className="text-xs text-rose-500 mt-1">{errors.noteRevisione}</p>}
             </div>
 
-            {/* Upload file */}
-            <div>
+            {/* Data revisione + Note revisione — solo in creation/edit mode */}
+            {!isRevMode && (
+              <>
+                <div>
+                  <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Calendar size={12} /> Data revisione <span className="font-medium text-slate-400 normal-case">(MM/YYYY)</span>
+                  </label>
+                  <input
+                    type="month"
+                    value={form.dataRevisione}
+                    onChange={e => setField('dataRevisione', e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-400 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5">
+                    Note revisione
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={form.noteRevisione}
+                    onChange={e => setField('noteRevisione', e.target.value)}
+                    placeholder="Modifiche apportate rispetto alla revisione precedente..."
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-400 resize-none transition-all"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Upload file — solo rev/edit mode */}
+            {(isRevMode || isEditMode) && <div>
               <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                 <Upload size={12} />
                 {isRevMode ? 'Nuovo file .docx *' : isEditMode ? 'File .docx' : 'File .docx *'}
@@ -811,10 +799,10 @@ export default function DocMasterModal({
               <input ref={fileRef} type="file" accept=".docx" onChange={handleFileChange} className="hidden" />
               {errors.file && <p className="text-xs text-rose-500 mt-1">{errors.file}</p>}
               {fileError   && <p className="text-xs text-rose-500 mt-1">{fileError}</p>}
-            </div>
+            </div>}
 
             {/* Placeholder trovati */}
-            {placeholders.length > 0 && (
+            {(isRevMode || isEditMode) && placeholders.length > 0 && (
               <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
                 <p className="text-xs font-black text-indigo-700 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
                   <AlertTriangle size={12} />
@@ -830,62 +818,6 @@ export default function DocMasterModal({
                     </span>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {/* Analisi AI — visibile solo dopo upload riuscito */}
-            {file && !loadingFile && !fileError && (
-              <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                <div className="bg-slate-50 px-4 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles size={14} className="text-violet-500" />
-                    <span className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                      Analisi AI documento
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {(aiResult || aiError) && (
-                      <button
-                        onClick={() => setShowAiPanel(s => !s)}
-                        className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                      >
-                        {showAiPanel ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </button>
-                    )}
-                    <button
-                      onClick={handleAnalisiAI}
-                      disabled={aiLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase
-                        bg-violet-600 text-white hover:bg-violet-700 transition-colors disabled:opacity-50 shadow-sm"
-                    >
-                      {aiLoading
-                        ? <><Loader2 size={12} className="animate-spin" /> Analisi...</>
-                        : <><Sparkles size={12} /> Analizza con AI</>
-                      }
-                    </button>
-                  </div>
-                </div>
-
-                {showAiPanel && (
-                  <div className="p-4 bg-slate-50 border-t border-slate-100">
-                    {aiLoading && (
-                      <div className="flex items-center gap-2 text-sm text-slate-500 font-medium py-4 justify-center">
-                        <Loader2 size={16} className="animate-spin text-violet-500" />
-                        Analisi in corso...
-                      </div>
-                    )}
-                    {aiError && !aiLoading && (
-                      <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium px-4 py-3 rounded-xl">
-                        {aiError}
-                      </div>
-                    )}
-                    {aiResult && !aiLoading && (
-                      <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
-                        {aiResult}
-                      </pre>
-                    )}
-                  </div>
-                )}
               </div>
             )}
 
@@ -1019,16 +951,26 @@ export default function DocMasterModal({
 
           {/* Footer */}
           <div className="border-t border-slate-100 px-7 py-4 flex items-center justify-between shrink-0 bg-slate-50">
-            {(isRevMode || isEditMode) ? (
+            <div className="flex items-center gap-2">
+              {(isRevMode || isEditMode) && (
+                <button
+                  onClick={() => setCopertinaModal(true)}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black uppercase
+                    text-emerald-700 hover:bg-emerald-50 border border-emerald-200 transition-colors"
+                >
+                  <BookOpen size={13} /> Copertina
+                </button>
+              )}
               <button
-                onClick={() => setCopertinaModal(true)}
+                onClick={() => alert('Gestione firme — prossima release')}
                 disabled={saving}
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black uppercase
-                  text-emerald-700 hover:bg-emerald-50 border border-emerald-200 transition-colors"
+                  text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors"
               >
-                <BookOpen size={13} /> Copertina
+                <PenLine size={13} /> Firme
               </button>
-            ) : <span />}
+            </div>
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
@@ -1037,21 +979,27 @@ export default function DocMasterModal({
               >
                 Annulla
               </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black uppercase text-white shadow transition-colors disabled:opacity-50
-                  ${isRevMode  ? 'bg-amber-600 hover:bg-amber-700'
-                  : isEditMode ? 'bg-slate-700 hover:bg-slate-800'
-                  : 'bg-indigo-600 hover:bg-indigo-700'}`}
-              >
-                {saving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                {saving
-                  ? 'Salvataggio...'
-                  : isRevMode  ? 'Salva revisione'
-                  : isEditMode ? 'Modifica documento'
-                  : 'Salva documento'}
-              </button>
+              {(isRevMode || isEditMode) ? (
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black uppercase text-white shadow transition-colors disabled:opacity-50
+                    ${isRevMode ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-700 hover:bg-slate-800'}`}
+                >
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                  {saving ? 'Salvataggio...' : isRevMode ? 'Salva revisione' : 'Modifica documento'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleSalvaEApriCopertina}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black uppercase text-white shadow transition-colors disabled:opacity-50
+                    bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : <BookOpen size={15} />}
+                  {saving ? 'Salvataggio...' : 'Crea Copertina'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -1114,12 +1062,17 @@ export default function DocMasterModal({
       )}
 
       {/* Modale copertina */}
-      {copertinaModal && (isRevMode || isEditMode) && (
+      {copertinaModal && (
         <DocCopertinaModal
-          documento={masterEsistente ?? masterDaModificare}
-          facility={null}
-          company={null}
+          documento={
+            isRevMode  ? masterEsistente :
+            isEditMode ? masterDaModificare :
+            createdDoc ?? { ...form, id: null }
+          }
+          dataRevisione={form.dataRevisione}
+          noteRevisione={form.noteRevisione}
           onClose={() => setCopertinaModal(false)}
+          onSuccess={(!isRevMode && !isEditMode) ? () => { setCopertinaModal(false); onSuccess?.(); } : undefined}
         />
       )}
     </>

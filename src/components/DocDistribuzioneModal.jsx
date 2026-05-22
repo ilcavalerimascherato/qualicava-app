@@ -38,14 +38,17 @@ export default function DocDistribuzioneModal({ master, onClose, onDistributed }
   const { profile } = useAuth();
   const isAllowed = ['superadmin', 'admin'].includes(profile?.role);
 
-  const [facilities,    setFacilities]    = useState([]);
-  const [istanzeMap,    setIstanzeMap]    = useState({});  // facilityId → istanza
-  const [selected,      setSelected]      = useState(new Set());
-  const [loading,       setLoading]       = useState(true);
-  const [generating,    setGenerating]    = useState(false);
-  const [progress,      setProgress]      = useState({ current: 0, total: 0 });
-  const [risultati,     setRisultati]     = useState(null);
-  const [error,         setError]         = useState('');
+  const [facilities,      setFacilities]      = useState([]);
+  const [istanzeMap,      setIstanzeMap]      = useState({});  // facilityId → istanza
+  const [selected,        setSelected]        = useState(new Set());
+  const [loading,         setLoading]         = useState(true);
+  const [generating,      setGenerating]      = useState(false);
+  const [progress,        setProgress]        = useState({ current: 0, total: 0 });
+  const [risultati,       setRisultati]       = useState(null);
+  const [error,           setError]           = useState('');
+  const [dataValidazione, setDataValidazione] = useState(
+    master?.data_approvazione ? master.data_approvazione.split('T')[0] : ''
+  );
 
   useEffect(() => {
     if (!master) return;
@@ -115,15 +118,16 @@ export default function DocDistribuzioneModal({ master, onClose, onDistributed }
     setError('');
 
     try {
-      const fileBuffer = await downloadMasterFile(master.file_url_master);
-      const storico    = await getStoricoRevisioni3(master.id);
-      const errors     = [];
-      let   done       = 0;
+      const fileBuffer    = await downloadMasterFile(master.file_url_master);
+      const storico       = await getStoricoRevisioni3(master.id);
+      const masterConData = { ...master, data_approvazione: dataValidazione || master.data_approvazione };
+      const errors        = [];
+      let   done          = 0;
 
       for (const fac of selectedFacilities) {
         try {
           // 1. Compila documento con dati struttura
-          const blob = await compileDocumento(fileBuffer, fac, master, storico);
+          const blob = await compileDocumento(fileBuffer, fac, masterConData, storico);
           // 2. Upload file compilato + aggiorna path in DB
           await uploadCompiledIstanza(
             master.id, fac.id, master.revisione_corrente ?? '1', blob
@@ -254,7 +258,25 @@ export default function DocDistribuzioneModal({ master, onClose, onDistributed }
               </button>
             </div>
           ) : (
-            /* Tabella strutture */
+            <>
+            {/* Data validazione struttura */}
+            <div className="px-7 pt-5 pb-4 border-b border-slate-100">
+              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5">
+                Data validazione struttura
+              </label>
+              <input
+                type="date"
+                value={dataValidazione}
+                onChange={e => setDataValidazione(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium
+                  outline-none focus:ring-2 focus:ring-indigo-400 transition-all"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Sovrascrive la data di approvazione nel documento compilato (es. data firma struttura)
+              </p>
+            </div>
+
+            {/* Tabella strutture */}
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
                 <tr>
@@ -328,6 +350,7 @@ export default function DocDistribuzioneModal({ master, onClose, onDistributed }
                 )}
               </tbody>
             </table>
+            </>
           )}
         </div>
 

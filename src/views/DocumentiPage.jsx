@@ -5,7 +5,7 @@ import {
   FileText, Library, Send, Building2, Settings,
   ChevronRight, Plus, FolderOpen, Shield,
   ArrowLeft, Eye, Loader2, Filter, RefreshCw,
-  Archive, Pencil, BookOpen, X,
+  Archive, Pencil, BookOpen, X, Search, PenLine,
   Stethoscope, Utensils, BarChart2
 } from 'lucide-react';
 import { useAuth }             from '../contexts/AuthContext';
@@ -16,6 +16,7 @@ import DocAnteprimaModal       from '../components/DocAnteprimaModal';
 import DocStrutturaPanel          from '../components/DocStrutturaPanel';
 import DocStrutturaProprioModal   from '../components/DocStrutturaProprioModal';
 import DocMyDocumentiView         from './DocMyDocumentiView';
+import DocFirmeModal              from '../components/DocFirmeModal';
 import { supabase } from '../supabaseClient';
 import {
   getDocMaster,
@@ -80,6 +81,7 @@ const TABS_ADMIN = [
   { id: 'libreria',      label: 'Libreria',      Icon: Library   },
   { id: 'distribuzione', label: 'Distribuzione', Icon: Send       },
   { id: 'strutture',     label: 'Strutture',     Icon: Building2 },
+  { id: 'firme',         label: 'Firme',         Icon: PenLine   },
   { id: 'impostazioni',  label: 'Impostazioni',  Icon: Settings  },
 ];
 
@@ -339,8 +341,11 @@ export default function DocumentiPage() {
   // Filtri distribuzione tab
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [filtroUdo,       setFiltroUdo]       = useState('');
+  const [searchTitolo,    setSearchTitolo]    = useState('');
+  const [ordinamento,     setOrdinamento]     = useState('recenti');
 
   // Modali
+  const [firmeModal,     setFirmeModal]     = useState(false);
   const [distribModal,   setDistribModal]   = useState({ open: false, master: null });
   const [accessiModal,   setAccessiModal]   = useState({ open: false, master: null });
   const [anteprimaModal, setAnteprimaModal] = useState({ open: false, master: null });
@@ -456,18 +461,39 @@ export default function DocumentiPage() {
 
   // Filtro distribuzione (solo attivi)
   const docMasterFiltrati = useMemo(() => {
-    return docAttivi.filter(doc => {
-      if (filtroCategoria && doc.categoria !== filtroCategoria) return false;
-      if (filtroUdo && !(doc.udo_applicabilita ?? []).includes(filtroUdo)) return false;
-      return true;
-    });
-  }, [docAttivi, filtroCategoria, filtroUdo]);
+    return docAttivi
+      .filter(doc => {
+        if (filtroCategoria && doc.categoria !== filtroCategoria) return false;
+        if (filtroUdo && !(doc.udo_applicabilita ?? []).includes(filtroUdo)) return false;
+        if (searchTitolo) {
+          const q = searchTitolo.toLowerCase();
+          if (!doc.titolo?.toLowerCase().includes(q) && !doc.codice_documento?.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (ordinamento === 'az') return (a.titolo || '').localeCompare(b.titolo || '');
+        if (ordinamento === 'za') return (b.titolo || '').localeCompare(a.titolo || '');
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      });
+  }, [docAttivi, filtroCategoria, filtroUdo, searchTitolo, ordinamento]);
 
   // Lista doc nella categoria selezionata — drill-down (solo attivi)
-  const docInCategoria = useMemo(
-    () => docAttivi.filter(d => d.categoria === selectedCategoria),
-    [docAttivi, selectedCategoria]
-  );
+  const docInCategoria = useMemo(() => {
+    let list = docAttivi.filter(d => d.categoria === selectedCategoria);
+    if (searchTitolo) {
+      const q = searchTitolo.toLowerCase();
+      list = list.filter(d =>
+        d.titolo?.toLowerCase().includes(q) ||
+        d.codice_documento?.toLowerCase().includes(q)
+      );
+    }
+    return list.sort((a, b) => {
+      if (ordinamento === 'az') return (a.titolo || '').localeCompare(b.titolo || '');
+      if (ordinamento === 'za') return (b.titolo || '').localeCompare(a.titolo || '');
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+  }, [docAttivi, selectedCategoria, searchTitolo, ordinamento]);
 
   // UDO unici per filtro (solo attivi)
   const udoOptions = useMemo(() => {
@@ -663,6 +689,43 @@ export default function DocumentiPage() {
                   <ArrowLeft size={15} /> Tutte le categorie
                 </button>
 
+                {/* Barra ricerca + ordinamento */}
+                <div className="flex items-center gap-3 mb-6 flex-wrap">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search size={13} className="absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Cerca titolo o codice..."
+                      value={searchTitolo}
+                      onChange={e => setSearchTitolo(e.target.value)}
+                      className="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-200
+                        bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                  </div>
+                  <select
+                    value={ordinamento}
+                    onChange={e => setOrdinamento(e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2
+                      text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-400"
+                  >
+                    <option value="recenti">Più recenti</option>
+                    <option value="az">A → Z</option>
+                    <option value="za">Z → A</option>
+                  </select>
+                  {(searchTitolo || ordinamento !== 'recenti') && (
+                    <button
+                      onClick={() => { setSearchTitolo(''); setOrdinamento('recenti'); }}
+                      className="text-xs font-black text-slate-400 hover:text-slate-700
+                        px-3 py-2 hover:bg-slate-100 rounded-xl transition-colors"
+                    >
+                      Reset
+                    </button>
+                  )}
+                  <span className="text-xs font-bold text-slate-400 ml-auto">
+                    {docInCategoria.length} document{docInCategoria.length === 1 ? 'o' : 'i'}
+                  </span>
+                </div>
+
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2.5">
                     {CAT_MAP[selectedCategoria] && (() => {
@@ -791,8 +854,22 @@ export default function DocumentiPage() {
             </div>
 
             {/* Filtri */}
-            <div className="flex items-center gap-3 mb-6">
-              <Filter size={14} className="text-slate-400" />
+            <div className="flex items-center gap-3 mb-6 flex-wrap">
+              <Filter size={14} className="text-slate-400 shrink-0" />
+
+              {/* Ricerca testo */}
+              <div className="relative">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchTitolo}
+                  onChange={e => setSearchTitolo(e.target.value)}
+                  placeholder="Cerca titolo o codice…"
+                  className="rounded-xl border border-slate-200 bg-white pl-8 pr-3 py-2 text-sm font-medium
+                    outline-none focus:ring-2 focus:ring-indigo-400 transition-all w-52"
+                />
+              </div>
+
               <select
                 value={filtroCategoria}
                 onChange={e => setFiltroCategoria(e.target.value)}
@@ -819,9 +896,21 @@ export default function DocumentiPage() {
                 </select>
               )}
 
-              {(filtroCategoria || filtroUdo) && (
+              {/* Ordinamento */}
+              <select
+                value={ordinamento}
+                onChange={e => setOrdinamento(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold
+                  outline-none focus:ring-2 focus:ring-indigo-400 transition-all ml-auto"
+              >
+                <option value="recenti">Più recenti</option>
+                <option value="az">A → Z</option>
+                <option value="za">Z → A</option>
+              </select>
+
+              {(filtroCategoria || filtroUdo || searchTitolo) && (
                 <button
-                  onClick={() => { setFiltroCategoria(''); setFiltroUdo(''); }}
+                  onClick={() => { setFiltroCategoria(''); setFiltroUdo(''); setSearchTitolo(''); }}
                   className="text-xs font-bold text-slate-400 hover:text-slate-600 px-2 transition-colors"
                 >
                   Resetta filtri
@@ -940,6 +1029,11 @@ export default function DocumentiPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── Tab Firme ── */}
+        {activeTab === 'firme' && (
+          <DocFirmeModal onClose={() => setActiveTab('libreria')} />
         )}
 
         {/* ── Tab Impostazioni ── */}

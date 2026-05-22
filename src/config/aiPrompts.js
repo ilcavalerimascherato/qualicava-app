@@ -238,15 +238,6 @@ Usa ESATTAMENTE questi titoli in maiuscolo:
   },
 
 
-  // ── 9. DocMASTER → Analisi documento ─────────────────────────
-  docMasterAnalisi: {
-    id: 9,
-    key: 'docMasterAnalisi',
-    descrizione: 'Analisi documento caricato: suggerisce placeholder mancanti e miglioramenti',
-    prompt: `Sei un esperto di qualità per strutture socio-sanitarie \nitaliane (RSA, CDI, SRTR). Analizza il testo di questo documento e:\n1. Elenca i {{placeholder}} già presenti nel documento\n2. Suggerisci placeholder aggiuntivi utili per personalizzazione \n   per struttura (es. direttore, indirizzo, UDO)\n3. Segnala sezioni che potrebbero richiedere adattamento per UDO \n   diversi (RSA vs CDI vs SRTR)\n4. Valuta la completezza rispetto agli standard JCI/AGENAS\n5. Suggerisci eventuali sezioni mancanti per un protocollo completo\nRispondi in italiano. Usa formato strutturato con sezioni numerate.\nSii conciso e pratico.`,
-  },
-
-  // ── 7. KPI → Periodo (Trend) ────────────────────────────────
 };
 
 // ── FACTORY UNIFICATA ─────────────────────────────────────────
@@ -285,8 +276,6 @@ export const buildPromptOperatoreDirezione = (p) => buildPrompt('operatoreDirezi
 export const buildPromptGlobaleBoard     = (p) => buildPrompt('globaleBoard',     p);
 export const buildPromptKpiMensile       = (p) => buildPrompt('kpiMensile',       p);
 export const buildPromptKpiPeriodo       = (p) => buildPrompt('kpiPeriodo',       p);
-
-export const docMasterAnalisi = PROMPT_REGISTRY.docMasterAnalisi;
 
 // ── KPI ANALISI COMPARATIVA — prompt preset ────────────────────
 export const kpiAnalisiComparativa = {

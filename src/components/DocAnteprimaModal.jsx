@@ -1,39 +1,10 @@
 // src/components/DocAnteprimaModal.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  X, Eye, Download, Send, Loader2, AlertTriangle,
-  CheckCircle2, Building2,
+  X, Eye, Download, Send, Loader2, Building2,
 } from 'lucide-react';
-import { supabase }            from '../supabaseClient';
+import { supabase }           from '../supabaseClient';
 import { downloadMasterFile, compileDocumento, getStoricoRevisioni3 } from '../services/documentiService';
-
-// ─── mappa placeholder → valore ──────────────────────────────
-
-function formatDateIT(iso) {
-  if (!iso) return '';
-  try { return new Date(iso).toLocaleDateString('it-IT'); } catch { return iso; }
-}
-
-function buildValori(facilityData, masterData) {
-  return {
-    nome_struttura:      facilityData?.name             ?? '',
-    ragione_sociale:     facilityData?.ragione_sociale  ?? '',
-    indirizzo:           facilityData?.address          ?? '',
-    regione:             facilityData?.region           ?? '',
-    udo_tipo:            facilityData?.udo_tipo         ?? '',
-    direttore:           facilityData?.director         ?? '',
-    direttore_sanitario: facilityData?.director_sanitario ?? '',
-    email_direzione:     facilityData?.email_direzione  ?? '',
-    posti_letto:         facilityData?.bed_count?.toString() ?? '',
-    revisione:           masterData?.revisione_corrente ?? '',
-    codice_documento:    masterData?.codice_documento   ?? '',
-    data_approvazione:   formatDateIT(masterData?.data_approvazione),
-    data_scadenza:       formatDateIT(masterData?.data_scadenza),
-    approvato_da:        masterData?.approvato_da       ?? '',
-  };
-}
-
-// ─── componente ───────────────────────────────────────────────
 
 export default function DocAnteprimaModal({ master, onClose, onGoDist, facilityId = null }) {
   const fixedFacility = !!facilityId;
@@ -41,8 +12,8 @@ export default function DocAnteprimaModal({ master, onClose, onGoDist, facilityI
   const [facilities,    setFacilities]    = useState([]);
   const [selectedFacId, setSelectedFacId] = useState(facilityId ? String(facilityId) : '');
   const [facilityData,  setFacilityData]  = useState(null);
-  const [loadingFac,    setLoadingFac]    = useState(!fixedFacility);
   const [loadingData,   setLoadingData]   = useState(false);
+  const [loadingFac,    setLoadingFac]    = useState(!fixedFacility);
   const [downloading,   setDownloading]   = useState(false);
   const [error,         setError]         = useState('');
 
@@ -73,11 +44,9 @@ export default function DocAnteprimaModal({ master, onClose, onGoDist, facilityI
     setFacilityData(null);
     supabase
       .from('facilities')
-      .select(`
-        id, name, address, region, company_id,
+      .select(`id, name, address, region, company_id,
         director, director_sanitario, email_direzione, bed_count,
-        companies(name), udos(name)
-      `)
+        companies(name), udos(name)`)
       .eq('id', selectedFacId)
       .single()
       .then(({ data, error: e }) => {
@@ -90,9 +59,6 @@ export default function DocAnteprimaModal({ master, onClose, onGoDist, facilityI
       })
       .finally(() => setLoadingData(false));
   }, [selectedFacId]);
-
-  const valori = facilityData ? buildValori(facilityData, master) : {};
-  const placeholders = master?.placeholder_list ?? [];
 
   const handleDownload = useCallback(async () => {
     if (!master?.file_url_master || !facilityData) return;
@@ -150,8 +116,8 @@ export default function DocAnteprimaModal({ master, onClose, onGoDist, facilityI
         <div className="bg-indigo-50 border-b border-indigo-100 px-7 py-3 shrink-0">
           <p className="text-xs font-bold text-indigo-700">
             {fixedFacility
-              ? <>Anteprima del documento compilato con i dati della tua struttura. <span className="font-black">Non distribuisce nulla.</span></>
-              : <>Scegli una struttura per vedere il documento compilato con i suoi dati reali. <span className="font-black"> Non distribuisce nulla</span> e non lascia tracce nel DB.</>
+              ? <>Anteprima del documento. <span className="font-black">Non distribuisce nulla.</span></>
+              : <>Scegli una struttura e scarica il documento master. <span className="font-black">Non distribuisce nulla</span> e non lascia tracce nel DB.</>
             }
           </p>
         </div>
@@ -166,11 +132,10 @@ export default function DocAnteprimaModal({ master, onClose, onGoDist, facilityI
             </label>
 
             {fixedFacility ? (
-              /* Struttura fissa — vista direttore/sede */
               <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
                 <Building2 size={14} className="text-slate-400 shrink-0" />
                 <span className="text-sm font-bold text-slate-700">
-                  {facilityData?.name ?? (loadingData ? '…' : '—')}
+                  {facilityData?.name ?? '…'}
                 </span>
                 {facilityData?.name && (
                   <span className="text-xs text-slate-400 font-medium ml-1">
@@ -197,90 +162,6 @@ export default function DocAnteprimaModal({ master, onClose, onGoDist, facilityI
               </select>
             )}
           </div>
-
-          {/* Tabella placeholder */}
-          {placeholders.length > 0 && (
-            <div>
-              <p className="text-xs font-black text-slate-600 uppercase tracking-wider mb-2">
-                Valori che verranno inseriti ({placeholders.length} placeholder)
-              </p>
-
-              {loadingData ? (
-                <div className="flex items-center gap-2 py-4 text-sm text-slate-400">
-                  <Loader2 size={14} className="animate-spin" /> Caricamento dati struttura…
-                </div>
-              ) : (
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="px-4 py-2.5 text-left text-[11px] font-black text-slate-500 uppercase tracking-wider w-1/2">
-                          Placeholder
-                        </th>
-                        <th className="px-4 py-2.5 text-left text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                          Valore
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {placeholders.map(ph => {
-                        const val = valori[ph];
-                        const isEmpty = !val || String(val).trim() === '';
-                        return (
-                          <tr key={ph} className={isEmpty ? 'bg-amber-50' : 'hover:bg-slate-50'}>
-                            <td className="px-4 py-2.5">
-                              <span className="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">
-                                {`{{${ph}}}`}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2.5">
-                              {isEmpty ? (
-                                <span className="flex items-center gap-1.5 text-[11px] font-black text-amber-600">
-                                  <AlertTriangle size={11} /> mancante
-                                </span>
-                              ) : (
-                                <span className="text-sm text-slate-700 font-medium">{val}</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Riepilogo mancanti */}
-              {!loadingData && facilityData && (() => {
-                const mancanti = placeholders.filter(ph => {
-                  const v = valori[ph];
-                  return !v || String(v).trim() === '';
-                });
-                if (mancanti.length === 0) return (
-                  <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 mt-2">
-                    <CheckCircle2 size={12} /> Tutti i campi sono compilati
-                  </p>
-                );
-                return (
-                  <p className="flex items-center gap-1.5 text-xs font-bold text-amber-600 mt-2">
-                    <AlertTriangle size={12} />
-                    {mancanti.length} campo{mancanti.length > 1 ? 'i' : ''} mancant{mancanti.length > 1 ? 'i' : 'e'} —
-                    verranno lasciati vuoti nel documento
-                  </p>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* Nessun placeholder */}
-          {placeholders.length === 0 && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-              <p className="text-xs font-bold text-slate-500">
-                Nessun placeholder rilevato nel documento.
-                Il file verrà scaricato così com'è.
-              </p>
-            </div>
-          )}
 
           {error && (
             <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm font-bold px-4 py-3 rounded-xl">
@@ -315,7 +196,7 @@ export default function DocAnteprimaModal({ master, onClose, onGoDist, facilityI
                 bg-slate-800 text-white shadow hover:bg-slate-700 transition-colors disabled:opacity-40"
             >
               {downloading
-                ? <><Loader2 size={14} className="animate-spin" /> Generazione…</>
+                ? <><Loader2 size={14} className="animate-spin" /> Download…</>
                 : <><Download size={14} /> Scarica anteprima .docx</>
               }
             </button>

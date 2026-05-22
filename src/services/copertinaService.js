@@ -13,25 +13,17 @@ const DARK        = '0f172a';
 const BIANCO      = 'FFFFFF';
 
 // ── Misure A4 (DXA) ───────────────────────────────────────────
-const PAGE_W    = 11906;
-const PAGE_H    = 16838;
-const MARGIN    = 1134;
+const PAGE_W = 11906;
+const PAGE_H = 16838;
+const MARGIN = 1134;
 
 // ── Bordi ─────────────────────────────────────────────────────
-const NB         = { style: BorderStyle.NONE,   size: 0, color: BIANCO };
-const GB         = (c = VERDE_BRD) => ({ style: BorderStyle.SINGLE, size: 4, color: c });
-const CELL_NONE  = { top: NB, bottom: NB, left: NB, right: NB };
-const TBL_NONE   = { top: NB, bottom: NB, left: NB, right: NB, insideH: NB, insideV: NB };
+const NB        = { style: BorderStyle.NONE, size: 0, color: BIANCO };
+const GB        = (c = VERDE_BRD) => ({ style: BorderStyle.SINGLE, size: 4, color: c });
+const CELL_NONE = { top: NB, bottom: NB, left: NB, right: NB };
+const TBL_NONE  = { top: NB, bottom: NB, left: NB, right: NB, insideH: NB, insideV: NB };
 
 // ── Helpers ───────────────────────────────────────────────────
-
-function b64ToUint8Array(b64) {
-  const clean  = b64.includes(',') ? b64.split(',')[1] : b64;
-  const binary = atob(clean);
-  const bytes  = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
 
 function detectImgType(hint = '') {
   if (hint.includes('jpeg') || hint.includes('jpg') || hint.endsWith('.jpg') || hint.endsWith('.jpeg')) return 'jpg';
@@ -43,7 +35,8 @@ async function fetchImageData(url) {
     const res         = await fetch(url);
     const contentType = res.headers.get('content-type') || '';
     const buffer      = await res.arrayBuffer();
-    return { bytes: new Uint8Array(buffer), type: detectImgType(contentType) };
+    const forcePng    = url.includes('signatures') || url.toLowerCase().endsWith('.png');
+    return { bytes: new Uint8Array(buffer), type: forcePng ? 'png' : detectImgType(contentType) };
   } catch {
     return null;
   }
@@ -60,7 +53,6 @@ async function fetchLogoOver() {
   }
   return null;
 }
-
 
 const r = (text, opts = {}) => new TextRun({
   text,
@@ -96,7 +88,7 @@ function metaRow(label, value, isImage = false) {
     verticalAlign: VerticalAlign.CENTER,
     children: [new Paragraph({
       spacing: { before: 60, after: 60 },
-      children: isImage ? [value] : [r(typeof value === 'string' ? (value || '—') : '', { size: 20 })],
+      children: isImage ? [value] : [r(typeof value === 'string' ? value : '', { size: 20 })],
     })],
   });
 
@@ -124,12 +116,19 @@ export async function generaCopertina(params) {
     strutturaNome      = '',
     indirizzoStruttura = '',
     dataValidazione    = '',
-    regioneLombardia   = false,
     storico            = [],
     logoSocietaUrl     = null,
+    firmaUrl           = null,
   } = params;
 
-  // Fetch logo società da URL pubblico Supabase Storage
+  // Placeholder per campi struttura — compilati alla distribuzione
+  const _societaNome        = societaNome        || '{{ragione_sociale}}';
+  const _udoNome            = udoNome            || '{{udo_tipo}}';
+  const _strutturaNome      = strutturaNome      || '{{nome_struttura}}';
+  const _indirizzoStruttura = indirizzoStruttura || '{{indirizzo}}';
+  const _dataValidazione    = dataValidazione    || '{{data_approvazione}}';
+
+  // Fetch logo società
   let logoImg = null;
   if (logoSocietaUrl) {
     try {
@@ -144,11 +143,19 @@ export async function generaCopertina(params) {
 
   let logoOverImg = await fetchLogoOver();
 
+  let firmaImg = null;
+  if (firmaUrl) {
+    firmaImg = await fetchImageData(firmaUrl);
+  }
+
   // Firma image run
   let firmaRun = null;
   if (firmaBase64) {
     try {
-      const bytes = b64ToUint8Array(firmaBase64);
+      const clean  = firmaBase64.includes(',') ? firmaBase64.split(',')[1] : firmaBase64;
+      const binary = atob(clean);
+      const bytes  = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       firmaRun = new ImageRun({
         data:           bytes,
         transformation: { width: 80, height: 40 },
@@ -158,25 +165,33 @@ export async function generaCopertina(params) {
   }
 
   // ── 1. HEADER ──────────────────────────────────────────────
-  const logoChild = logoImg
-  ? new ImageRun({ data: logoImg.bytes, transformation: { width: 160, height: 56 }, type: logoImg.type })
-    : r(societaNome || 'GRUPPO OVER', { bold: true, color: VERDE, size: 24 });
+  // Cella sx: logo se disponibile, altrimenti ragione sociale come testo
+  const logoSxChildren = logoImg
+    ? [new ImageRun({ data: logoImg.bytes, transformation: { width: 220, height: 80 }, type: logoImg.type })]
+    : [r(_societaNome, { bold: true, color: VERDE, size: 24 })];
 
   const headerTable = new Table({
     width:   { size: 100, type: WidthType.PERCENTAGE },
     borders: TBL_NONE,
     rows: [new TableRow({
+      height: { value: 1000, rule: 'atLeast' },
       children: [
         new TableCell({
-          width: { size: 50, type: WidthType.PERCENTAGE },
-          borders: CELL_NONE,
-          children: [new Paragraph({ children: [logoChild] })],
+          width:         { size: 50, type: WidthType.PERCENTAGE },
+          borders:       CELL_NONE,
+          verticalAlign: VerticalAlign.CENTER,
+          children: [new Paragraph({
+            spacing: { before: 60, after: 60 },
+            children: logoSxChildren,
+          })],
         }),
         new TableCell({
-          width: { size: 50, type: WidthType.PERCENTAGE },
-          borders: CELL_NONE,
+          width:         { size: 50, type: WidthType.PERCENTAGE },
+          borders:       CELL_NONE,
+          verticalAlign: VerticalAlign.CENTER,
           children: [new Paragraph({
             alignment: AlignmentType.RIGHT,
+            spacing:   { before: 60, after: 60 },
             children: [logoOverImg
               ? new ImageRun({ data: logoOverImg.bytes, transformation: { width: 80, height: 80 }, type: logoOverImg.type })
               : r('GRUPPO OVER', { bold: true, color: VERDE, size: 24 })
@@ -205,22 +220,28 @@ export async function generaCopertina(params) {
     alignment: AlignmentType.CENTER,
     spacing:   { before: 160, after: 200 },
     border:    { left: { style: BorderStyle.SINGLE, size: 18, color: VERDE, space: 10 } },
-    children:  [r(titolo, { bold: true, size: 26, color: DARK })],
+    children:  [r(titolo.toUpperCase(), { bold: true, size: 26, color: DARK })],
   });
 
   // ── 4. TABELLA METADATI ────────────────────────────────────
   const metadataTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
-      metaRow('Codice documento', codice || '—'),
+      metaRow('Codice documento', (codice || '—').toUpperCase()),
       metaRow('Revisione',        `Rev. ${revisione}`),
       metaRow('Data revisione',   dataRevisione),
       metaRow('Note revisione',   noteRevisione),
-      metaRow('Elaborata da',     elaborataDa),
-      metaRow('Verificata da',    verificataDa),
-      firmaRun
-        ? metaRow('Approvata da', firmaRun, true)
-        : metaRow('Approvata da', approvataDa),
+      metaRow('Elaborata da',     elaborataDa.toUpperCase()),
+      metaRow('Verificata da',    verificataDa.toUpperCase()),
+      firmaImg
+        ? metaRow('Approvata da', new ImageRun({
+            data:           firmaImg.bytes,
+            transformation: { width: 180, height: 90 },
+            type:           'png',
+          }), true)
+        : firmaBase64 && firmaRun
+          ? metaRow('Approvata da', firmaRun, true)
+          : metaRow('Approvata da', approvataDa.toUpperCase()),
     ],
   });
 
@@ -234,10 +255,10 @@ export async function generaCopertina(params) {
   const applicabilitaTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
-      metaRow('Società',                    societaNome),
-      metaRow('UDO — Struttura',            `${udoNome} — ${strutturaNome}`),
-      metaRow('Indirizzo',                  indirizzoStruttura),
-      metaRow('Data validazione struttura', dataValidazione),
+      metaRow('Società',                    _societaNome),
+      metaRow('UDO — Struttura',            `${_udoNome} — ${_strutturaNome}`),
+      metaRow('Indirizzo',                  _indirizzoStruttura),
+      metaRow('Data validazione struttura', _dataValidazione),
     ],
   });
 
@@ -258,70 +279,61 @@ export async function generaCopertina(params) {
     )],
   });
 
-  // ── 8. BLOCCO VALIDAZIONE (solo regioneLombardia) ──────────
-  const validazioneBlocks = [];
-  if (regioneLombardia) {
-    const valTable = new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        // Header verde
-        new TableRow({
-          children: [new TableCell({
-            shading: { type: ShadingType.CLEAR, fill: VERDE },
-            borders: { top: GB(VERDE), bottom: GB(VERDE), left: GB(VERDE), right: GB(VERDE) },
-            children: [new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing:   { before: 80, after: 80 },
-              children:  [r('LOMBARDIA — OBBLIGO DI VALIDAZIONE', { bold: true, color: BIANCO, size: 20 })],
-            })],
+  // ── 8. BOX VALIDAZIONE — sempre presente ───────────────────
+  const valTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [new TableCell({
+          shading: { type: ShadingType.CLEAR, fill: VERDE },
+          borders: { top: GB(VERDE), bottom: GB(VERDE), left: GB(VERDE), right: GB(VERDE) },
+          children: [new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing:   { before: 80, after: 80 },
+            children:  [r('VALIDAZIONE REGIONALE', { bold: true, color: BIANCO, size: 20 })],
           })],
-        }),
-        // Body
-        new TableRow({
-          height: { value: 1700, rule: 'atLeast' },
-          children: [new TableCell({
-            borders: { top: GB(VERDE), bottom: GB(VERDE), left: GB(VERDE), right: GB(VERDE) },
-            children: [
-              new Paragraph({
-                spacing: { before: 160, after: 80 },
-                children: [r('Il Documento deve essere validato dal', { color: VERDE, size: 20 })],
-              }),
-              new Paragraph({
-                spacing: { before: 0, after: 400 },
-                children: [r('Direttore / Responsabile Sanitario', { bold: true, color: VERDE, size: 20 })],
-              }),
-              new Table({
-                width: { size: 100, type: WidthType.PERCENTAGE },
-                borders: TBL_NONE,
-                rows: [new TableRow({
-                  children: [
-                    new TableCell({
-                      width: { size: 60, type: WidthType.PERCENTAGE },
-                      borders: CELL_NONE,
-                      children: [new Paragraph({ children: [] })],
-                    }),
-                    new TableCell({
-                      width: { size: 40, type: WidthType.PERCENTAGE },
-                      borders: {
-                        top: NB, bottom: GB(VERDE), left: GB(VERDE), right: GB(VERDE),
-                      },
-                      children: [new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        spacing: { before: 60, after: 60 },
-                        children: [r('Timbro e firma', { color: VERDE, size: 18 })],
-                      })],
-                    }),
-                  ],
-                })],
-              }),
-            ],
-          })],
-        }),
-      ],
-    });
-    validazioneBlocks.push(emptyPar(120));
-    validazioneBlocks.push(valTable);
-  }
+        })],
+      }),
+      new TableRow({
+        height: { value: 1700, rule: 'atLeast' },
+        children: [new TableCell({
+          borders: { top: GB(VERDE), bottom: GB(VERDE), left: GB(VERDE), right: GB(VERDE) },
+          children: [
+            new Paragraph({
+              spacing: { before: 160, after: 80 },
+              children: [r('Compilare se richiesto dalla normativa regionale', { color: VERDE, size: 20, italic: true })],
+            }),
+            new Paragraph({
+              spacing: { before: 0, after: 400 },
+              children: [r('Direttore / Responsabile Sanitario', { bold: true, color: VERDE, size: 20 })],
+            }),
+            new Table({
+              width:   { size: 100, type: WidthType.PERCENTAGE },
+              borders: TBL_NONE,
+              rows: [new TableRow({
+                children: [
+                  new TableCell({
+                    width:   { size: 60, type: WidthType.PERCENTAGE },
+                    borders: CELL_NONE,
+                    children: [new Paragraph({ children: [] })],
+                  }),
+                  new TableCell({
+                    width:   { size: 40, type: WidthType.PERCENTAGE },
+                    borders: { top: NB, bottom: GB(VERDE), left: GB(VERDE), right: GB(VERDE) },
+                    children: [new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      spacing:   { before: 60, after: 60 },
+                      children:  [r('Timbro e firma', { color: VERDE, size: 18 })],
+                    })],
+                  }),
+                ],
+              })],
+            }),
+          ],
+        })],
+      }),
+    ],
+  });
 
   // ── 9. STORICO REVISIONI ───────────────────────────────────
   const hdrCell = (text) => new TableCell({
@@ -384,7 +396,8 @@ export async function generaCopertina(params) {
         applicabileLabel,
         applicabilitaTable,
         distribuzionePar,
-        ...validazioneBlocks,
+        emptyPar(120),
+        valTable,
         emptyPar(120),
         storicoTable,
       ],
