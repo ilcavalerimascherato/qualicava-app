@@ -41,6 +41,26 @@ export default function DocCopertinaModal({
   const [salvato,           setSalvato]           = useState(false);
   const [salvandoDoc,       setSalvandoDoc]       = useState(false);
   const [isDragging,        setIsDragging]        = useState(false);
+  const [logoSocietaUrl,    setLogoSocietaUrl]    = useState(null);
+
+  // Fetch logo società collegata al documento
+  useEffect(() => {
+    const societaId = documento?.societa_id;
+    if (!societaId) return;
+
+    supabase
+      .from('societa')
+      .select('logo_url')
+      .eq('id', societaId)
+      .single()
+      .then(async ({ data }) => {
+        if (!data?.logo_url) return;
+        const { data: signed } = await supabase.storage
+          .from('loghi-societa')
+          .createSignedUrl(data.logo_url, 3600);
+        setLogoSocietaUrl(signed?.signedUrl ?? null);
+      });
+  }, [documento]);
 
   const [form, setForm] = useState({
     dataRevisione,
@@ -95,7 +115,7 @@ export default function DocCopertinaModal({
         dataValidazione:    '',
         regioneLombardia:   false,
         storico:            form.storico,
-        logoSocietaUrl:     null,
+        logoSocietaUrl:     logoSocietaUrl,
       });
       const url = URL.createObjectURL(blob);
       const a   = document.createElement('a');
@@ -114,7 +134,7 @@ export default function DocCopertinaModal({
   };
 
   // Upload documento assemblato su Storage
-  const doUpload = useCallback(async (file) => {
+  const doUpload = async (file) => {
     setSalvandoDoc(true);
     setSalvato(false);
     setGenError('');
@@ -143,16 +163,17 @@ export default function DocCopertinaModal({
     } finally {
       setSalvandoDoc(false);
     }
-  }, [documento, onClose, onSuccess]);
+  };
 
   const handleDragOver  = useCallback((e) => { e.preventDefault(); setIsDragging(true);  }, []);
   const handleDragLeave = useCallback((e) => { e.preventDefault(); setIsDragging(false); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleDrop      = useCallback((e) => {
     e.preventDefault();
     setIsDragging(false);
     const f = e.dataTransfer.files?.[0];
     if (f) doUpload(f);
-  }, [doUpload]);
+  }, []);
 
   // ── render ────────────────────────────────────────────────────
 

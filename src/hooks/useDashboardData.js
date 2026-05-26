@@ -42,7 +42,7 @@ const fetchers = {
   },
   surveys: async (year) => {
     const { data, error } = await supabase
-      .from('survey_data')
+      .from('v_survey_data_normalized')
       .select('*')
       .like('calendar_id', `${year}-%`);
     if (error) throw error;

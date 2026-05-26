@@ -136,7 +136,7 @@ export async function generaCopertina(params) {
       const buffer = await res.arrayBuffer();
       logoImg = {
         bytes: new Uint8Array(buffer),
-        type:  logoSocietaUrl.includes('.jpg') || logoSocietaUrl.includes('.jpeg') ? 'jpg' : 'png',
+        type:  detectImgType(res.headers.get('content-type') || logoSocietaUrl),
       };
     } catch { logoImg = null; }
   }

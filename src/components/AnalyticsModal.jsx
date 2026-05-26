@@ -20,7 +20,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   CartesianGrid, Legend
 } from 'recharts';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// Google Generative AI rimosso — si usa Claude API via fetch
 import { exportPDF }       from '../utils/pdfExport';
 import { supabase }       from '../supabaseClient';
 import { getPromptAnalytics } from '../config/aiPrompts';
@@ -194,26 +194,52 @@ export default function AnalyticsModal({
     setReportTarget(target);
     if (target === 'ospiti'    && latestSurvey.ai_report_ospiti)    { setAiReport(latestSurvey.ai_report_ospiti);    return; }
     if (target === 'direzione' && latestSurvey.ai_report_direzione) { setAiReport(latestSurvey.ai_report_direzione); return; }
-    if (!process.env.REACT_APP_GEMINI_API_KEY) { alert('Manca la chiave API di Gemini'); return; }
+    if (!process.env.REACT_APP_ANTHROPIC_API_KEY) { alert('Manca la chiave API di Anthropic'); return; }
 
     setIsGeneratingAI(true);
     try {
-      const genAI  = new GoogleGenerativeAI(process.env.REACT_APP_GEMINI_API_KEY);
-      const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const dataPayload = chartData.map(d => `${d.subject}: ${d.score}/100`).join('\n');
-      const prompt = getPromptAnalytics({ type, target, facilityName: facility.name, dataPayload });
-      const result = await model.generateContent(prompt);
-      setAiReport(result.response.text());
+      const prompt      = getPromptAnalytics({ type, target, facilityName: facility.name, dataPayload });
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method:  'POST',
+        headers: {
+          'Content-Type':                            'application/json',
+          'x-api-key':                               process.env.REACT_APP_ANTHROPIC_API_KEY,
+          'anthropic-version':                       '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model:      'claude-sonnet-4-20250514',
+          max_tokens: 2048,
+          messages:   [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error?.message || response.statusText);
+      }
+
+      const json = await response.json();
+      setAiReport(json.content[0].text);
     } catch (error) { alert('Errore AI: ' + error.message); }
     finally { setIsGeneratingAI(false); }
   };
 
   const handleRegenerate = async () => {
     try {
-      const upd = {};
+      const sourceTable = latestSurvey.summary_stats?.source ?? 'survey_seniorliving';
+      const upd = {
+        facility_id:  facility.id,
+        calendar_id:  latestSurvey.calendar_id,
+        source_table: sourceTable,
+      };
       if (reportTarget === 'ospiti')    upd.ai_report_ospiti    = null;
       if (reportTarget === 'direzione') upd.ai_report_direzione = null;
-      await supabase.from('survey_data').update(upd).eq('id', latestSurvey.id);
+      await supabase
+        .from('survey_ai_reports')
+        .upsert(upd, { onConflict: 'facility_id,calendar_id,source_table' });
       latestSurvey[`ai_report_${reportTarget}`] = null;
       handleAction(reportTarget);
     } catch (err) { alert('Errore ripristino: ' + err.message); }
@@ -221,10 +247,17 @@ export default function AnalyticsModal({
 
   const handleSaveAndPDF = async () => {
     try {
-      const upd = {};
+      const sourceTable = latestSurvey.summary_stats?.source ?? 'survey_seniorliving';
+      const upd = {
+        facility_id:  facility.id,
+        calendar_id:  latestSurvey.calendar_id,
+        source_table: sourceTable,
+      };
       if (reportTarget === 'ospiti')    upd.ai_report_ospiti    = aiReport;
       if (reportTarget === 'direzione') upd.ai_report_direzione = aiReport;
-      await supabase.from('survey_data').update(upd).eq('id', latestSurvey.id);
+      await supabase
+        .from('survey_ai_reports')
+        .upsert(upd, { onConflict: 'facility_id,calendar_id,source_table' });
       if (onUpdateSuccess) onUpdateSuccess();
     } catch (err) { alert('Errore DB: ' + err.message); return; }
 

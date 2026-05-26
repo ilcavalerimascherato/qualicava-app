@@ -60,7 +60,7 @@ export function useDirectorData(facilityIds, year) {
     queryKey: directorKeys.surveys(ids, year),
     queryFn:  async () => {
       const { data, error } = await supabase
-        .from('survey_data')
+        .from('v_survey_data_normalized')
         .select('*')
         .in('facility_id', ids)
         .like('calendar_id', `${year}-%`);
