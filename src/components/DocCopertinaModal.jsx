@@ -134,7 +134,7 @@ export default function DocCopertinaModal({
   };
 
   // Upload documento assemblato su Storage
-  const doUpload = async (file) => {
+  const doUpload = useCallback(async (file) => {
     setSalvandoDoc(true);
     setSalvato(false);
     setGenError('');
@@ -163,17 +163,16 @@ export default function DocCopertinaModal({
     } finally {
       setSalvandoDoc(false);
     }
-  };
+  }, [documento, onSuccess, onClose]);
 
   const handleDragOver  = useCallback((e) => { e.preventDefault(); setIsDragging(true);  }, []);
   const handleDragLeave = useCallback((e) => { e.preventDefault(); setIsDragging(false); }, []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleDrop      = useCallback((e) => {
     e.preventDefault();
     setIsDragging(false);
     const f = e.dataTransfer.files?.[0];
     if (f) doUpload(f);
-  }, []);
+  }, [doUpload]);
 
   // ── render ────────────────────────────────────────────────────
 
