@@ -173,7 +173,7 @@ export default function OccupazioneDashboard() {
       const summary    = calcCdgSummary(aggregated, f.bed_count || 0);
       return { ...f, _semaforo: cdgSemaforo(summary), _cdgRecords: records };
     });
-  }, [facilities, cdgData]);
+  }, [dashData, cdgData]);
 
   const counts = useMemo(() => {
     const c = { verde: 0, giallo: 0, rosso: 0, grigio: 0 };
