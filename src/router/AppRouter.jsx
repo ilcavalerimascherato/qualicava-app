@@ -16,7 +16,8 @@ import { ROLES }   from '../config/constants';
 const AdminApp         = lazy(() => import('../App'));
 const DirectorApp      = lazy(() => import('../views/DirectorApp'));
 const DirectorFacility = lazy(() => import('../views/DirectorFacility'));
-const MasterDashboard  = lazy(() => import('../views/MasterDashboard'));
+const MasterDashboard       = lazy(() => import('../views/MasterDashboard'));
+const OccupazioneDashboard  = lazy(() => import('../views/OccupazioneDashboard'));
 const DocumentiPage    = lazy(() => import('../views/DocumentiPage'));
 const Login            = lazy(() => import('../Login'));
 
@@ -116,8 +117,9 @@ export default function AppRouter() {
 
             {/* Vista HQ — solo admin/superadmin/sede */}
             <Route element={<RequireAdmin />}>
-              <Route path="/admin"  element={<AdminApp />} />
-              <Route path="/master" element={<MasterDashboard />} />
+              <Route path="/admin"       element={<AdminApp />} />
+              <Route path="/master"      element={<MasterDashboard />} />
+              <Route path="/occupazione" element={<OccupazioneDashboard />} />
             </Route>
 
             {/* Documenti: accessibile a tutti i ruoli autenticati

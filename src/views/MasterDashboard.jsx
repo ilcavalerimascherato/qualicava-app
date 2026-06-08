@@ -15,6 +15,8 @@ import { ChefHat, ArrowLeft, Search, Filter, BookOpen } from 'lucide-react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useHaccpSemafori } from '../hooks/useHaccpData';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
+import CdgKpiPanel          from '../components/CdgKpiPanel';
+import { useCdgData }       from '../hooks/useCdgData';
 
 // Configurazione colori semaforo
 const SEMAFORO_CFG = {
@@ -29,8 +31,10 @@ export default function MasterDashboard() {
   const [searchParams]  = useSearchParams();
   const facilityIdParam = searchParams.get('facility');
 
-  const { data, loading } = useDashboardData(new Date().getFullYear());
+  const year = new Date().getFullYear();
+  const { data, loading } = useDashboardData(year);
   const { semafori, scadenzario, loading: loadingSem } = useHaccpSemafori();
+  const { data: cdgData } = useCdgData(null, year);
 
   const [search,          setSearch]          = useState('');
   const [filterSemaforo,  setFilterSemaforo]  = useState('all');
@@ -190,12 +194,18 @@ export default function MasterDashboard() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
             {filtered.map(f => (
-              <HaccpCard
-                key={f.id}
-                f={f}
-                udos={data.udos}
-                onClick={() => setSelectedFacility(f)}
-              />
+              <div key={f.id}>
+                <HaccpCard
+                  f={f}
+                  udos={data.udos}
+                  onClick={() => setSelectedFacility(f)}
+                />
+                <CdgKpiPanel
+                  cdgRecords={cdgData?.cdgByFacility?.[f.id] ?? []}
+                  year={year}
+                  compact={true}
+                />
+              </div>
             ))}
             {filtered.length === 0 && (
               <div className="col-span-full text-center py-20 text-slate-400 font-bold">

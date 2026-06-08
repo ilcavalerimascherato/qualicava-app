@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
   Settings, LogOut, ShieldCheck, ChefHat,
-  Search, Grid2X2, Grid3X3, LayoutGrid, BarChart2, PawPrint, FileText
+  Search, Grid2X2, Grid3X3, LayoutGrid, BarChart2, PawPrint, FileText, Users
 } from 'lucide-react';
 
 import { useAuth }                                           from './contexts/AuthContext';
@@ -203,6 +203,13 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/occupazione')}
+              className="relative bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
+            >
+              <Users size={14} /> Saturazione
+            </button>
+
             <button
               onClick={() => navigate('/master')}
               className="relative bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"

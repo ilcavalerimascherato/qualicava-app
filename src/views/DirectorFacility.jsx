@@ -44,6 +44,8 @@ import DataImportModal      from '../components/DataImportModal';
 import AnalyticsModal       from '../components/AnalyticsModal';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
 import DocMyDocumentiView   from './DocMyDocumentiView';
+import CdgKpiPanel          from '../components/CdgKpiPanel';
+import { useCdgData, aggregateCdgRecords } from '../hooks/useCdgData';
 
 // Mappa tab → conteggio badge e colore
 function getTabBadge(tabId, fBadge) {
@@ -138,6 +140,14 @@ export default function DirectorFacility() {
     ), [data.surveys, facilityId, facility]);
 
   const hasMultipleFacilities = facilityIds.length > 1;
+
+  const { data: cdgData } = useCdgData(
+    facility ? [facility.id] : [],
+    year
+  );
+  const cdgRecords = cdgData?.cdgByFacility?.[facility?.id]
+    ?? cdgData?.cdgByFacility?.[String(facility?.id)]
+    ?? [];
 
   const handleDataClick = (type) => {
     const hasData = facilitySurveys.some(s => s.type === type);
@@ -268,7 +278,17 @@ export default function DirectorFacility() {
       {/* Contenuto tab */}
       <main className="max-w-5xl mx-auto px-6 py-8">
         {activeTab === 'overview' && (
-          <OverviewTab facility={facility} surveys={facilitySurveys} year={year} />
+          <>
+            {/* ── Andamento Gestionale CDG ── */}
+            <div className="mb-6">
+              <CdgKpiPanel
+                cdgRecords={cdgRecords}
+                year={year}
+                bedCount={facility?.bed_count || 0}
+              />
+            </div>
+            <OverviewTab facility={facility} surveys={facilitySurveys} year={year} />
+          </>
         )}
         {activeTab === 'kpi' && (
           <KpiTab
