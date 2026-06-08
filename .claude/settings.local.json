@@ -28,7 +28,8 @@
       "Bash(git commit *)",
       "Bash(node -e \"require\\('docx'\\); console.log\\('docx ok'\\)\")",
       "PowerShell(npm run *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

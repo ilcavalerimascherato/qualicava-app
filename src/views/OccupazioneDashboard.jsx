@@ -7,8 +7,6 @@ import { useNavigate } from 'react-router-dom';
 import { useCdgData, aggregateCdgRecords, calcCdgSummary } from '../hooks/useCdgData';
 import { useDashboardData } from '../hooks/useDashboardData';
 
-const MESI = ['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-
 // ── Semaforo: basato su delta saturazione vs budget ──────────────────────────
 function cdgSemaforo(summary) {
   if (!summary || summary.deltaVsBudget == null) return 'grigio';
@@ -167,9 +165,8 @@ export default function OccupazioneDashboard() {
   const { data: dashData, loading } = useDashboardData(year);
   const { data: cdgData }           = useCdgData(null, year);
 
-  const facilities = dashData?.facilities ?? [];
-
   const facilitiesConSemaforo = useMemo(() => {
+    const facilities = dashData?.facilities ?? [];
     return facilities.map(f => {
       const records    = cdgData?.cdgByFacility?.[f.id] ?? [];
       const aggregated = aggregateCdgRecords(records);

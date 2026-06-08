@@ -45,7 +45,7 @@ import AnalyticsModal       from '../components/AnalyticsModal';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
 import DocMyDocumentiView   from './DocMyDocumentiView';
 import CdgKpiPanel          from '../components/CdgKpiPanel';
-import { useCdgData, aggregateCdgRecords } from '../hooks/useCdgData';
+import { useCdgData } from '../hooks/useCdgData';
 
 // Mappa tab → conteggio badge e colore
 function getTabBadge(tabId, fBadge) {
