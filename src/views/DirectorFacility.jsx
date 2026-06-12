@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/views/DirectorFacility.jsx  â€”  v3
  * Dashboard completa per il direttore di una struttura specifica.
  * Tab: Panoramica Â· KPI Â· Survey Â· Analisi Survey Â· Non ConformitÃ  Â· Benchmark

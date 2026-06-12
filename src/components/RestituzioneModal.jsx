@@ -350,7 +350,7 @@ export default function RestituzioneModal({
             setLoading(false);
           });
       });
-  }, [isOpen, sourceTable, facility?.id, dateStart, dateEnd]);
+  }, [isOpen, sourceTable, facility?.id, facility?.company_id, dateStart, dateEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedDomande = domande.filter(d => selected[d.col]);
   const nRisposte = rawData.length;
