@@ -49,16 +49,13 @@ export default function DocCopertinaModal({
     if (!societaId) return;
 
     supabase
-      .from('societa')
+      .from('companies')
       .select('logo_url')
       .eq('id', societaId)
       .single()
-      .then(async ({ data }) => {
+      .then(({ data }) => {
         if (!data?.logo_url) return;
-        const { data: signed } = await supabase.storage
-          .from('loghi-societa')
-          .createSignedUrl(data.logo_url, 3600);
-        setLogoSocietaUrl(signed?.signedUrl ?? null);
+        setLogoSocietaUrl(data.logo_url);
       });
   }, [documento]);
 

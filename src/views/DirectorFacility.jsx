@@ -1,14 +1,14 @@
-/**
- * src/views/DirectorFacility.jsx  —  v3
+﻿/**
+ * src/views/DirectorFacility.jsx  â€”  v3
  * Dashboard completa per il direttore di una struttura specifica.
- * Tab: Panoramica · KPI · Survey · Analisi Survey · Non Conformità · Benchmark
+ * Tab: Panoramica Â· KPI Â· Survey Â· Analisi Survey Â· Non ConformitÃ  Â· Benchmark
  *
  * MODIFICHE v3:
  *  - FIX CRITICO: superadmin/admin che accede via /facility/:id usava
- *    useDirectorData con facilityIds=[] → query disabled → facility null.
+ *    useDirectorData con facilityIds=[] â†’ query disabled â†’ facility null.
  *    Ora il hook di caricamento si sceglie in base al ruolo:
- *      • admin/superadmin/sede → useDashboardData (carica tutto, ha accesso globale)
- *      • director              → useDirectorData (carica solo le strutture assegnate)
+ *      â€¢ admin/superadmin/sede â†’ useDashboardData (carica tutto, ha accesso globale)
+ *      â€¢ director              â†’ useDirectorData (carica solo le strutture assegnate)
  *    L'invalidazione segue la stessa logica.
  */
 import React, { useState, useMemo, useEffect } from 'react';
@@ -18,19 +18,21 @@ import {
   PawPrint, LogOut, ArrowLeft, Activity, BarChart3, Database,
   ChefHat, FileText,
   AlertTriangle, TrendingUp,
-  Plus, Save, Loader2, X
+  Plus, Loader2,
 } from 'lucide-react';
 
+import { useQueryClient }                    from '@tanstack/react-query';
 import { useAuth }                           from '../contexts/AuthContext';
 import { useModals }                         from '../contexts/ModalContext';
 import { useDirectorData, useDirectorInvalidate } from '../hooks/useDirectorData';
 import { useDashboardData, useInvalidate }   from '../hooks/useDashboardData';
 import { useBadgeCounts }                    from '../hooks/useBadgeCounts';
 import { enrichFacilitiesData }              from '../utils/statusCalculator';
-import { createUserDirect }                  from '../utils/createUserDirect';
 import { supabase }                          from '../supabaseClient';
 import { detectAnomalies }                   from '../utils/kpiAnomalyEngine';
 import NcFormModal                           from '../components/NcFormModal';
+import FacilityModal                         from '../components/FacilityModal';
+import RestituzioneModal                     from '../components/RestituzioneModal';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, LineChart, Line,
@@ -44,10 +46,11 @@ import DataImportModal      from '../components/DataImportModal';
 import AnalyticsModal       from '../components/AnalyticsModal';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
 import DocMyDocumentiView   from './DocMyDocumentiView';
-import CdgKpiPanel          from '../components/CdgKpiPanel';
-import { useCdgData } from '../hooks/useCdgData';
+import { useCdgData }        from '../hooks/useCdgData';
+import SurveysTab            from '../components/SurveysTab';
+import OverviewTab           from '../components/OverviewTab';
 
-// Mappa tab → conteggio badge e colore
+// Mappa tab â†’ conteggio badge e colore
 function getTabBadge(tabId, fBadge) {
   if (!fBadge) return { count: 0, bg: 'bg-rose-500' };
   switch (tabId) {
@@ -70,12 +73,12 @@ const TABS = [
   { id: 'kpi',              label: 'KPI Mensili',    Icon: BarChart3     },
   { id: 'surveys',          label: 'Survey',         Icon: Database      },
   { id: 'analysis',         label: 'Analisi Survey', Icon: BarChart3     },
-  { id: 'non_conformities', label: 'Non Conformità', Icon: AlertTriangle },
+  { id: 'non_conformities', label: 'Non ConformitÃ ', Icon: AlertTriangle },
   { id: 'benchmark',        label: 'Benchmark',      Icon: TrendingUp    },
   { id: 'haccp',            label: 'Documenti',      Icon: ChefHat       },
 ];
 
-// FIX v3: hook wrapper — sceglie la sorgente dati in base al ruolo.
+// FIX v3: hook wrapper â€” sceglie la sorgente dati in base al ruolo.
 // Entrambi i hook vengono chiamati incondizionatamente (rules of hooks),
 // ma solo quello corretto per il ruolo viene effettivamente usato.
 function useAdaptiveData(isAdminUser, facilityIds, year) {
@@ -109,19 +112,22 @@ export default function DirectorFacility() {
   const navigate                      = useNavigate();
   const { profile, isAdmin, signOut, can } = useAuth();
   const { modals, open, close }       = useModals();
+  const queryClient                       = useQueryClient();
   const [activeTab, setActiveTab]         = useState('overview');
   const [ncEditId, setNcEditId]           = useState(null);
   const [ncRefreshKey, setNcRefreshKey]   = useState(0);
   const [dataTarget, setDataTarget]       = useState(null);
   const [documentiTabStatus, setDocumentiTabStatus] = useState(null);
+  const [editingStructure, setEditingStructure]     = useState(false);
+  const [restituzioneTarget, setRestituzioneTarget] = useState(null);
   const year = new Date().getFullYear();
 
   const numericFacilityId = Number(facilityId);
   const { perFacility: badgePerFacility } = useBadgeCounts([numericFacilityId], year);
   const fBadge = badgePerFacility[numericFacilityId];
 
-  // FIX v3: admin → useDashboardData (accesso globale)
-  //         director → useDirectorData (solo strutture assegnate)
+  // FIX v3: admin â†’ useDashboardData (accesso globale)
+  //         director â†’ useDirectorData (solo strutture assegnate)
   const facilityIds = profile?.accessibleFacilityIds ?? [];
   const { data, loading, errors, invalidate } = useAdaptiveData(isAdmin, facilityIds, year);
 
@@ -149,7 +155,26 @@ export default function DirectorFacility() {
     ?? cdgData?.cdgByFacility?.[String(facility?.id)]
     ?? [];
 
-  const handleDataClick = (type) => {
+  const handleFacilityUpdate = async (payload) => {
+    const { data: saved, error } = await supabase
+      .from('facilities')
+      .update(payload)
+      .eq('id', facility.id)
+      .select()
+      .single();
+    if (!error) {
+      queryClient.invalidateQueries({ queryKey: ['facilities'] });
+      queryClient.invalidateQueries({ queryKey: ['director', 'facilities'] });
+      setEditingStructure(false);
+    }
+    return saved;
+  };
+
+  const handleRestituzioneClick = (type, periodo = {}) => {
+    setRestituzioneTarget({ type, ...periodo });
+  };
+
+  const handleDataClick = (type, periodo = {}) => {
     const hasData = facilitySurveys.some(s => s.type === type);
     setDataTarget({ facility, type });
     open(hasData ? 'analytics' : 'dataImport');
@@ -173,7 +198,7 @@ export default function DirectorFacility() {
             Struttura non trovata o accesso non autorizzato.
           </p>
           <button onClick={() => navigate('/')} className="text-indigo-600 font-bold text-sm hover:underline">
-            ← Torna alla home
+            â† Torna alla home
           </button>
         </div>
       </div>
@@ -278,17 +303,16 @@ export default function DirectorFacility() {
       {/* Contenuto tab */}
       <main className="max-w-5xl mx-auto px-6 py-8">
         {activeTab === 'overview' && (
-          <>
-            {/* ── Andamento Gestionale CDG ── */}
-            <div className="mb-6">
-              <CdgKpiPanel
-                cdgRecords={cdgRecords}
-                year={year}
-                bedCount={facility?.bed_count || 0}
-              />
-            </div>
-            <OverviewTab facility={facility} surveys={facilitySurveys} year={year} />
-          </>
+          <OverviewTab
+            facility={facility}
+            surveys={facilitySurveys}
+            year={year}
+            fBadge={fBadge}
+            cdgRecords={cdgRecords}
+            kpiRecords={data.kpiRecords}
+            onTabChange={setActiveTab}
+            onEditStructure={() => setEditingStructure(true)}
+          />
         )}
         {activeTab === 'kpi' && (
           <KpiTab
@@ -303,6 +327,7 @@ export default function DirectorFacility() {
             facility={facility}
             surveys={facilitySurveys}
             onDataClick={handleDataClick}
+            onRestituzioneClick={handleRestituzioneClick}
           />
         )}
         {activeTab === 'analysis' && (
@@ -382,12 +407,33 @@ export default function DirectorFacility() {
           }}
         />
       )}
+
+      {restituzioneTarget && (
+        <RestituzioneModal
+          isOpen={!!restituzioneTarget}
+          onClose={() => setRestituzioneTarget(null)}
+          facility={facility}
+          surveys={facilitySurveys}
+          type={restituzioneTarget.type}
+          year={restituzioneTarget.year}
+          month={restituzioneTarget.month}
+        />
+      )}
+
+      <FacilityModal
+        isOpen={editingStructure}
+        onClose={() => setEditingStructure(false)}
+        udos={data?.udos || []}
+        facility={facility}
+        onSave={handleFacilityUpdate}
+        onDelete={null}
+      />
     </div>
   );
 }
 
-// ── Sub-componenti ─────────────────────────────────────────────
-// (invariati rispetto alla versione originale — solo import cambiati)
+// â”€â”€ Sub-componenti â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// (invariati rispetto alla versione originale â€” solo import cambiati)
 
 function StatusPill({ label, isOk, isPartial }) {
   const cfg = isOk
@@ -403,387 +449,6 @@ function StatusPill({ label, isOk, isPartial }) {
   );
 }
 
-const ORG_CONFIG = [
-  { key: 'director',            emailKey: 'email_direzione',           label: 'Direttore',      icon: '👤' },
-  { key: 'director_sanitario',  emailKey: 'email_sanitario',           label: 'Dir. Sanitario', icon: '⚕️' },
-  { key: 'referente_struttura', emailKey: 'email_referente_struttura', label: 'Ref. Struttura', icon: '🏠' },
-  { key: 'referent',            emailKey: 'email_qualita',             label: 'Ref. Qualità',   icon: '✅' },
-];
-
-function OrgStatoPill({ email, userProfiles }) {
-  if (!email) return (
-    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">
-      Nessuna mail
-    </span>
-  );
-  const profile = userProfiles.find(p => p.email === email);
-  if (!profile) return (
-    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
-      ● Da invitare
-    </span>
-  );
-  const hasSignedIn = profile.last_sign_in_at || profile.updated_at !== profile.created_at;
-  if (hasSignedIn) return (
-    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
-      ● Attivo
-    </span>
-  );
-  return (
-    <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-lg">
-      ● In attesa
-    </span>
-  );
-}
-
-function InvitoPanel({ figura, email, facilityId, companyId, onClose, onSuccess }) {
-  // null | 'sending' | 'credentials' | 'error'
-  const [status,      setStatus]      = useState(null);
-  const [msg,         setMsg]         = useState('');
-  const [credentials, setCredentials] = useState(null); // { email, password }
-  const [copied,      setCopied]      = useState(false);
-
-  const handleInvita = async () => {
-    setStatus('sending');
-    try {
-      // Crea utente direttamente tramite supabase.auth.signUp (senza Edge Function)
-      const result = await createUserDirect({
-        email,
-        role:       'director',
-        facilityId: facilityId || null,
-        companyId:  companyId  || null,
-      });
-      setCredentials({ email: result.email, password: result.password });
-      setStatus('credentials');
-      if (onSuccess) onSuccess();
-
-      // (Fallback commentato — Edge Function 'invite-user' non più in uso)
-      // const { data, error } = await supabase.functions.invoke('invite-user', {
-      //   body: { email, fullName: figura, role: 'director', companyId, facilityIds: [facilityId] },
-      // });
-      // if (error || data?.error) throw new Error(error?.message || data?.error);
-    } catch (err) {
-      setStatus('error');
-      setMsg(err.message);
-    }
-  };
-
-  const handleCopia = async () => {
-    if (!credentials) return;
-    const testo = `Email: ${credentials.email}\nPassword temporanea: ${credentials.password}`;
-    try {
-      await navigator.clipboard.writeText(testo);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // fallback silenzioso
-    }
-  };
-
-  return (
-    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-2">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-black text-amber-700 uppercase tracking-widest">Crea account — {figura}</p>
-        <button onClick={onClose} className="text-amber-400 hover:text-amber-700"><X size={14} /></button>
-      </div>
-
-      {status === null && (
-        <>
-          <p className="text-xs text-slate-600 mb-3">
-            Verrà creato un account per <span className="font-bold">{email}</span> con ruolo Direttore.
-            Le credenziali temporanee verranno mostrate qui.
-          </p>
-          <button
-            onClick={handleInvita}
-            className="flex items-center gap-2 bg-emerald-600 text-white text-xs font-black px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
-          >
-            ✉ Crea account
-          </button>
-        </>
-      )}
-
-      {status === 'sending' && (
-        <p className="text-xs font-bold text-amber-700 animate-pulse">Creazione account in corso...</p>
-      )}
-
-      {status === 'credentials' && credentials && (
-        <div className="space-y-3">
-          <p className="text-xs font-bold text-emerald-700">✓ Account creato con successo</p>
-          <div className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider w-20 shrink-0">Email</span>
-              <span className="text-xs font-bold text-slate-700 font-mono">{credentials.email}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider w-20 shrink-0">Password</span>
-              <span className="text-xs font-bold text-slate-700 font-mono">{credentials.password}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopia}
-              className="flex items-center gap-1.5 bg-slate-700 text-white text-xs font-black px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors"
-            >
-              {copied ? '✓ Copiato!' : '⎘ Copia credenziali'}
-            </button>
-            <p className="text-[10px] text-slate-400">Condividi le credenziali in modo sicuro con il direttore</p>
-          </div>
-        </div>
-      )}
-
-      {status === 'error' && (
-        <div>
-          <p className="text-xs font-bold text-red-700 mb-2">✗ {msg}</p>
-          <p className="text-xs text-slate-500">
-            Se il problema persiste, crea l'utente manualmente da{' '}
-            <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer"
-              className="text-indigo-600 hover:underline">Supabase Dashboard</a>
-            {' '}→ Authentication → Users → Add user
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-function OverviewTab({ facility: f, surveys, year }) {
-  const [userProfiles, setUserProfiles] = useState([]);
-  const [showInvito, setShowInvito]     = useState(null);
-  const [editingOrg, setEditingOrg]     = useState(false);
-  const [companyData, setCompanyData]   = useState(null);
-  const [orgForm, setOrgForm]           = useState({
-    director:                  f.director                      || '',
-    email_direzione:           f.email_direzione               || '',
-    director_sanitario:        f.director_sanitario            || '',
-    email_sanitario:           f.email_sanitario               || '',
-    referente_struttura:       f.referente_struttura           || '',
-    email_referente_struttura: f.email_referente_struttura     || '',
-    referent:                  f.referent                      || '',
-    email_qualita:             f.email_qualita                 || '',
-  });
-  const [savingOrg, setSavingOrg] = useState(false);
-
-  useEffect(() => {
-    const emails = ORG_CONFIG.map(o => f[o.emailKey]).filter(Boolean);
-    if (!emails.length) return;
-    supabase.from('user_profiles').select('email,last_sign_in_at,created_at,updated_at')
-      .in('email', emails)
-      .then(({ data, error }) => {
-        if (error) { console.warn('user_profiles non accessibile:', error.message); return; }
-        if (data) setUserProfiles(data);
-      });
-  }, [f]);
-
-  useEffect(() => {
-    if (!f.company_id) return;
-    supabase
-      .from('companies')
-      .select('id, name, piva, sede_legale')
-      .eq('id', f.company_id)
-      .single()
-      .then(({ data }) => { if (data) setCompanyData(data); });
-  }, [f.company_id]);
-
-  const handleSaveOrg = async () => {
-    setSavingOrg(true);
-    try {
-      const { error } = await supabase.from('facilities').update({
-        director:                  orgForm.director                  || null,
-        email_direzione:           orgForm.email_direzione           || null,
-        director_sanitario:        orgForm.director_sanitario        || null,
-        email_sanitario:           orgForm.email_sanitario           || null,
-        referente_struttura:       orgForm.referente_struttura       || null,
-        email_referente_struttura: orgForm.email_referente_struttura || null,
-        referent:                  orgForm.referent                  || null,
-        email_qualita:             orgForm.email_qualita             || null,
-      }).eq('id', f.id);
-      if (error) throw error;
-      setEditingOrg(false);
-    } catch (err) {
-      alert('Errore salvataggio: ' + err.message);
-    } finally {
-      setSavingOrg(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Scheda struttura */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center"
-          style={{ borderTopWidth: '4px', borderTopColor: f.udo_color || '#cbd5e1' }}>
-          <div>
-            <h2 className="font-black text-slate-800 text-lg">{f.name}</h2>
-            <p className="text-xs text-slate-400 font-medium uppercase tracking-widest mt-0.5">
-              {f.udo_name} {f.region ? `· ${f.region}` : ''} {f.bed_count > 0 ? `· ${f.bed_count} p.l.` : ''}
-            </p>
-          </div>
-          <button onClick={() => setEditingOrg(e => !e)}
-            className={`text-xs font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-colors ${
-              editingOrg ? 'bg-slate-200 text-slate-600' : 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100'
-            }`}>
-            {editingOrg ? 'Annulla' : '✎ Modifica contatti'}
-          </button>
-        </div>
-
-        <div className="divide-y divide-slate-50">
-          {ORG_CONFIG.map(({ key, emailKey, label, icon }) => {
-            const nome          = f[key];
-            const email         = f[emailKey];
-            const userProfile   = userProfiles.find(p => p.email === email);
-            const isShowingInvito = showInvito === key;
-
-            return (
-              <div key={key} className="px-6 py-4">
-                <div className="flex items-start gap-3">
-                  <span className="text-lg mt-0.5">{icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</span>
-                      <OrgStatoPill email={email} userProfiles={userProfiles} />
-                    </div>
-
-                    {editingOrg ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                        <input type="text" value={orgForm[key]} onChange={e => setOrgForm(p => ({ ...p, [key]: e.target.value }))}
-                          placeholder={`Nome ${label}`}
-                          className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 transition-all" />
-                        <input type="email" value={orgForm[emailKey]} onChange={e => setOrgForm(p => ({ ...p, [emailKey]: e.target.value }))}
-                          placeholder="Email"
-                          className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 transition-all" />
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-sm font-bold ${nome ? 'text-slate-800' : 'text-slate-300 italic'}`}>
-                          {nome || 'Non assegnato'}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {email && (
-                            <a href={`mailto:${email}`} className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors" title={email}>✉</a>
-                          )}
-                          {email && !userProfile && (
-                            <button onClick={() => setShowInvito(isShowingInvito ? null : key)}
-                              className="text-xs font-bold text-amber-600 hover:bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg transition-colors">
-                              {isShowingInvito ? 'Chiudi' : 'Invia invito'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {isShowingInvito && !editingOrg && email && (
-                      <InvitoPanel figura={label} email={f[emailKey]} facilityId={f.id} companyId={f.company_id} onClose={() => setShowInvito(null)} onSuccess={() => setUserProfiles([])} />
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {editingOrg && (
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
-            <button onClick={handleSaveOrg} disabled={savingOrg}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase shadow hover:bg-indigo-700 transition-colors disabled:opacity-60">
-              {savingOrg ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              Salva contatti
-            </button>
-          </div>
-        )}
-
-        <div className="px-6 py-3 bg-slate-50 border-t border-slate-100">
-          <p className="text-[10px] text-slate-400 font-medium">
-            🟢 Attivo · 🟠 In attesa · 🟡 Da invitare · ⚫ Nessuna mail
-          </p>
-        </div>
-      </div>
-
-      {/* Società e Struttura */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-        {/* Box Società */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4">Società</p>
-          <div className="space-y-3">
-            {[
-              { label: 'Denominazione', value: companyData?.name },
-              { label: 'P.IVA',         value: companyData?.piva },
-              { label: 'Sede Legale',   value: companyData?.sede_legale },
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
-                <p className={`text-sm font-bold ${value ? 'text-slate-800' : 'text-slate-300'}`}>
-                  {value || '—'}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Box Struttura */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4">Struttura</p>
-          <div className="space-y-3">
-            {[
-              { label: 'Posti letto', value: f.bed_count > 0 ? String(f.bed_count) : null },
-              { label: 'Indirizzo',   value: f.address },
-              { label: 'Regione',     value: f.region },
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
-                <p className={`text-sm font-bold ${value ? 'text-slate-800' : 'text-slate-300'}`}>
-                  {value || '—'}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
-function SurveysTab({ facility, surveys, onDataClick }) {
-  return (
-    <div className="space-y-4">
-      <h2 className="font-black text-slate-800 text-lg">Gestione Survey</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {[
-          { type: 'client',   label: 'Clienti / Ospiti',  desc: 'Questionari di gradimento' },
-          { type: 'operator', label: 'Staff / Operatori',  desc: 'Questionari di clima interno' },
-        ].map(({ type, label, desc }) => {
-          const latest = surveys
-            .filter(s => s.type === type)
-            .sort((a,b) => b.calendar_id.localeCompare(a.calendar_id))[0];
-          const status = latest
-            ? latest.ai_report_direzione ? 'completed' : 'pending'
-            : 'empty';
-          const statusCfg = {
-            completed: { label: 'Relazione OK',  bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-            pending:   { label: 'Da elaborare',  bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200'   },
-            empty:     { label: 'Nessun dato',   bg: 'bg-slate-50',   text: 'text-slate-500',   border: 'border-slate-200'   },
-          }[status];
-          return (
-            <button key={type} onClick={() => onDataClick(type)}
-              className="bg-white rounded-2xl border border-slate-200 p-6 text-left hover:shadow-md hover:border-indigo-300 transition-all group">
-              <div className="flex justify-between items-start mb-3">
-                <p className="font-black text-slate-800">{label}</p>
-                <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}>
-                  {statusCfg.label}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mb-4">{desc}</p>
-              <p className="text-xs font-black text-indigo-600 group-hover:translate-x-1 transition-transform inline-block">
-                {status === 'empty' ? 'Carica dati →' : 'Visualizza / Aggiorna →'}
-              </p>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function NonConformitiesTab({ facility, year, profile, refreshKey = 0, onNew, onEdit }) {
   const [ncs, setNcs]   = useState([]);
@@ -811,7 +476,7 @@ function NonConformitiesTab({ facility, year, profile, refreshKey = 0, onNew, on
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="font-black text-slate-800 text-lg">Non Conformità {year}</h2>
+        <h2 className="font-black text-slate-800 text-lg">Non ConformitÃ  {year}</h2>
         <button onClick={onNew}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors shadow">
           <Plus size={15} /> Registra NC
@@ -825,7 +490,7 @@ function NonConformitiesTab({ facility, year, profile, refreshKey = 0, onNew, on
       ) : ncs.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
           <AlertTriangle size={40} className="mx-auto text-slate-300 mb-4" />
-          <p className="text-slate-500 font-medium">Nessuna non conformità registrata per il {year}.</p>
+          <p className="text-slate-500 font-medium">Nessuna non conformitÃ  registrata per il {year}.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -837,14 +502,14 @@ function NonConformitiesTab({ facility, year, profile, refreshKey = 0, onNew, on
               </span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-black text-slate-800 truncate">
-                  {nc.titolo || nc.classificazione || '—'}
+                  {nc.titolo || nc.classificazione || 'â€”'}
                 </p>
                 <p className="text-xs text-slate-400 mt-0.5 truncate">{nc.classificazione}</p>
               </div>
               <div className="text-right shrink-0">
                 <p className="text-xs text-slate-400">{new Date(nc.created_at).toLocaleDateString('it')}</p>
                 <p className="text-xs font-black text-indigo-600 group-hover:translate-x-0.5 transition-transform mt-1">
-                  Modifica →
+                  Modifica â†’
                 </p>
               </div>
             </button>
@@ -949,7 +614,7 @@ function KpiTab({ facility, kpiRecords, year, onOpenManager }) {
           <BarChart3 size={40} className="mx-auto text-slate-300 mb-4" />
           <p className="text-slate-500 font-medium">Nessun dato KPI inserito per il {year}.</p>
           <button onClick={onOpenManager} className="mt-4 text-indigo-600 font-bold text-sm hover:underline">
-            Apri inserimento KPI →
+            Apri inserimento KPI â†’
           </button>
         </div>
       )}
@@ -985,7 +650,7 @@ function KpiCard({ rule, data, isPerc }) {
           </span>
         )}
       </div>
-      <ResponsiveContainer width="100%" height={60}>
+      <ResponsiveContainer width="100%" height={60} minWidth={0}>
         {useBar ? (
           <BarChart data={data} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
             <Bar dataKey="value" radius={[2,2,0,0]}>
@@ -1130,7 +795,7 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
         <div>
           <h2 className="font-black text-slate-800 text-lg">Benchmark {year}</h2>
           <p className="text-sm text-slate-400 mt-0.5">
-            {facility.udo_name} — confronto anonimo con strutture dello stesso tipo
+            {facility.udo_name} â€” confronto anonimo con strutture dello stesso tipo
             {!monthBench && <span className="ml-2 text-amber-600 font-bold">(servono almeno 3 strutture con dati per il benchmark)</span>}
           </p>
         </div>
@@ -1146,10 +811,10 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
       {/* Box overview: struttura vs media UDO */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <h3 className="font-black text-slate-700 mb-1">
-          Struttura vs Media UDO — {BENCH_MONTH_NAMES[selectedMonth - 1]} {year}
+          Struttura vs Media UDO â€” {BENCH_MONTH_NAMES[selectedMonth - 1]} {year}
         </h3>
         <p className="text-xs text-slate-400 mb-4">
-          {myRecord ? 'Dati inseriti per questo mese' : 'Nessun dato per questo mese — solo media UDO visibile'}
+          {myRecord ? 'Dati inseriti per questo mese' : 'Nessun dato per questo mese â€” solo media UDO visibile'}
         </p>
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
           {overviewData.map(d => (
@@ -1163,7 +828,7 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
               <div className="flex items-center gap-1.5 mb-1">
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
                 <span className="text-sm font-black" style={{ color: d.color }}>
-                  {d.myValue !== null ? `${d.myValue}%` : '—'}
+                  {d.myValue !== null ? `${d.myValue}%` : 'â€”'}
                 </span>
               </div>
               {d.udoAvg !== null && (
@@ -1172,7 +837,7 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
                   <span className="text-xs font-bold text-slate-400">{d.udoAvg}%</span>
                 </div>
               )}
-              <p className="text-[9px] text-slate-300 mt-1 uppercase">{d.dir === 'MAX' ? '↑ max' : '↓ min'}</p>
+              <p className="text-[9px] text-slate-300 mt-1 uppercase">{d.dir === 'MAX' ? 'â†‘ max' : 'â†“ min'}</p>
             </div>
           ))}
         </div>
@@ -1185,11 +850,11 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
         </div>
       </div>
 
-      {/* Trend 12 mesi — KPI selezionato */}
+      {/* Trend 12 mesi â€” KPI selezionato */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <div>
-            <h3 className="font-black text-slate-700">Trend 12 mesi — {selectedKpi}</h3>
+            <h3 className="font-black text-slate-700">Trend 12 mesi â€” {selectedKpi}</h3>
             <p className="text-xs text-slate-400 mt-0.5">Clicca un box sopra per cambiare indicatore</p>
           </div>
           <select value={selectedKpi} onChange={e => setSelectedKpi(e.target.value)}
@@ -1207,7 +872,7 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
             </span>
           </div>
         )}
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={280} minWidth={0}>
           <LineChart data={trendData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 'bold', fill: '#64748b' }} />
@@ -1279,7 +944,7 @@ function SurveyAnalysisTab({ facility, surveys }) {
 
       {latest?.ai_report_direzione && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5">
-          <p className="text-xs font-black text-indigo-600 uppercase tracking-widest mb-2">Sintesi AI — Report Direzione</p>
+          <p className="text-xs font-black text-indigo-600 uppercase tracking-widest mb-2">Sintesi AI â€” Report Direzione</p>
           <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{latest.ai_report_direzione}</p>
         </div>
       )}
@@ -1304,7 +969,7 @@ function SurveyAnalysisTab({ facility, surveys }) {
                   <p className="text-xs text-slate-400 text-center py-4">Nessuna risposta</p>
                 ) : (
                   <div className="flex items-center gap-4">
-                    <ResponsiveContainer width={140} height={140}>
+                    <ResponsiveContainer width={140} height={140} minWidth={0}>
                       <PieChart>
                         <Pie data={pieData} cx="50%" cy="50%" innerRadius={35} outerRadius={65} dataKey="value" paddingAngle={2}>
                           {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
@@ -1332,7 +997,7 @@ function SurveyAnalysisTab({ facility, surveys }) {
   );
 }
 
-// ── Tab HACCP/Documenti ────────────────────────────────────────
+// â”€â”€ Tab HACCP/Documenti â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function HaccpTab({ facility, onStatusChange, fBadge }) {
   const [showModal, setShowModal]                     = useState(false);
   const [haccpStatus, setHaccpStatus]                 = useState(null);
@@ -1413,21 +1078,21 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
           <p className="font-black text-slate-400 text-lg">Struttura non soggetta a HACCP</p>
           <p className="text-sm text-slate-300 mt-1">Questa struttura non ha l'obbligo di autocontrollo alimentare.</p>
         </div>
-        {/* BOX 2 — Documenti */}
+        {/* BOX 2 â€” Documenti */}
         <div className="relative pt-3">
           {docBadgeLevel === 'red' && (
             <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              ⚠ Documenti scaduti
+              âš  Documenti scaduti
             </span>
           )}
           {docBadgeLevel === 'amber' && (
             <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              ↑ Aggiornamenti disponibili
+              â†‘ Aggiornamenti disponibili
             </span>
           )}
           {docBadgeLevel === 'green' && (
             <span className="absolute top-0 left-4 bg-emerald-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              ✓ Tutto aggiornato
+              âœ“ Tutto aggiornato
             </span>
           )}
           {(fBadge?.documenti ?? 0) > 0 && (
@@ -1483,7 +1148,7 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
             </div>
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <h2 className="text-lg font-black text-slate-800">Operatore non OSA — documentazione fornitore</h2>
+                <h2 className="text-lg font-black text-slate-800">Operatore non OSA â€” documentazione fornitore</h2>
                 <span className="text-xs font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">Non OSA</span>
               </div>
               <p className="text-sm text-slate-500">
@@ -1496,10 +1161,10 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
               <p className="text-sm font-black text-slate-700">SCIA e documentazione fornitore</p>
               <p className="text-xs text-slate-400 mt-0.5">
                 {haccpStatus?.stato_scia === 'ok'
-                  ? '✅ SCIA fornitore aggiornata'
+                  ? 'âœ… SCIA fornitore aggiornata'
                   : haccpStatus?.stato_scia
-                  ? '⚠️ Verificare stato SCIA fornitore'
-                  : 'Nessun dato — aprire il fascicolo per configurare'}
+                  ? 'âš ï¸ Verificare stato SCIA fornitore'
+                  : 'Nessun dato â€” aprire il fascicolo per configurare'}
               </p>
             </div>
             <button
@@ -1516,21 +1181,21 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
             onClose={() => setShowModal(false)}
           />
         )}
-        {/* BOX 2 — Documenti */}
+        {/* BOX 2 â€” Documenti */}
         <div className="relative pt-3">
           {docBadgeLevel === 'red' && (
             <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              ⚠ Documenti scaduti
+              âš  Documenti scaduti
             </span>
           )}
           {docBadgeLevel === 'amber' && (
             <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              ↑ Aggiornamenti disponibili
+              â†‘ Aggiornamenti disponibili
             </span>
           )}
           {docBadgeLevel === 'green' && (
             <span className="absolute top-0 left-4 bg-emerald-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              ✓ Tutto aggiornato
+              âœ“ Tutto aggiornato
             </span>
           )}
           {(fBadge?.documenti ?? 0) > 0 && (
@@ -1589,16 +1254,16 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
   return (
     <div className="space-y-4">
 
-      {/* BOX 1 — HACCP */}
+      {/* BOX 1 â€” HACCP */}
       <div className="relative pt-3">
         {haccpStatus && haccpRed && (
           <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            ⚠ Attenzione
+            âš  Attenzione
           </span>
         )}
         {haccpStatus && !haccpRed && haccpAmber && (
           <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            ⚠ Verificare
+            âš  Verificare
           </span>
         )}
         {(fBadge?.haccp ?? 0) > 0 && (
@@ -1654,21 +1319,21 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
         </div>
       </div>
 
-      {/* BOX 2 — Documenti */}
+      {/* BOX 2 â€” Documenti */}
       <div className="relative pt-3">
         {docBadgeLevel === 'red' && (
           <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            ⚠ Documenti scaduti
+            âš  Documenti scaduti
           </span>
         )}
         {docBadgeLevel === 'amber' && (
           <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            ↑ Aggiornamenti disponibili
+            â†‘ Aggiornamenti disponibili
           </span>
         )}
         {docBadgeLevel === 'green' && (
           <span className="absolute top-0 left-4 bg-emerald-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            ✓ Tutto aggiornato
+            âœ“ Tutto aggiornato
           </span>
         )}
         {(fBadge?.documenti ?? 0) > 0 && (
@@ -1715,7 +1380,7 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
         </div>
       </div>
 
-      {/* Documenti inline — header DirectorFacility rimane visibile, nessun navigate */}
+      {/* Documenti inline â€” header DirectorFacility rimane visibile, nessun navigate */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
         <DocMyDocumentiView facilityId={facility.id} />
       </div>

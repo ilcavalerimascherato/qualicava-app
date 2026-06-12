@@ -162,8 +162,27 @@ export default function DocMasterModal({
   const [loadingAuditLog,   setLoadingAuditLog]   = useState(false);
   const [copertinaModal,    setCopertinaModal]    = useState(false);
   const [createdDoc,        setCreatedDoc]        = useState(null);
+  const [companyId,         setCompanyId]         = useState(
+    masterEsistente?.societa_id ?? masterDaModificare?.societa_id ?? null
+  );
 
   const fileRef  = useRef(null);
+
+  // Deriva companyId dalla prima facility accessibile (solo se non già presente sul documento)
+  useEffect(() => {
+    if (companyId) return;
+    const firstFacilityId = profile?.accessibleFacilityIds?.[0];
+    if (!firstFacilityId) return;
+    import('../supabaseClient').then(({ supabase }) => {
+      supabase
+        .from('facilities')
+        .select('company_id')
+        .eq('id', firstFacilityId)
+        .single()
+        .then(({ data }) => { if (data?.company_id) setCompanyId(data.company_id); });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile]);
   const prossRev = isRevMode ? nextRev(masterEsistente.revisione_corrente) : null;
 
   // Carica storico in modalità revisione
@@ -256,6 +275,7 @@ export default function DocMasterModal({
         placeholder_list: [],
         stato:            'attivo',
         data_scadenza:    scadenza.toISOString(),
+        societa_id:       companyId ?? null,
       });
       setCreatedDoc(newDoc);
       setCopertinaModal(true);
@@ -310,6 +330,7 @@ export default function DocMasterModal({
           file_url_master:  path,
           placeholder_list: placeholders,
           stato:            'attivo',
+          societa_id:       companyId ?? null,
         });
       }
       onSuccess?.();

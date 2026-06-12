@@ -2,8 +2,8 @@
  * src/views/MasterDashboard.jsx
  * ─────────────────────────────────────────────────────────────
  * Vista MASTER HACCP — accessibile solo ad admin/superadmin/sede.
- * Mostra tutte le strutture con il cappello da chef semaforo.
- * Cliccando sul cappello (o sulla card) si apre HaccpFascicoloModal.
+ * Mostra tutte le strutture raggruppate per regione con semaforo HACCP.
+ * Cliccando su una card si apre HaccpFascicoloModal.
  *
  * Props ricevute da route: nessuna (tutto da hook)
  * Query string: ?facility=ID → apre direttamente il fascicolo di quella struttura
@@ -11,20 +11,10 @@
  */
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChefHat, ArrowLeft, Search, Filter, BookOpen } from 'lucide-react';
+import { ChefHat, ArrowLeft, Search, Filter } from 'lucide-react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useHaccpSemafori } from '../hooks/useHaccpData';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
-import CdgKpiPanel          from '../components/CdgKpiPanel';
-import { useCdgData }       from '../hooks/useCdgData';
-
-// Configurazione colori semaforo
-const SEMAFORO_CFG = {
-  verde:  { color: 'text-emerald-500', bg: 'bg-emerald-50',  border: 'border-emerald-200', label: 'In regola',  dot: 'bg-emerald-500' },
-  giallo: { color: 'text-amber-400',   bg: 'bg-amber-50',    border: 'border-amber-200',   label: 'Attenzione', dot: 'bg-amber-400'   },
-  rosso:  { color: 'text-red-500',     bg: 'bg-red-50',      border: 'border-red-200',     label: 'Critico',    dot: 'bg-red-500'     },
-  grigio: { color: 'text-slate-300',   bg: 'bg-slate-50',    border: 'border-slate-200',   label: 'N/A',        dot: 'bg-slate-300'   },
-};
 
 export default function MasterDashboard() {
   const navigate        = useNavigate();
@@ -34,11 +24,11 @@ export default function MasterDashboard() {
   const year = new Date().getFullYear();
   const { data, loading } = useDashboardData(year);
   const { semafori, scadenzario, loading: loadingSem } = useHaccpSemafori();
-  const { data: cdgData } = useCdgData(null, year);
 
-  const [search,          setSearch]          = useState('');
-  const [filterSemaforo,  setFilterSemaforo]  = useState('all');
-  const [filterRegione,   setFilterRegione]   = useState('all');
+  const [search,           setSearch]           = useState('');
+  const [filterSemaforo,   setFilterSemaforo]   = useState('all');
+  const [filterRegione,    setFilterRegione]    = useState('all');
+  const [filterUdo,        setFilterUdo]        = useState('all');
   const [selectedFacility, setSelectedFacility] = useState(null);
 
   // Apri automaticamente il fascicolo se arriva da ?facility=ID
@@ -55,8 +45,8 @@ export default function MasterDashboard() {
       const sc = scadenzario?.[f.id];
       return {
         ...f,
-        haccp_semaforo:    semafori[f.id] ?? (f.haccp_obbligatorio ? 'grigio' : null),
-        manuale_presente:  sc ? !!sc.manuale_scadenza : false,
+        haccp_semaforo:   semafori[f.id] ?? (f.haccp_obbligatorio ? 'grigio' : null),
+        manuale_presente: sc ? !!sc.manuale_scadenza : false,
       };
     });
   }, [data.facilities, semafori, scadenzario]);
@@ -67,19 +57,37 @@ export default function MasterDashboard() {
     return Array.from(set).sort();
   }, [enriched]);
 
+  // UDO disponibili per filtro
+  const udoNames = useMemo(() => {
+    const set = new Set(enriched.map(f => f.udo_name).filter(Boolean));
+    return Array.from(set).sort();
+  }, [enriched]);
+
   // Filtro strutture
   const filtered = useMemo(() => {
     return enriched.filter(f => {
       if (f.is_suspended) return false;
       if (search && !f.name.toLowerCase().includes(search.toLowerCase())) return false;
       if (filterRegione !== 'all' && f.region !== filterRegione) return false;
+      if (filterUdo !== 'all' && f.udo_name !== filterUdo) return false;
       if (filterSemaforo === 'haccp_only' && !f.haccp_obbligatorio) return false;
       if (filterSemaforo !== 'all' && filterSemaforo !== 'haccp_only') {
         if (f.haccp_semaforo !== filterSemaforo) return false;
       }
       return true;
     });
-  }, [enriched, search, filterRegione, filterSemaforo]);
+  }, [enriched, search, filterRegione, filterUdo, filterSemaforo]);
+
+  // Raggruppamento per regione
+  const byRegione = useMemo(() => {
+    const map = {};
+    for (const f of filtered) {
+      const key = f.region || 'Altre';
+      if (!map[key]) map[key] = [];
+      map[key].push(f);
+    }
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+  }, [filtered]);
 
   // Contatori semaforo
   const counts = useMemo(() => {
@@ -124,13 +132,13 @@ export default function MasterDashboard() {
             </div>
           </div>
 
-          {/* KPI semaforo sintetico */}
+          {/* Badge semaforo cliccabili */}
           <div className="flex items-center gap-3">
             {[
-              { key: 'verde',  label: 'In regola',  count: counts.verde,  cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-              { key: 'giallo', label: 'Attenzione', count: counts.giallo, cls: 'bg-amber-50 border-amber-200 text-amber-700'       },
-              { key: 'rosso',  label: 'Critici',    count: counts.rosso,  cls: 'bg-red-50 border-red-200 text-red-700'             },
-              { key: 'grigio', label: 'Non censiti',count: counts.grigio, cls: 'bg-slate-100 border-slate-200 text-slate-500'      },
+              { key: 'verde',  label: 'In regola',   count: counts.verde,  cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+              { key: 'giallo', label: 'Attenzione',  count: counts.giallo, cls: 'bg-amber-50 border-amber-200 text-amber-700'       },
+              { key: 'rosso',  label: 'Critici',     count: counts.rosso,  cls: 'bg-red-50 border-red-200 text-red-700'             },
+              { key: 'grigio', label: 'Non censiti', count: counts.grigio, cls: 'bg-slate-100 border-slate-200 text-slate-500'      },
             ].map(({ key, label, count, cls }) => (
               <button
                 key={key}
@@ -167,6 +175,14 @@ export default function MasterDashboard() {
               {regioni.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
             <select
+              value={filterUdo}
+              onChange={e => setFilterUdo(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-amber-400"
+            >
+              <option value="all">Tutte le UDO</option>
+              {udoNames.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+            <select
               value={filterSemaforo}
               onChange={e => setFilterSemaforo(e.target.value)}
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-amber-400"
@@ -185,34 +201,40 @@ export default function MasterDashboard() {
         </div>
       </header>
 
-      {/* ── Griglia strutture ── */}
-      <main className="px-8 py-8">
+      {/* ── Contenuto ── */}
+      <main className="p-4 space-y-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-32 text-slate-400 font-black uppercase tracking-widest animate-pulse">
             Caricamento strutture HACCP...
           </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
-            {filtered.map(f => (
-              <div key={f.id}>
-                <HaccpCard
-                  f={f}
-                  udos={data.udos}
-                  onClick={() => setSelectedFacility(f)}
-                />
-                <CdgKpiPanel
-                  cdgRecords={cdgData?.cdgByFacility?.[f.id] ?? []}
-                  year={year}
-                  compact={true}
-                />
-              </div>
-            ))}
-            {filtered.length === 0 && (
-              <div className="col-span-full text-center py-20 text-slate-400 font-bold">
-                Nessuna struttura trovata
-              </div>
-            )}
+        ) : byRegione.length === 0 ? (
+          <div className="text-center py-20 text-slate-400 font-bold">
+            Nessuna struttura trovata
           </div>
+        ) : (
+          byRegione.map(([regione, strutture]) => (
+            <div key={regione}>
+              {/* Separatore regione */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-px flex-1 bg-gray-200" />
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest px-2">
+                  {regione} · {strutture.length} strutture
+                </span>
+                <div className="h-px flex-1 bg-gray-200" />
+              </div>
+              {/* Griglia strutture */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {strutture.map(f => (
+                  <HaccpCard
+                    key={f.id}
+                    f={f}
+                    udos={data.udos}
+                    onClick={() => setSelectedFacility(f)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
         )}
       </main>
 
@@ -229,72 +251,56 @@ export default function MasterDashboard() {
 
 // ── HaccpCard ─────────────────────────────────────────────────
 function HaccpCard({ f, udos, onClick }) {
-  const semaforo = f.haccp_semaforo ?? (f.haccp_obbligatorio ? 'grigio' : null);
-  const cfg      = SEMAFORO_CFG[semaforo] ?? SEMAFORO_CFG.grigio;
-  const udoName  = udos?.find(u => u.id === f.udo_id)?.name || '';
-  const haManualeArchiviato = f.manuale_presente;
+  const udoName  = udos?.find(u => u.id === f.udo_id)?.name || f.udo_name || '';
+  const udoColor = f.udo_color || '#6366f1';
+
+  const semaforoConfig = {
+    verde:  { dot: 'bg-green-500',  bg: 'bg-green-50',  border: 'border-green-200',  label: 'Conforme',   text: 'text-green-700'  },
+    giallo: { dot: 'bg-yellow-400', bg: 'bg-yellow-50', border: 'border-yellow-200', label: 'Attenzione', text: 'text-yellow-700' },
+    rosso:  { dot: 'bg-red-500',    bg: 'bg-red-50',    border: 'border-red-200',    label: 'Critico',    text: 'text-red-700'    },
+    grigio: { dot: 'bg-gray-300',   bg: 'bg-gray-50',   border: 'border-gray-200',   label: 'Non attivo', text: 'text-gray-400'   },
+  };
+  const s = semaforoConfig[f.haccp_semaforo] || semaforoConfig.grigio;
 
   return (
     <div
       onClick={f.haccp_obbligatorio ? onClick : undefined}
-      className={`
-        bg-white rounded-xl p-4 shadow-sm border flex flex-col gap-2 relative
-        transition-all duration-200
-        ${f.haccp_obbligatorio
-          ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5'
-          : 'opacity-50 cursor-default'
-        }
-        ${cfg.border}
-      `}
-      style={{ borderTopWidth: '4px', borderTopColor: f.udo_color || '#cbd5e1' }}
+      className={`relative rounded-xl border ${s.border} ${s.bg}
+                  p-3 flex flex-col gap-2 transition-all
+                  ${f.haccp_obbligatorio
+                    ? 'cursor-pointer hover:shadow-md hover:border-opacity-80'
+                    : 'opacity-60 cursor-default'}`}
     >
-      {/* Nome + cappello */}
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-xs font-black text-slate-800 leading-tight line-clamp-2 flex-1">
-          {f.name}
-        </h3>
-        <div className={`shrink-0 p-1.5 rounded-lg ${cfg.bg}`} title={cfg.label}>
-          <ChefHat size={16} className={cfg.color} />
-        </div>
+      {/* Striscia colore UDO */}
+      <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl"
+           style={{ background: udoColor }} />
+
+      {/* UDO + semaforo dot */}
+      <div className="flex items-center justify-between mt-1">
+        <span className="text-[9px] font-bold uppercase tracking-wider truncate"
+              style={{ color: udoColor }}>
+          {udoName}
+        </span>
+        <div className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />
       </div>
 
-      {/* Subtitle */}
-      {udoName && (
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
-          {udoName}
-        </p>
-      )}
-      {f.region && (
-        <p className="text-[10px] text-slate-400 truncate">{f.region}</p>
-      )}
+      {/* Nome struttura */}
+      <p className="text-[11px] font-semibold text-gray-800 leading-tight line-clamp-2 min-h-[28px]">
+        {f.name}
+      </p>
 
-      {/* Badge doppio: semaforo sx | manuale dx */}
-      <div className="flex gap-1.5 mt-auto">
-        {/* Metà sinistra — stato semaforo */}
-        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg flex-1 ${cfg.bg} border ${cfg.border}`}
-          title={cfg.label}>
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
-          <span className={`text-[10px] font-black uppercase tracking-widest truncate ${cfg.color}`}>
-            {f.haccp_obbligatorio ? cfg.label : 'Non HACCP'}
-          </span>
-        </div>
+      {/* Regione + posti letto */}
+      <p className="text-[10px] text-gray-400 truncate">
+        {f.region} · {f.bed_count ? `${f.bed_count} pl` : '—'}
+      </p>
 
-        {/* Metà destra — manuale archiviato */}
-        {f.haccp_obbligatorio && (
-          <div
-            className={`flex items-center gap-1 px-2 py-1 rounded-lg border ${
-              haManualeArchiviato
-                ? 'bg-emerald-50 border-emerald-200'
-                : 'bg-red-50 border-red-200'
-            }`}
-            title={haManualeArchiviato ? 'Manuale prodotto e archiviato' : 'Manuale non ancora prodotto'}
-          >
-            <BookOpen
-              size={12}
-              className={haManualeArchiviato ? 'text-emerald-500' : 'text-red-400'}
-            />
-          </div>
-        )}
+      {/* Footer: stato + manuale */}
+      <div className="flex items-center justify-between gap-1 pt-1 border-t border-black/5">
+        <span className={`text-[9px] font-medium ${s.text}`}>{s.label}</span>
+        {f.manuale_presente
+          ? <span className="text-[9px] text-green-600 font-medium">📋 Manuale</span>
+          : <span className="text-[9px] text-red-400 font-medium">📋 Mancante</span>
+        }
       </div>
     </div>
   );

@@ -26,29 +26,46 @@ import { supabase }       from '../supabaseClient';
 import { getPromptAnalytics } from '../config/aiPrompts';
 
 const metricNames = {
-  soddisfazione_generale: 'Soddisfazione Globale',
-  info_cura: 'Chiarezza Progetto di Cura',
-  ascolto: "Qualità dell'Ascolto",
-  contatto_struttura: 'Reperibilità Struttura',
-  relazione_equipe: "Relazione con l'Equipe",
-  voto_assistenza: 'Assistenza Personale',
-  voto_alloggio: 'Comfort Alloggio',
-  soddisfazione_pulizia: 'Igiene e Pulizia',
-  voto_animazione: 'Attività Ricreative',
-  cura_bisogni: 'Attenzione ai Bisogni',
-  nps_consiglio: 'Propensione Raccomandazione (NPS)',
-  info_prenotazione: 'Info in Prenotazione',
-  info_ingresso: 'Accoglienza Ingresso',
-  voto_bagno: 'Servizi Igienici',
-  voto_spazio_esterno: 'Spazi Esterni',
-  voto_pulizie: 'Personale Pulizie',
-  voto_ristorazione_qualita: 'Qualità Ristorazione',
-  soddisfazione_tempo: "Tempo Dedicato all'Ospite",
-  appagamento_vita: 'Appagamento Quotidiano',
-  assistenza_diurna: 'Assistenza Diurna',
-  assistenza_notturna: 'Assistenza Notturna',
-  rispetto_dignita: 'Rispetto della Dignità',
-  coinvolgimento_cure: 'Coinvolgimento nelle Cure',
+  // ── Senior Living / generici ─────────────────────────────
+  soddisfazione_generale:       'Soddisfazione Globale',
+  nps_consiglio:                'Propensione Raccomandazione (NPS)',
+  voto_assistenza:              'Assistenza Personale',
+  voto_animazione:              'Attività Ricreative',
+  voto_alloggio:                'Comfort Alloggio',
+  voto_bagno:                   'Servizi Igienici',
+  voto_spazio_esterno:          'Spazi Esterni',
+  voto_pulizie:                 'Personale Pulizie',
+  voto_ristorazione_qualita:    'Qualità Ristorazione',
+  soddisfazione_pulizia:        'Igiene e Pulizia',
+  soddisfazione_tempo:          "Tempo Dedicato all'Ospite",
+  info_prenotazione:            'Informazioni Prenotazione',
+  info_ingresso:                'Accoglienza Ingresso',
+  // ── RSA ──────────────────────────────────────────────────
+  assistenza_medica:            'Assistenza Medica',
+  assistenza_notturna:          'Assistenza Infermieristica',
+  rispetto_dignita:             'Riservatezza e Dignità',
+  soddisfazione_servizi:        'Servizi Offerti',
+  fisioterapia:                 'Fisioterapia',
+  // ── Disabilità ───────────────────────────────────────────
+  ascolto:                      'Modo in cui viene Ascoltato',
+  relazione_equipe:             "Relazione con l'Equipe",
+  contatto_struttura:           'Facilità di Contatto',
+  info_cura:                    'Informazioni sul Progetto di Cura',
+  cura_bisogni:                 'Bisogni Presi in Considerazione',
+  // ── Psichiatria ──────────────────────────────────────────
+  appagamento_vita:             'Appagamento Vita Quotidiana',
+  coinvolgimento_cure:          'Coinvolgimento nelle Cure',
+  assistenza_diurna:            'Assistenza Diurna',
+  voto_ristorazione:            'Servizio Ristorazione',
+  // ── Personale / Staff ────────────────────────────────────
+  sicurezza_ambiente:           'Ambiente di Lavoro Sicuro',
+  riconoscimento:               'Riconoscimento del Lavoro',
+  supporto_leadership:          'Supporto dal Responsabile',
+  etica_assistenza:             'Trattamento degli Ospiti',
+  chiarezza_ruolo:              'Chiarezza di Ruolo',
+  qualita_tecnica:              'Qualità delle Cure agli Ospiti',
+  reputazione_lavoro:           'Consiglio come Posto di Lavoro',
+  reputazione_servizio:         'Consiglio per Assistenza',
 };
 
 // KPI che contiene il numero di dipendenti totali (fonte per staff_count operatori)
@@ -91,6 +108,17 @@ export default function AnalyticsModal({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiReport, setAiReport]             = useState('');
   const [reportTarget, setReportTarget]     = useState(null);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState(null);
+
+  useEffect(() => {
+    if (!facility?.company_id) return;
+    supabase
+      .from('companies')
+      .select('logo_url')
+      .eq('id', facility.company_id)
+      .single()
+      .then(({ data }) => setCompanyLogoUrl(data?.logo_url ?? null));
+  }, [facility?.company_id]);
 
 
   const targetSurveys = surveys.filter(s =>
@@ -132,8 +160,17 @@ export default function AnalyticsModal({
   // ── Chart data ───────────────────────────────────────────────
   const chartData = useMemo(() => {
     if (!latestSurvey?.responses_json) return [];
+
+    const parseRows = (raw) => {
+      try {
+        const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(arr) ? arr : [];
+      } catch { return []; }
+    };
+
+    const rows = parseRows(latestSurvey.responses_json);
     const facilityAgg = {};
-    latestSurvey.responses_json.forEach(row => {
+    rows.forEach(row => {
       Object.keys(row).forEach(key => {
         if (!facilityAgg[key]) facilityAgg[key] = { sum: 0, count: 0 };
         facilityAgg[key].sum   += row[key];
@@ -159,7 +196,7 @@ export default function AnalyticsModal({
       });
 
       Object.values(latestPerTarget).forEach(sv => {
-        sv.responses_json?.forEach(row => {
+        parseRows(sv.responses_json).forEach(row => {
           Object.keys(row).forEach(key => {
             if (!udoAgg[key]) udoAgg[key] = { sum: 0, count: 0 };
             udoAgg[key].sum   += row[key];
@@ -264,6 +301,7 @@ export default function AnalyticsModal({
     await exportPDF({
       sections: ['pdf-section-text', 'pdf-section-charts'],
       filename: `Relazione_${reportTarget === 'ospiti' ? 'Ospiti' : 'Direzione'}_${facility.name}_${latestSurvey.calendar_id}.pdf`,
+      logoSrc:  companyLogoUrl,
       onDone:   () => setTimeout(onClose, 500),
     });
   };

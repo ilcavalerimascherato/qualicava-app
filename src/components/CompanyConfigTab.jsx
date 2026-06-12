@@ -4,11 +4,11 @@ import { Save, Plus, Loader2, X, Upload, Building2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 const INPUT = 'w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 outline-none text-slate-700';
-const LABEL = 'block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1';
+const LABEL = 'block text-xs font-black text-slate-400 uppercase tracking-wider mb-1';
 
 const EMPTY_CO = {
   name: '', piva: '', codice_fiscale: '', sede_legale: '',
-  pec: '', telefono: '', referente: '', logo_key: '',
+  pec: '', telefono: '', referente: '',
 };
 
 export default function CompanyConfigTab() {
@@ -39,7 +39,6 @@ export default function CompanyConfigTab() {
       pec:            co.pec            || '',
       telefono:       co.telefono       || '',
       referente:      co.referente      || '',
-      logo_key:       co.logo_key       || '',
     });
     setLogoFile(null);
     setLogoPreview(null);
@@ -81,7 +80,6 @@ export default function CompanyConfigTab() {
         pec:            form.pec.trim()            || null,
         telefono:       form.telefono.trim()       || null,
         referente:      form.referente.trim()      || null,
-        logo_key:       form.logo_key.trim()       || null,
       };
 
       let savedId;
@@ -234,21 +232,6 @@ export default function CompanyConfigTab() {
                 className="hidden"
                 onChange={e => handleLogoFile(e.target.files[0])}
               />
-            </div>
-
-            {/* Chiave logo locale */}
-            <div>
-              <label className={LABEL}>Chiave logo (nome file in public/logos/)</label>
-              <input
-                type="text"
-                value={form.logo_key}
-                onChange={set('logo_key')}
-                className={INPUT}
-                placeholder="es. avvittuone.png"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Nome del file immagine presente in <code>public/logos/</code>
-              </p>
             </div>
 
             <button

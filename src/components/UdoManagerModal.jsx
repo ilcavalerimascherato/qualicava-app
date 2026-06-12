@@ -46,7 +46,7 @@ export default function UdoManagerModal({ isOpen, onClose, udos, onSave, onDelet
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
 
           {tab === 'udo' && (
             <div className="p-6 space-y-6 overflow-y-auto h-full">
@@ -113,7 +113,7 @@ export default function UdoManagerModal({ isOpen, onClose, udos, onSave, onDelet
           )}
 
           {tab === 'societa' && (
-            <div className="h-full overflow-hidden">
+            <div className="h-full overflow-y-auto">
               <CompanyConfigTab />
             </div>
           )}

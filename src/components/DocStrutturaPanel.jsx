@@ -173,13 +173,13 @@ export default function DocStrutturaPanel() {
     setUploadingLogo(true);
     try {
       const ext  = file.name.split('.').pop();
-      const path = `logos/${companyId}.${ext}`;
+      const path = `${companyId}.${ext}`;
       const { error: uploadErr } = await supabase.storage
-        .from('company-assets')
+        .from('company-logos')
         .upload(path, file, { upsert: true });
       if (uploadErr) throw uploadErr;
       const { data: { publicUrl } } = supabase.storage
-        .from('company-assets')
+        .from('company-logos')
         .getPublicUrl(path);
       setComField('logo_url', publicUrl);
     } catch (e) {

@@ -122,14 +122,14 @@ function paginateCanvas(pdf, canvas, logoDataUrl, pxPerMm, isFirstSection) {
  * @param {string}   [opts.elementId]   id singolo elemento (modalità semplice)
  * @param {string[]} [opts.sections]    array di id (modalità multi-sezione)
  * @param {string}   opts.filename      nome file .pdf
- * @param {string}   [opts.logoSrc]     path logo da /public (default: /intestazione.png)
+ * @param {string}   [opts.logoSrc]     URL logo (es. company.logo_url dal bucket); fallback: /intestazione.jpeg
  * @param {function} [opts.onDone]      callback al termine
  */
 export async function exportPDF({
   elementId,
   sections,
   filename,
-  logoSrc = 'intestazione.jpeg',
+  logoSrc = null,
   onDone,
 }) {
   // Normalizza: supporta sia elementId singolo che array sections
@@ -145,8 +145,9 @@ export async function exportPDF({
     return;
   }
 
-  // ── 1. Carica logo ────────────────────────────────────────────
-  const logoDataUrl = await loadAsJpeg(logoSrc);
+  // ── 1. Carica logo — usa company.logo_url se fornito, fallback a intestazione.jpeg ──
+  const resolvedLogo = logoSrc || '/intestazione.jpeg';
+  const logoDataUrl = await loadAsJpeg(resolvedLogo);
 
   // ── 2. Mostra tutti gli elementi e aspetta il render ──────────
   elements.forEach(el => { el.style.display = 'block'; });
