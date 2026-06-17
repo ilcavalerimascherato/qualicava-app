@@ -5,6 +5,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { exportPDF } from '../utils/pdfExport';
+import { buildPrompt } from '../config/aiPrompts';
 import {
   ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -36,6 +37,18 @@ const SCALE_NPS_TEXT = [
   { label: 'Gliene parlo',     color: '#EF9F27', score: 0  },
   { label: 'Probabilmente no', color: '#E24B4A', score: -1 },
   { label: 'No',               color: '#A32D2D', score: -2 },
+];
+
+// ORDINE CANONICO domande — Restituzione Clienti
+const QUESTION_ORDER_CLIENT = [
+  'attivita', 'animazione', 'laboratori', 'uscite_territoriali',
+  'alloggio', 'bagno', 'spazio_eterno', 'manutenzione',
+  'personale_assistenza', 'personale_pulizie', 'soddisfazione_pulizia', 'amministrazione',
+  'orario_pasti', 'quantita_cibo', 'varieta_cibo', 'qualita_cibo',
+  'servizio', 'apparecchiatura_tavolo', 'soddisfazione_personale',
+  'soddisfazione_complessiva',
+  'nps', 'consiglio_struttura',
+  'bracciale', 'sos',
 ];
 
 function detectScale(values) {
@@ -249,6 +262,30 @@ function StackedCard({ domande, rawData, nRisposte }) {
   );
 }
 
+// ── Bar statica per PDF (no Recharts) ───────────────────────
+function SimplePdfBar({ data }) {
+  const max = Math.max(...data.map(d => d.count), 1);
+  return (
+    <div>
+      {data.map(d => (
+        <div key={d.label} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ width: 160, fontSize: 11, color: '#374151', flexShrink: 0 }}>{d.label}</span>
+          <div style={{ flex: 1, background: '#f3f4f6', borderRadius: 4, height: 14, marginRight: 8 }}>
+            <div style={{
+              width: `${(d.count / max) * 100}%`,
+              background: d.color ?? '#6b7280',
+              height: '100%', borderRadius: 4,
+            }} />
+          </div>
+          <span style={{ fontSize: 11, color: '#374151', width: 30, textAlign: 'right' }}>
+            {d.count}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Componente principale ────────────────────────────────────
 export default function RestituzioneModal({
   isOpen, onClose, facility, surveys, type, year, month,
@@ -262,6 +299,8 @@ export default function RestituzioneModal({
   const [showCharts,     setShowCharts]     = useState(false);
   const [chartTypes,     setChartTypes]     = useState({});
   const [companyLogoUrl, setCompanyLogoUrl] = useState(null);
+  const [aperturaText,    setAperturaText]    = useState('');
+  const [aperturaLoading, setAperturaLoading] = useState(false);
 
   const survey = useMemo(
     () => surveys?.find(s => s.type === type) || null,
@@ -296,6 +335,7 @@ export default function RestituzioneModal({
     setShowCharts(false);
     setSelected({});
     setChartTypes({});
+    setAperturaText('');
   }, [isOpen, year, month]);
 
   useEffect(() => {
@@ -307,6 +347,9 @@ export default function RestituzioneModal({
       'sesso', 'anno_nascita', 'quanto_tempo', 'soggiorno',
       'secondo_soggiorno', 'tempo_indeterminato', 'note', 'Note',
       'eta', 'professione', 'tempo_lavoro', 'formazione_12mesi',
+      // Sì/No tecnologici — non valutazioni
+      'bracciale', 'fascia_letto', 'domotica', 'sensori_ambientali',
+      'presenza_animale', 'pet_friendly', 'sos',
     ];
 
     if (facility?.company_id) {
@@ -355,11 +398,81 @@ export default function RestituzioneModal({
   const selectedDomande = domande.filter(d => selected[d.col]);
   const nRisposte = rawData.length;
 
+  const sortedSelected = [...selectedDomande].sort((a, b) => {
+    const ia = QUESTION_ORDER_CLIENT.indexOf(a.col);
+    const ib = QUESTION_ORDER_CLIENT.indexOf(b.col);
+    if (ia === -1 && ib === -1) return 0;
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+
+  const MONTH_NAMES = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                       'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const periodoStr = month ? `${MONTH_NAMES[month - 1]} ${year}` : `${year ?? ''}`;
+
   const toggleAll = () => {
     const allSelected = domande.every(d => selected[d.col]);
     const next = {};
     domande.forEach(d => { next[d.col] = !allSelected; });
     setSelected(next);
+  };
+
+  const generateApertura = async () => {
+    setAperturaLoading(true);
+    try {
+      const SCORE_MAP = {
+        'Molto soddisfatto/e': 5, 'Soddisfatto/e': 4, 'Sufficiente': 3,
+        'Insufficiente/Poco': 2, 'Insoddisfatto/e': 1,
+      };
+      const scores = selectedDomande
+        .filter(d => d.scale === 'standard')
+        .map(d => {
+          const dist = calcDistribuzione(rawData, d.col, SCALE_STANDARD);
+          const tot = dist.reduce((a, b) => a + b.count, 0);
+          if (tot === 0) return null;
+          const sum = dist.reduce((a, b) => a + (SCORE_MAP[b.label] ?? 3) * b.count, 0);
+          return { label: d.label, score: sum / tot };
+        })
+        .filter(Boolean);
+
+      const sorted = [...scores].sort((a, b) => b.score - a.score);
+      const topForza = sorted[0]?.label ?? 'la qualità dei nostri servizi';
+      const areaAttenzione = sorted[sorted.length - 1]?.label ?? 'alcune aree di miglioramento';
+      const npsScore = survey?.summary_stats?.nps_score ?? null;
+
+      const promptId = type === 'operator'
+        ? 'restituzioneAperturaOperatori'
+        : 'restituzioneAperturaClienti';
+      const prompt = buildPrompt(promptId, {
+        facilityName: facility?.nome_struttura ?? facility?.name ?? '',
+        periodo: periodoStr,
+        npsScore,
+        topForza,
+        areaAttenzione,
+      });
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 300,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const data = await response.json();
+      setAperturaText(data.content?.[0]?.text ?? '');
+    } catch (err) {
+      console.error('Errore generazione apertura:', err);
+    } finally {
+      setAperturaLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -510,8 +623,8 @@ export default function RestituzioneModal({
                   <button
                     onClick={async () => {
                       await exportPDF({
-                        elementId: 'restituzione-grafici',
-                        filename: `Restituzione_${type === 'client' ? 'Clienti' : 'Staff'}_${facility?.name}_${dateStart}_${dateEnd}.pdf`,
+                        elementId: 'restituzione-pdf-content',
+                        filename: `Restituzione_${type === 'operator' ? 'Staff' : 'Clienti'}_${(facility?.nome_struttura ?? facility?.name ?? '').replace(/ /g, '_')}_${year}.pdf`,
                         logoSrc: companyLogoUrl || undefined,
                       });
                     }}
@@ -522,10 +635,34 @@ export default function RestituzioneModal({
                   </button>
                 </div>
 
+                {/* ── APERTURA DIRETTORE ── */}
+                <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      {type === 'operator' ? 'Messaggio agli Operatori' : 'Messaggio agli Ospiti'}
+                    </span>
+                    <button
+                      onClick={generateApertura}
+                      disabled={aperturaLoading}
+                      className="text-[11px] px-3 py-1 rounded-lg bg-indigo-600 text-white
+                                 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                    >
+                      {aperturaLoading ? '⏳ Generazione…' : aperturaText ? '🔄 Rigenera' : '✨ Genera testo apertura'}
+                    </button>
+                  </div>
+                  {aperturaText ? (
+                    <p className="text-sm text-gray-700 leading-relaxed italic">{aperturaText}</p>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">
+                      Genera un breve messaggio del direttore da inserire in apertura del PDF.
+                    </p>
+                  )}
+                </div>
+
                 {/* Griglia grafici */}
                 {(() => {
-                  const partDomande  = selectedDomande.filter(d => d.scale === 'partecipazione');
-                  const altreDomande = selectedDomande.filter(d => d.scale !== 'partecipazione');
+                  const partDomande  = sortedSelected.filter(d => d.scale === 'partecipazione');
+                  const altreDomande = sortedSelected.filter(d => d.scale !== 'partecipazione');
                   const showStacked  = partDomande.length >= 3;
 
                   return (
@@ -587,7 +724,7 @@ export default function RestituzioneModal({
                         );
                       })}
 
-                      {/* Domande partecipazione individuali (solo se < 3) */}
+                      {/* Domande partecipazione individuali (solo se < 3) — già in partDomande da sortedSelected */}
                       {!showStacked && partDomande.map(d => {
                         const dist = calcDistribuzione(rawData, d.col, SCALE_PARTECIPAZIONE);
                         return (
@@ -603,6 +740,45 @@ export default function RestituzioneModal({
             )}
           </div>
         </div>
+      </div>
+
+      {/* ── Hidden PDF template — catturato da exportPDF ── */}
+      <div
+        id="restituzione-pdf-content"
+        style={{ display: 'none', padding: '20px', fontFamily: 'sans-serif', background: '#fff' }}
+      >
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e3a5f', marginBottom: 8 }}>
+          {type === 'operator'
+            ? 'Restituzione Staff — Risultati Questionario'
+            : 'Restituzione Ospiti — Risultati Questionario'}
+        </h2>
+        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 20 }}>
+          {facility?.nome_struttura ?? facility?.name} · {periodoStr} · {sortedSelected.length} domande · {nRisposte} risposte
+        </p>
+
+        {aperturaText && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 24 }}>
+            <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, fontStyle: 'italic' }}>
+              {aperturaText}
+            </p>
+          </div>
+        )}
+
+        {sortedSelected.filter(d => d.scale !== 'partecipazione').map(d => {
+          const scale =
+            d.scale === 'nps_text' ? SCALE_NPS_TEXT :
+            d.scale === 'sinon'    ? SCALE_SINON :
+                                     SCALE_STANDARD;
+          const dist = calcDistribuzione(rawData, d.col, scale);
+          return (
+            <div key={d.col} style={{ marginBottom: 20, pageBreakInside: 'avoid' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', marginBottom: 8 }}>
+                {d.label}
+              </h3>
+              <SimplePdfBar data={dist} />
+            </div>
+          );
+        })}
       </div>
     </div>
   );

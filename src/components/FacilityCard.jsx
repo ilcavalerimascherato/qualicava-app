@@ -23,6 +23,18 @@ const SCORE_COLOR = {
   high:   'text-red-600',
 };
 
+const UDO_COLORS = {
+  RSA: { bg: 'bg-blue-100',   text: 'text-blue-700'   },
+  CDI: { bg: 'bg-violet-100', text: 'text-violet-700' },
+  RSD: { bg: 'bg-pink-100',   text: 'text-pink-700'   },
+  SL:  { bg: 'bg-teal-100',   text: 'text-teal-700'   },
+  PSI: { bg: 'bg-orange-100', text: 'text-orange-700' },
+  CDD: { bg: 'bg-cyan-100',   text: 'text-cyan-700'   },
+  DIS: { bg: 'bg-rose-100',   text: 'text-rose-700'   },
+  NPI: { bg: 'bg-lime-100',   text: 'text-lime-700'   },
+};
+const DEFAULT_UDO = { bg: 'bg-slate-100', text: 'text-slate-600' };
+
 const FacilityCard = memo(function FacilityCard({
   f,
   onEdit,
@@ -108,7 +120,11 @@ const FacilityCard = memo(function FacilityCard({
       <div className="px-3 pt-2.5 pb-0">
         <div className="flex items-start justify-between gap-1">
           <div className="min-w-0 pr-16">
-            <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">
+            <span className={`inline-block text-[10px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded ${
+              (UDO_COLORS[f.udo_name] ?? DEFAULT_UDO).bg
+            } ${
+              (UDO_COLORS[f.udo_name] ?? DEFAULT_UDO).text
+            }`}>
               {f.udo_name}
             </span>
             <h3 className="text-sm font-semibold text-slate-900 leading-tight truncate mt-0.5">

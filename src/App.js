@@ -77,7 +77,14 @@ export default function App() {
       return { ...f, riskScore: score, riskLevel: level };
     });
     const stats = calculateDashboardStats(withRisk, 'all');
-    return { list: withRisk, ...stats };
+    return {
+      list: withRisk,
+      ...stats,
+      countLow:       withRisk.filter(f => !f.is_suspended && f.riskLevel === 'low').length,
+      countMedium:    withRisk.filter(f => !f.is_suspended && f.riskLevel === 'medium').length,
+      countHigh:      withRisk.filter(f => !f.is_suspended && f.riskLevel === 'high').length,
+      countSuspended: withRisk.filter(f => f.is_suspended).length,
+    };
   }, [data.facilities, data.surveys, data.kpiRecords, data.udos, year, haccpSemafori]);
 
   const allFacilityIds = useMemo(
@@ -208,13 +215,10 @@ export default function App() {
       {/* ── AppHeader ── */}
       <AppHeader
         activePage="dashboard"
-        facilities={processedData.list}
         badgeCounts={badgeTotals}
         user={profile}
         onSignOut={signOut}
         onNavigate={handleNavigate}
-        onSemaforoFilter={setSemaforoFilter}
-        semaforoFilter={semaforoFilter}
       />
 
       {/* ── Context bar + Toolbar (unica riga) ── */}
@@ -328,7 +332,7 @@ export default function App() {
 
       {/* ── KPI Strip ── */}
       {kpiStripOpen ? (
-        <div className="flex items-center gap-0 px-5 py-1.5 bg-slate-50 border-b border-slate-200 text-sm flex-wrap">
+        <div className="flex items-center px-5 py-1.5 bg-slate-50 border-b border-slate-200 text-xs flex-nowrap">
           <div className="flex items-center gap-2 pr-4 mr-4 border-r border-slate-200">
             <span className="text-slate-400">Posti letto attivi</span>
             <span className="font-bold text-slate-800">{processedData.totalBeds}</span>
@@ -379,9 +383,58 @@ export default function App() {
             <span className="text-slate-400">NC aperte</span>
             <span className="font-bold text-red-600 tabular-nums">{badgeTotals.nc}</span>
           </div>
+
+          {/* SEMAFORI — destra */}
+          <div className="flex-1 flex items-center justify-end gap-2 mr-3">
+            <button
+              onClick={() => setSemaforoFilter(prev => prev === 'low' ? null : 'low')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                semaforoFilter === 'low'
+                  ? 'bg-emerald-200 text-emerald-800 ring-1 ring-emerald-400'
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+              {processedData.countLow} ok
+            </button>
+            <button
+              onClick={() => setSemaforoFilter(prev => prev === 'medium' ? null : 'medium')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                semaforoFilter === 'medium'
+                  ? 'bg-amber-200 text-amber-800 ring-1 ring-amber-400'
+                  : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+              {processedData.countMedium} att.
+            </button>
+            <button
+              onClick={() => setSemaforoFilter(prev => prev === 'high' ? null : 'high')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                semaforoFilter === 'high'
+                  ? 'bg-red-200 text-red-800 ring-1 ring-red-400'
+                  : 'bg-red-50 text-red-700 hover:bg-red-100'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+              {processedData.countHigh} critici
+            </button>
+            <button
+              onClick={() => setSemaforoFilter(prev => prev === 'suspended' ? null : 'suspended')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                semaforoFilter === 'suspended'
+                  ? 'bg-slate-200 text-slate-700 ring-1 ring-slate-400'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-slate-400 flex-shrink-0" />
+              {processedData.countSuspended} sosp.
+            </button>
+          </div>
+
           <button
             onClick={() => setKpiStripOpen(false)}
-            className="ml-auto text-slate-400 flex items-center gap-1 text-[10px] hover:text-slate-600"
+            className="text-slate-400 flex items-center gap-1 text-[10px] hover:text-slate-600 flex-shrink-0"
           >
             <ChevronUp size={10} /> comprimi
           </button>

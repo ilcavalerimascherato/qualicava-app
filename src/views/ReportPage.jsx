@@ -3,16 +3,19 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { FileText, Trophy, BarChart2, TrendingUp, Building2, Search } from 'lucide-react';
-import { useAuth }          from '../contexts/AuthContext';
-import { useDashboardData } from '../hooks/useDashboardData';
-import { useBadgeCounts }   from '../hooks/useBadgeCounts';
-import AppHeader            from '../components/AppHeader';
-import GlobalReportModal    from '../components/GlobalReportModal';
-import RankingModal         from '../components/RankingModal';
-import KpiChartsModal       from '../components/KpiChartsModal';
-import KpiLaserModal        from '../components/KpiLaserModal';
-import KpiXrayModal         from '../components/KpiXrayModal';
-import KpiAnalisiComparativa from '../components/KpiAnalisiComparativa';
+import { useAuth }                from '../contexts/AuthContext';
+import { useDashboardData }      from '../hooks/useDashboardData';
+import { useBadgeCounts }        from '../hooks/useBadgeCounts';
+import { enrichFacilitiesData }  from '../utils/statusCalculator';
+import { calcFacilityRiskScore } from '../utils/riskScoreEngine';
+import AppHeader                 from '../components/AppHeader';
+import AiBriefing                from '../components/AiBriefing';
+import GlobalReportModal         from '../components/GlobalReportModal';
+import RankingModal              from '../components/RankingModal';
+import KpiChartsModal            from '../components/KpiChartsModal';
+import KpiLaserModal             from '../components/KpiLaserModal';
+import KpiXrayModal              from '../components/KpiXrayModal';
+import KpiAnalisiComparativa     from '../components/KpiAnalisiComparativa';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -67,6 +70,20 @@ export default function ReportPage() {
     [data.facilities],
   );
 
+  const enrichedFacilities = useMemo(() => {
+    const enriched = enrichFacilitiesData(
+      data.facilities ?? [],
+      data.surveys    ?? [],
+      data.kpiRecords ?? [],
+      year,
+      data.udos       ?? [],
+    );
+    return enriched.map(f => {
+      const risk = calcFacilityRiskScore(f, data.kpiRecords ?? []);
+      return { ...f, riskScore: risk, riskLevel: risk.level };
+    });
+  }, [data.facilities, data.surveys, data.kpiRecords, data.udos, year]);
+
   const handleNavigate = (page) => {
     const routes = {
       dashboard:    '/admin',
@@ -87,13 +104,10 @@ export default function ReportPage() {
 
       <AppHeader
         activePage="report"
-        facilities={headerFacilities}
         badgeCounts={badgeTotals}
         user={profile}
         onSignOut={signOut}
         onNavigate={handleNavigate}
-        onSemaforoFilter={() => {}}
-        semaforoFilter={null}
       />
 
       {/* ── Context bar ── */}
@@ -122,6 +136,12 @@ export default function ReportPage() {
 
       {/* ── Body ── */}
       <main className="px-6 py-4 max-w-3xl">
+
+        <AiBriefing
+          facilities={enrichedFacilities}
+          kpiRecords={data.kpiRecords ?? []}
+        />
+
         <section className="mb-6">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
             Reportistica di gruppo

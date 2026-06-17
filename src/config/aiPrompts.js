@@ -237,6 +237,52 @@ Usa ESATTAMENTE questi titoli in maiuscolo:
 `.trim(),
   },
 
+  // ── 8. Apertura Direttore → Ospiti (Restituzione PDF) ────────
+  restituzioneAperturaClienti: {
+    required: ['facilityName', 'periodo', 'topForza', 'areaAttenzione'],
+    build: ({ facilityName, periodo, npsScore, topForza, areaAttenzione }) => `
+Sei il Direttore della struttura "${facilityName}".
+Scrivi un breve messaggio di apertura per il PDF di restituzione risultati
+del questionario di soddisfazione, rivolto agli OSPITI E ALLE FAMIGLIE.
+
+PERIODO: ${periodo}
+NPS Score: ${npsScore !== null && npsScore !== undefined ? npsScore : 'non rilevato'}
+Punto di forza principale: ${topForza}
+Area su cui ci concentriamo: ${areaAttenzione}
+
+REGOLE TASSATIVE:
+- Lunghezza MASSIMA: 120 parole.
+- Tono: caldo, diretto, autentico. Come una lettera breve.
+- Apri con "Gentili ospiti e care famiglie,"
+- Ringrazia per la partecipazione e cita il numero del periodo in modo naturale.
+- Tocca il punto di forza e l'area di attenzione in modo GENERICO (no numeri grezzi).
+- Chiudi con una frase di impegno verso il futuro.
+- NON usare titoli o sezioni — testo continuo.
+`.trim(),
+  },
+
+  // ── 9. Apertura Direttore → Operatori (Restituzione PDF) ─────
+  restituzioneAperturaOperatori: {
+    required: ['facilityName', 'periodo', 'topForza', 'areaAttenzione'],
+    build: ({ facilityName, periodo, topForza, areaAttenzione }) => `
+Sei il Direttore della struttura "${facilityName}".
+Scrivi un breve messaggio di apertura per il PDF di restituzione risultati
+del questionario di clima interno, rivolto agli OPERATORI E AL PERSONALE.
+
+PERIODO: ${periodo}
+Punto di forza principale: ${topForza}
+Area su cui ci concentriamo: ${areaAttenzione}
+
+REGOLE TASSATIVE:
+- Lunghezza MASSIMA: 100 parole.
+- Tono: motivante, squadra, costruttivo.
+- Apri con "Cari colleghi,"
+- Riconosci il contributo del team.
+- Tocca il punto di forza e l'area di crescita in modo propositivo (no numeri grezzi).
+- Chiudi con una frase orientata al prossimo passo insieme.
+- NON usare titoli o sezioni — testo continuo.
+`.trim(),
+  },
 
 };
 
