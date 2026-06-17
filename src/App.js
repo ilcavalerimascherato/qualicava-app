@@ -415,12 +415,15 @@ export default function App() {
                   <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Strutture sospese</span>
                   <span className="text-[10px] text-amber-500">({facilitiesByRegion.suspended.length})</span>
                 </div>
-                <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 ${gridCols} gap-4`}>
+                <div className={`grid gap-3 ${
+                  gridCols === 'lg:grid-cols-4' ? 'grid-cols-4' :
+                  gridCols === 'lg:grid-cols-6' ? 'grid-cols-5' :
+                  'grid-cols-6'
+                }`}>
                   {facilitiesByRegion.suspended.map(f => (
                     <div key={f.id} className="opacity-60">
                       <FacilityCard
                         f={f}
-                        gridCols={gridCols}
                         onEdit={() => {
                           const fresh = data.facilities.find(x => x.id === f.id) || f;
                           setSelectedFacility(fresh);
@@ -455,12 +458,15 @@ export default function App() {
                     {rGiallo > 0 && <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-1.5 py-0.5 leading-none">{rGiallo} att.</span>}
                     {rRosso  > 0 && <span className="text-[9px] bg-red-50 text-red-600 border border-red-200 rounded-full px-1.5 py-0.5 leading-none">{rRosso} crit.</span>}
                   </div>
-                  <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 ${gridCols} gap-4`}>
+                  <div className={`grid gap-3 ${
+                    gridCols === 'lg:grid-cols-4' ? 'grid-cols-4' :
+                    gridCols === 'lg:grid-cols-6' ? 'grid-cols-5' :
+                    'grid-cols-6'
+                  }`}>
                     {facs.map(f => (
                       <FacilityCard
                         key={f.id}
                         f={f}
-                        gridCols={gridCols}
                         onEdit={() => {
                           const fresh = data.facilities.find(x => x.id === f.id) || f;
                           setSelectedFacility(fresh);

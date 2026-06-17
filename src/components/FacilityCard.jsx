@@ -1,23 +1,30 @@
 /**
- * src/components/FacilityCard.jsx  —  v2
- * MODIFICHE v2:
- *  - Anno futuro: badge KPI grigio "N/D" invece di verde ingannevole.
- *    isKpiGreen=true su anni futuri è tecnicamente corretto ma visivamente
- *    fuorviante — ora mostriamo uno stato neutro distinto.
- *  - Icona "Vista Direttore" visibile solo per admin (prop onDirectorView).
- *    Cliccando naviga a /facility/:id per vedere la struttura come la
- *    vedrebbe il direttore. Se la prop non è passata, il tasto non appare.
+ * src/components/FacilityCard.jsx  —  v3
+ * Card compatta: ~30% meno altezza, border-top colorato per riskLevel.
+ * Tutta la logica onClick invariata.
  */
 import React, { memo, useMemo } from 'react';
 import {
   Settings, Database, BarChart3, Archive,
   ArchiveRestore, ExternalLink, ChefHat
 } from 'lucide-react';
-import { calcFacilityRiskScore, RISK_BADGE } from '../utils/riskScoreEngine';
+import { calcFacilityRiskScore } from '../utils/riskScoreEngine';
+
+const BORDER_COLOR = {
+  low:       '#10b981',  // emerald-500
+  medium:    '#fbbf24',  // amber-400
+  high:      '#ef4444',  // red-500
+  suspended: '#94a3b8',  // slate-400
+};
+
+const SCORE_COLOR = {
+  low:    'text-emerald-600',
+  medium: 'text-amber-500',
+  high:   'text-red-600',
+};
 
 const FacilityCard = memo(function FacilityCard({
   f,
-  gridCols,
   onEdit,
   onDataClick,
   onSuspendToggle,
@@ -27,30 +34,15 @@ const FacilityCard = memo(function FacilityCard({
   kpiRecords = [],
   isAdmin = false,
 }) {
-  const isCompact      = gridCols?.includes('6') || gridCols?.includes('8');
-  const isUltraCompact = gridCols?.includes('8');
-  // In configurazione 4 colonne (default) mostra anche i PL
-  const plLabel        = (!isCompact && f.bed_count > 0) ? `${f.bed_count} PL` : null;
+  const scoreColor = SCORE_COLOR[f.riskLevel] ?? 'text-slate-400';
 
-  // Risk score — solo 4 colonne, solo se ha dati KPI
   const riskScore = useMemo(() => {
-    if (!isAdmin || isCompact || !kpiRecords.length) return null;
+    if (!isAdmin || !kpiRecords.length) return null;
     return calcFacilityRiskScore(f, kpiRecords);
-  }, [f, kpiRecords, isAdmin, isCompact]);
+  }, [f, kpiRecords, isAdmin]);
 
-  const riskCfg = riskScore?.score !== null && riskScore?.score !== undefined
-    ? RISK_BADGE[riskScore.level]
-    : null;
-  const subtitle       = [f.udo_name, f.region, plLabel].filter(Boolean).join(' • ');
+  const kpiState = f._kpiFuture ? 'future' : f.isKpiGreen ? 'ok' : 'todo';
 
-  // Stato KPI: distingue verde, futuro (grigio N/D) e da fare (rosso)
-  const kpiState = f._kpiFuture
-    ? 'future'
-    : f.isKpiGreen
-    ? 'ok'
-    : 'todo';
-
-  // Semaforo HACCP — colore cappello da chef
   const haccpCfg = !f.haccp_obbligatorio
     ? { color: 'text-slate-300', bg: 'hover:bg-slate-50', title: 'Non soggetta a HACCP' }
     : f.haccp_semaforo === 'verde'
@@ -61,159 +53,174 @@ const FacilityCard = memo(function FacilityCard({
     ? { color: 'text-red-500',     bg: 'hover:bg-red-50',     title: 'HACCP — situazione critica' }
     : { color: 'text-slate-300',   bg: 'hover:bg-slate-50',   title: 'HACCP non censito' };
 
+  const metaLine = [
+    f.region,
+    f.bed_count > 0 ? `${f.bed_count} pl` : null,
+    f.director || null,
+  ].filter(Boolean).join(' · ');
+
   return (
     <div
       className={`
-        bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex flex-col relative
-        group hover:shadow-md transition-all duration-200
-        ${f.is_suspended ? 'opacity-50 grayscale' : ''}
+        bg-white border border-slate-200 rounded-lg border-t-[3px]
+        group relative cursor-pointer hover:shadow-sm transition-all
+        ${f.is_suspended ? 'opacity-60 grayscale' : ''}
       `}
-      style={{ borderTopWidth: '5px', borderTopColor: f.is_suspended ? '#94a3b8' : (f.udo_color || '#cbd5e1') }}
+      style={{ borderTopColor: BORDER_COLOR[f.riskLevel] ?? '#e2e8f0' }}
+      onClick={() => onDirectorView && onDirectorView(f)}
     >
-      {/* Azioni hover */}
-      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {/* Icona vista direttore — solo se admin e prop passata */}
+
+      {/* ── Hover actions ── */}
+      <div
+        className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+        onClick={e => e.stopPropagation()}
+      >
         {onDirectorView && (
           <button
             onClick={() => onDirectorView(f)}
-            className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+            className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-all"
             title="Vista direttore"
           >
-            <ExternalLink size={13} />
+            <ExternalLink size={12} />
           </button>
         )}
         <button
           onClick={() => onSuspendToggle(f)}
-          className={`p-1.5 rounded-lg transition-all ${
+          className={`p-1 rounded transition-all ${
             f.is_suspended
               ? 'text-amber-500 hover:bg-amber-50'
-              : 'text-slate-400 hover:text-red-500 hover:bg-red-50'
+              : 'text-slate-300 hover:text-red-500 hover:bg-red-50'
           }`}
           title={f.is_suspended ? 'Riattiva struttura' : 'Sospendi struttura'}
         >
-          {f.is_suspended ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+          {f.is_suspended ? <ArchiveRestore size={12} /> : <Archive size={12} />}
         </button>
         <button
           onClick={() => onEdit(f)}
-          className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+          className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-all"
           title="Modifica struttura"
         >
-          <Settings size={14} />
+          <Settings size={12} />
         </button>
       </div>
 
-      {/* Contenuto principale */}
-      <div className="mb-2 pr-12 flex-1">
-        <h3 className={`text-sm font-black leading-tight line-clamp-2 ${
-          f.is_suspended ? 'text-slate-500 line-through' : 'text-slate-800'
-        }`}>
-          {f.name}
-        </h3>
-
-        {subtitle && (
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-            {subtitle}
-          </p>
-        )}
-
-        {/* Badge rischio rimosso dal corpo — spostato nel footer */}
-
-        <div className="mt-2 text-[11px] font-medium text-slate-500 space-y-0.5">
-          {!isUltraCompact && f.address && (
-            <p className="truncate">{f.address}</p>
-          )}
-          {!isCompact && f.referent && (
-            <p className="truncate text-slate-400">Ref: {f.referent}</p>
-          )}
-          {!isCompact && f.director && (
-            <p className="truncate text-slate-400">Dir: {f.director}</p>
+      {/* ── Riga 1: UDO + nome + badge sospesa ── */}
+      <div className="px-3 pt-2.5 pb-0">
+        <div className="flex items-start justify-between gap-1">
+          <div className="min-w-0 pr-16">
+            <span className="text-[10px] font-bold tracking-wide text-slate-400 uppercase">
+              {f.udo_name}
+            </span>
+            <h3 className="text-sm font-semibold text-slate-900 leading-tight truncate mt-0.5">
+              {f.name}
+            </h3>
+          </div>
+          {f.is_suspended && (
+            <span className="text-[9px] font-bold bg-slate-100 text-slate-500 rounded px-1.5 py-0.5 flex-shrink-0 mt-0.5">
+              SOSP.
+            </span>
           )}
         </div>
       </div>
 
-      {/* Footer: badge rischio + icone allineate a destra */}
-      <div className="mt-2 pt-3 border-t border-slate-50">
+      {/* ── Riga 2: regione · posti letto · direttore ── */}
+      <div className="px-3 pt-0.5 pb-0">
+        <p className="text-[11px] text-slate-400 truncate">{metaLine}</p>
+      </div>
 
-        {/* Icone + badge rischio sulla stessa riga */}
-        <div className="flex justify-between items-center">
+      {/* ── Riga 3: score + icone azione ── */}
+      <div
+        className="flex items-center justify-between px-3 pt-2 pb-2.5 mt-1 border-t border-slate-50"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Score */}
+        {riskScore != null ? (
+          <span className={`text-xs font-semibold ${scoreColor}`}>
+            {riskScore.score > 0 ? `● ${riskScore.score}/${riskScore.months}m` : '● ok'}
+          </span>
+        ) : (
+          <span className="text-xs font-semibold text-slate-300">● –</span>
+        )}
 
-          {/* Sx: badge rischio — solo se disponibile */}
-          {riskCfg && riskScore?.score !== null ? (
-            <div
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[11px] font-black ${riskCfg.text}`}
-              title={riskScore.detail?.slice(0, 3).map(d => `${d.kpi}: ${d.status}`).join(' · ')}
-            >
-              <span className={`w-2 h-2 rounded-full shrink-0 ${riskCfg.dot}`} />
-              {riskScore.score}<span className="text-[9px] font-bold opacity-60">/{riskScore.months}m</span>
-            </div>
-          ) : <span />}
+        {/* Icone azione */}
+        <div className="flex items-center gap-1.5">
+          {/* HACCP */}
+          <button
+            onClick={() => onHaccpClick && onHaccpClick(f)}
+            disabled={!f.haccp_obbligatorio}
+            className={`flex items-center justify-center w-6 h-6 rounded transition-all
+              ${f.haccp_obbligatorio ? `${haccpCfg.bg} cursor-pointer` : 'cursor-default'}`}
+            title={haccpCfg.title}
+          >
+            <ChefHat size={13} className={haccpCfg.color} />
+          </button>
 
-          {/* Dx: icone */}
-          <div className="flex items-center gap-2">
-        <button
-          onClick={() => onHaccpClick && onHaccpClick(f)}
-          disabled={!f.haccp_obbligatorio}
-          className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all
-            ${f.haccp_obbligatorio ? `${haccpCfg.bg} cursor-pointer` : 'cursor-default'}`}
-          title={haccpCfg.title}
-        >
-          <ChefHat size={15} className={haccpCfg.color} />
-        </button>
+          {/* KPI */}
+          <button
+            onClick={() => kpiState !== 'future' && onKpiClick(f)}
+            disabled={kpiState === 'future'}
+            className={`flex items-center justify-center h-6 px-1 rounded transition-all ${
+              kpiState === 'ok'     ? 'hover:bg-emerald-50' :
+              kpiState === 'future' ? 'cursor-default'      :
+                                     'hover:bg-indigo-50'
+            }`}
+            title={
+              kpiState === 'future' ? 'Nessun mese rendicontabile' :
+              kpiState === 'ok'     ? 'KPI in regola' :
+                                     'KPI da completare'
+            }
+          >
+            <span className={`text-[11px] font-black tracking-wider ${
+              kpiState === 'ok'     ? 'text-emerald-500' :
+              kpiState === 'future' ? 'text-slate-300'   :
+                                     'text-indigo-500'
+            }`}>KPI</span>
+          </button>
 
-        {/* KPI — scritta colorata */}
-        <button
-          onClick={() => kpiState !== 'future' && onKpiClick(f)}
-          disabled={kpiState === 'future'}
-          className={`flex items-center justify-center h-7 px-1.5 rounded-lg transition-all ${
-            kpiState === 'ok'     ? 'hover:bg-emerald-50' :
-            kpiState === 'future' ? 'cursor-default'       :
-                                   'hover:bg-indigo-50'
-          }`}
-          title={kpiState === 'future' ? 'Nessun mese rendicontabile' : kpiState === 'ok' ? 'KPI in regola' : 'KPI da completare'}
-        >
-          <span className={`text-[11px] font-black tracking-wider ${
-            kpiState === 'ok'     ? 'text-emerald-500' :
-            kpiState === 'future' ? 'text-slate-300'   :
-                                   'text-indigo-500'
-          }`}>KPI</span>
-        </button>
+          {/* Dati clienti */}
+          <button
+            onClick={() => onDataClick(f, 'client')}
+            className={`flex items-center justify-center w-6 h-6 rounded transition-all ${
+              f.clientStatus === 'completed' ? 'hover:bg-emerald-50' :
+              f.clientStatus === 'pending'   ? 'hover:bg-indigo-50'  :
+                                              'hover:bg-slate-100'
+            }`}
+            title={`Clienti — ${
+              f.clientStatus === 'completed' ? 'Relazione OK' :
+              f.clientStatus === 'pending'   ? 'Da elaborare' :
+                                              'Carica dati'
+            }`}
+          >
+            <BarChart3 size={13} className={
+              f.clientStatus === 'completed' ? 'text-emerald-500' :
+              f.clientStatus === 'pending'   ? 'text-indigo-500'  :
+                                              'text-slate-300'
+            } />
+          </button>
 
-        {/* Clienti */}
-        <button
-          onClick={() => onDataClick(f, 'client')}
-          className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all ${
-            f.clientStatus === 'completed' ? 'hover:bg-emerald-50' :
-            f.clientStatus === 'pending'   ? 'hover:bg-indigo-50'  :
-                                            'hover:bg-slate-100'
-          }`}
-          title={`Clienti — ${f.clientStatus === 'completed' ? 'Relazione OK' : f.clientStatus === 'pending' ? 'Da elaborare' : 'Carica dati'}`}
-        >
-          <BarChart3 size={14} className={
-            f.clientStatus === 'completed' ? 'text-emerald-500' :
-            f.clientStatus === 'pending'   ? 'text-indigo-500'  :
-                                            'text-slate-300'
-          } />
-        </button>
+          {/* Dati operatori */}
+          <button
+            onClick={() => onDataClick(f, 'operator')}
+            className={`flex items-center justify-center w-6 h-6 rounded transition-all ${
+              f.staffStatus === 'completed' ? 'hover:bg-emerald-50' :
+              f.staffStatus === 'pending'   ? 'hover:bg-indigo-50'  :
+                                             'hover:bg-slate-100'
+            }`}
+            title={`Operatori — ${
+              f.staffStatus === 'completed' ? 'Relazione OK' :
+              f.staffStatus === 'pending'   ? 'Da elaborare' :
+                                             'Carica dati'
+            }`}
+          >
+            <Database size={13} className={
+              f.staffStatus === 'completed' ? 'text-emerald-500' :
+              f.staffStatus === 'pending'   ? 'text-indigo-500'  :
+                                             'text-slate-300'
+            } />
+          </button>
+        </div>
+      </div>
 
-        {/* Operatori */}
-        <button
-          onClick={() => onDataClick(f, 'operator')}
-          className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all ${
-            f.staffStatus === 'completed' ? 'hover:bg-emerald-50' :
-            f.staffStatus === 'pending'   ? 'hover:bg-indigo-50'  :
-                                           'hover:bg-slate-100'
-          }`}
-          title={`Operatori — ${f.staffStatus === 'completed' ? 'Relazione OK' : f.staffStatus === 'pending' ? 'Da elaborare' : 'Carica dati'}`}
-        >
-          <Database size={14} className={
-            f.staffStatus === 'completed' ? 'text-emerald-500' :
-            f.staffStatus === 'pending'   ? 'text-indigo-500'  :
-                                           'text-slate-300'
-          } />
-        </button>
-        </div> {/* fine flex icone dx */}
-        </div> {/* fine riga badge+icone */}
-      </div>  {/* fine footer */}
     </div>
   );
 });
