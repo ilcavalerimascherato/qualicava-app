@@ -13,13 +13,15 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams } from 'react
 import { useAuth } from '../contexts/AuthContext';
 import { ROLES }   from '../config/constants';
 
-const AdminApp         = lazy(() => import('../App'));
-const DirectorApp      = lazy(() => import('../views/DirectorApp'));
-const DirectorFacility = lazy(() => import('../views/DirectorFacility'));
+const AdminApp              = lazy(() => import('../App'));
+const DirectorApp           = lazy(() => import('../views/DirectorApp'));
+const DirectorFacility      = lazy(() => import('../views/DirectorFacility'));
 const MasterDashboard       = lazy(() => import('../views/MasterDashboard'));
 const OccupazioneDashboard  = lazy(() => import('../views/OccupazioneDashboard'));
-const DocumentiPage    = lazy(() => import('../views/DocumentiPage'));
-const Login            = lazy(() => import('../Login'));
+const DocumentiPage         = lazy(() => import('../views/DocumentiPage'));
+const ReportPage            = lazy(() => import('../views/ReportPage'));
+const ImpostazioniPage      = lazy(() => import('../views/ImpostazioniPage'));
+const Login                 = lazy(() => import('../Login'));
 
 function Splash({ msg = 'Caricamento...' }) {
   return (
@@ -117,9 +119,11 @@ export default function AppRouter() {
 
             {/* Vista HQ — solo admin/superadmin/sede */}
             <Route element={<RequireAdmin />}>
-              <Route path="/admin"       element={<AdminApp />} />
-              <Route path="/master"      element={<MasterDashboard />} />
-              <Route path="/occupazione" element={<OccupazioneDashboard />} />
+              <Route path="/admin"          element={<AdminApp />} />
+              <Route path="/master"         element={<MasterDashboard />} />
+              <Route path="/occupazione"    element={<OccupazioneDashboard />} />
+              <Route path="/report"         element={<ReportPage />} />
+              <Route path="/impostazioni"   element={<ImpostazioniPage />} />
             </Route>
 
             {/* Documenti: accessibile a tutti i ruoli autenticati

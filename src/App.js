@@ -3,8 +3,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
-  Settings, LogOut, ShieldCheck, ChefHat,
-  Search, Grid2X2, Grid3X3, LayoutGrid, BarChart2, PawPrint, FileText, Users
+  Search, Grid2X2, Grid3X3, LayoutGrid,
+  Building2, Briefcase, Pause, Plus, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 import { useAuth }                                           from './contexts/AuthContext';
@@ -12,15 +12,16 @@ import { useModals }                                         from './contexts/Mo
 import { useDashboardData, useInvalidate }                   from './hooks/useDashboardData';
 import { useHaccpSemafori }                                  from './hooks/useHaccpData';
 import { useBadgeCounts }                                    from './hooks/useBadgeCounts';
-import { facilityService, questionnaireService, udoService } from './services/supabaseService';
+import { facilityService, questionnaireService } from './services/supabaseService';
 import { getDocumentiInScadenza }                            from './services/documentiService';
 import { enrichFacilitiesData, calculateDashboardStats }     from './utils/statusCalculator';
+import { calcFacilityRiskScore }                             from './utils/riskScoreEngine';
 
 import Login              from './Login';
+import AppHeader          from './components/AppHeader';
 import FacilityCard       from './components/FacilityCard';
 import CompaniesView     from './components/CompaniesView';
 import GlobalReportModal  from './components/GlobalReportModal';
-import UdoManagerModal    from './components/UdoManagerModal';
 import FacilityModal      from './components/FacilityModal';
 import QuestionnaireModal from './components/QuestionnaireModal';
 import DataImportModal    from './components/DataImportModal';
@@ -33,8 +34,6 @@ import KpiLaserModal      from './components/KpiLaserModal';
 import KpiXrayModal           from './components/KpiXrayModal';
 import QualityDashboardModal  from './components/QualityDashboardModal';
 import RankingModal           from './components/RankingModal';
-import ReportHubModal         from './components/ReportHubModal';
-import NotificheDropdown      from './components/NotificheDropdown';
 
 export default function App() {
   const { session, loading: authLoading, isAdmin, profile, signOut } = useAuth();
@@ -52,6 +51,8 @@ export default function App() {
   const [selectedFacility, setSelectedFacility] = useState(null);
   const [dataTarget, setDataTarget]             = useState(null);
   const [docScadenze, setDocScadenze]           = useState({ docs: [], scaduti: 0 });
+  const [semaforoFilter, setSemaforoFilter]     = useState(null);
+  const [kpiStripOpen, setKpiStripOpen]         = useState(true);
 
   const { loading: dataLoading, data, errors } = useDashboardData(year);
   const { semafori: haccpSemafori }            = useHaccpSemafori();
@@ -67,13 +68,16 @@ export default function App() {
 
   const processedData = useMemo(() => {
     const enriched = enrichFacilitiesData(data.facilities, data.surveys, data.kpiRecords, year, data.udos);
-    // Aggiungo semaforo HACCP a ogni struttura
     const withHaccp = enriched.map(f => ({
       ...f,
       haccp_semaforo: haccpSemafori[f.id] ?? (f.haccp_obbligatorio ? 'grigio' : null),
     }));
-    const stats = calculateDashboardStats(withHaccp, 'all');
-    return { list: withHaccp, ...stats };
+    const withRisk = withHaccp.map(f => {
+      const { score, level } = calcFacilityRiskScore(f, data.kpiRecords);
+      return { ...f, riskScore: score, riskLevel: level };
+    });
+    const stats = calculateDashboardStats(withRisk, 'all');
+    return { list: withRisk, ...stats };
   }, [data.facilities, data.surveys, data.kpiRecords, data.udos, year, haccpSemafori]);
 
   const allFacilityIds = useMemo(
@@ -84,13 +88,34 @@ export default function App() {
 
   const filteredFacilities = useMemo(() => {
     return processedData.list.filter(f => {
-      if (!showSuspended && f.is_suspended) { return false; }
-      const q = searchQuery.toLowerCase(); if (!f.name.toLowerCase().includes(q) && !(f.address || '').toLowerCase().includes(q)) { return false; }
-      if (filterUdo !== 'all' && String(f.udo_id) !== String(filterUdo)) { return false; }
-      if (selectedCompany && f.company_id !== selectedCompany.id) { return false; }
+      if (semaforoFilter === 'suspended') {
+        if (!f.is_suspended) return false;
+      } else {
+        if (!showSuspended && f.is_suspended) return false;
+        if (semaforoFilter && f.riskLevel !== semaforoFilter) return false;
+      }
+      const q = searchQuery.toLowerCase();
+      if (!f.name.toLowerCase().includes(q) && !(f.address || '').toLowerCase().includes(q)) return false;
+      if (filterUdo !== 'all' && String(f.udo_id) !== String(filterUdo)) return false;
+      if (selectedCompany && f.company_id !== selectedCompany.id) return false;
       return true;
     });
-  }, [processedData.list, filterUdo, searchQuery, showSuspended, selectedCompany]);
+  }, [processedData.list, filterUdo, searchQuery, showSuspended, selectedCompany, semaforoFilter]);
+
+  const facilitiesByRegion = useMemo(() => {
+    const active    = filteredFacilities.filter(f => !f.is_suspended);
+    const suspended = filteredFacilities.filter(f => f.is_suspended);
+    const groups    = {};
+    active.forEach(f => {
+      const r = f.region || 'Senza regione';
+      if (!groups[r]) groups[r] = [];
+      groups[r].push(f);
+    });
+    const regionEntries = Object.entries(groups).sort(([a], [b]) =>
+      a.localeCompare(b, 'it', { sensitivity: 'base' }),
+    );
+    return { regionEntries, suspended };
+  }, [filteredFacilities]);
 
   const handleSuspendToggle = async (facility) => {
     try {
@@ -111,13 +136,12 @@ export default function App() {
 
   const handleFacilitySave = async (d) => {
     try {
-      // Restituisce il record salvato con l'ID (necessario per il provisioning direttore)
       const saved = await facilityService.save(d);
       await invalidate.facilities();
       close('facility');
       setSelectedFacility(null);
       toast.success('Struttura salvata');
-      return saved; // FacilityModal usa l'ID per creare l'account direttore
+      return saved;
     } catch (err) {
       toast.error(`Errore salvataggio: ${err.message}`);
       throw err;
@@ -147,25 +171,6 @@ export default function App() {
     }
   };
 
-  const handleUdoSave = async (d) => {
-    try {
-      await udoService.save(d);
-      await invalidate.udos();
-    } catch (err) {
-      toast.error(`Errore salvataggio UDO: ${err.message}`);
-    }
-  };
-
-  const handleUdoDelete = async (id) => {
-    if (!window.confirm('Eliminare questa UDO?')) { return; }
-    try {
-      await udoService.delete(id);
-      await invalidate.udos();
-    } catch (err) {
-      toast.error(`Errore eliminazione UDO: ${err.message}`);
-    }
-  };
-
   const handleDataClick = (facility, type) => {
     const hasData = data.surveys.some(s =>
       s.type === type &&
@@ -173,6 +178,18 @@ export default function App() {
     );
     setDataTarget({ facility, type });
     open(hasData ? 'analytics' : 'dataImport');
+  };
+
+  const handleNavigate = (page) => {
+    const actions = {
+      saturazione:  () => navigate('/occupazione'),
+      haccp:        () => navigate('/master'),
+      documenti:    () => navigate('/documenti'),
+      nc:           () => open('qualityDashboard'),
+      report:       () => navigate('/report'),
+      impostazioni: () => navigate('/impostazioni'),
+    };
+    actions[page]?.();
   };
 
   if (authLoading) {
@@ -188,243 +205,194 @@ export default function App() {
     <div className="min-h-screen bg-slate-100 pb-10 text-slate-900 font-sans">
       <Toaster position="top-right" />
 
-      <header className="bg-white border-b border-slate-200 px-6 py-3 sticky top-0 z-30 shadow-md">
+      {/* ── AppHeader ── */}
+      <AppHeader
+        activePage="dashboard"
+        facilities={processedData.list}
+        badgeCounts={badgeTotals}
+        user={profile}
+        onSignOut={signOut}
+        onNavigate={handleNavigate}
+        onSemaforoFilter={setSemaforoFilter}
+        semaforoFilter={semaforoFilter}
+      />
 
-        {/* ── RIGA 1: verde emerald ── */}
-        <div className="flex justify-between items-center mb-3">
+      {/* ── Context bar ── */}
+      <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-100">
+        <div>
+          <h1 className="text-base font-semibold text-slate-900">Dashboard strutture</h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {year} · {processedData.list.filter(f => !f.is_suspended).length} attive · {processedData.list.filter(f => f.is_suspended).length} sospese
+          </p>
+        </div>
+      </div>
 
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-600 p-2 rounded-xl text-white">
-              <PawPrint size={22} />
-            </div>
-            <h1 className="text-lg font-black tracking-tighter text-slate-900 italic">
-              QualiCAVA <span className="text-emerald-600 italic">GRUPPO OVER</span>
-            </h1>
-          </div>
+      {/* ── Toolbar ── */}
+      <div className="flex items-center gap-2 px-5 py-2 bg-white border-b border-slate-200 flex-nowrap">
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/occupazione')}
-              className="relative bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
-            >
-              <Users size={14} /> Saturazione
-            </button>
-
-            <button
-              onClick={() => navigate('/master')}
-              className="relative bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
-            >
-              <ChefHat size={14} /> HACCP
-              {badgeTotals.haccp > 0 && (
-                <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] ${badgeTotals.haccpRossi > 0 ? 'bg-rose-500' : 'bg-amber-500'} text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow`}>
-                  {badgeTotals.haccpRossi > 0
-                    ? (badgeTotals.haccpRossi > 99 ? '99+' : badgeTotals.haccpRossi)
-                    : (badgeTotals.haccp      > 99 ? '99+' : badgeTotals.haccp)
-                  }
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => navigate('/documenti')}
-              className="relative bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
-            >
-              <FileText size={14} /> Documenti
-              {badgeTotals.documenti > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow">
-                  {badgeTotals.documenti > 99 ? '99+' : badgeTotals.documenti}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => open('reportHub')}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
-            >
-              <BarChart2 size={14} /> Report
-            </button>
-
-            <button
-              onClick={() => open('qualityDashboard')}
-              className="relative bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-emerald-700 transition-colors flex items-center gap-2"
-            >
-              <ShieldCheck size={14} /> Qualità
-              {badgeTotals.nc > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none shadow">
-                  {badgeTotals.nc > 99 ? '99+' : badgeTotals.nc}
-                </span>
-              )}
-            </button>
-
-            {isAdmin && (
-              <button
-                onClick={() => { setSelectedFacility(null); open('facility'); }}
-                className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-slate-700 transition-colors flex items-center gap-2"
-              >
-                + Struttura
-              </button>
-            )}
-
-            {isAdmin && (
-              <button
-                onClick={() => open('udo')}
-                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
-                title="Gestione UDO"
-              >
-                <Settings size={20} />
-              </button>
-            )}
-
-            <NotificheDropdown />
-
-            {/* Nome utente loggato */}
-            {profile?.full_name && (
-              <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
-                <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white font-black text-[10px]">
-                  {profile.full_name[0].toUpperCase()}
-                </div>
-                <span className="text-xs font-bold text-slate-700 max-w-[120px] truncate">
-                  {profile.full_name}
-                </span>
-              </div>
-            )}
-
-            <button
-              onClick={signOut}
-              className="flex items-center gap-1.5 text-rose-500 hover:text-rose-700 px-3 py-2 hover:bg-rose-50 rounded-xl transition-colors text-xs font-black uppercase"
-              title="Esci"
-            >
-              <LogOut size={16} /> Esci
-            </button>
-          </div>
+        {/* Ricerca */}
+        <div className="flex items-center gap-1.5 border border-slate-200 rounded-full px-3 py-1.5 bg-slate-50 flex-shrink-0 w-48">
+          <Search size={14} className="text-slate-400 flex-shrink-0" />
+          <input
+            type="text"
+            placeholder="Cerca struttura..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="bg-transparent text-sm outline-none w-full min-w-0"
+          />
         </div>
 
-        {/* ── RIGA 2: blu/slate ── */}
-        <div className="flex justify-between items-center bg-slate-900 rounded-2xl px-5 py-3">
-          <div className="flex items-center gap-6 grow max-w-6xl">
-            <div className="relative flex-1">
-              <Search size={20} className="absolute left-4 top-3 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Cerca struttura..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full text-[16px] font-bold bg-slate-800 text-white pl-14 pr-4 py-3 rounded-2xl border-2 border-slate-700 outline-none focus:border-indigo-400 transition-all placeholder-slate-400"
-              />
-            </div>
-            <select
-              value={filterUdo}
-              onChange={e => setFilterUdo(e.target.value)}
-              className="text-sm font-black bg-slate-800 text-white px-4 py-3 rounded-2xl border-2 border-slate-700 uppercase outline-none cursor-pointer"
-            >
-              <option value="all">Tutte le UDO</option>
-              {data.udos.map(u => (
-                <option key={u.id} value={String(u.id)}>{u.name}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => {
-                if (showSocieta) setSelectedCompany(null);
-                setShowSocieta(prev => !prev);
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-bold border transition-all duration-200 ${
-                showSocieta
-                  ? 'bg-green-500 text-black border-green-500'
-                  : 'bg-white text-slate-600 border-slate-300 hover:border-green-400'
-              }`}
-            >
-              SOCIETÀ
-            </button>
-            {selectedCompany && !showSocieta && (
-              <div className="flex items-center gap-1 px-3 py-1.5 bg-green-100 border border-green-300 rounded-lg text-xs font-bold text-green-800">
-                {selectedCompany.name}
-                <button onClick={() => setSelectedCompany(null)} className="ml-1 hover:text-red-600">✕</button>
-              </div>
-            )}
-          </div>
-
-          {/* Progress bar report — ora nella barra filtri, responsive */}
-          <div className="flex items-center gap-4 px-2">
-            {[
-              { label: 'Clienti', pct: processedData.clientPct },
-              { label: 'Staff',   pct: processedData.staffPct  },
-            ].map(({ label, pct }) => (
-              <div key={label} className="flex flex-col items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">{label}</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-20 h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${pct || 0}%` }} />
-                  </div>
-                  <span className="text-xs font-black text-white">{pct || 0}%</span>
-                </div>
-              </div>
+        {/* UDO */}
+        <div className="relative flex-shrink-0">
+          <Building2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <select
+            value={filterUdo}
+            onChange={e => setFilterUdo(e.target.value)}
+            className="border border-slate-200 rounded-full pl-8 pr-6 py-1.5 text-sm text-slate-500 bg-slate-50 appearance-none cursor-pointer outline-none"
+          >
+            <option value="all">Tutte le UDO</option>
+            {data.udos.map(u => (
+              <option key={u.id} value={String(u.id)}>{u.name}</option>
             ))}
-          </div>
+          </select>
+          <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        </div>
 
-          <div className="flex items-center gap-3 bg-slate-800 border border-slate-700 px-4 py-3 rounded-2xl ml-2">
-            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-tight text-right">
-              Posti Letto<br />Attivi
-            </span>
-            <span className="text-3xl font-black text-white">{processedData.totalBeds}</span>
-          </div>
+        {/* Società */}
+        <button
+          onClick={() => {
+            if (showSocieta) setSelectedCompany(null);
+            setShowSocieta(prev => !prev);
+          }}
+          className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-sm whitespace-nowrap flex-shrink-0 ${
+            showSocieta
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-slate-50 border-slate-200 text-slate-500'
+          }`}
+        >
+          <Briefcase size={13} /> Società
+        </button>
 
-          {/* DocuMASTER scadenze — solo superadmin/admin */}
+        {selectedCompany && !showSocieta && (
+          <div className="flex items-center gap-1 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full text-sm font-medium text-green-700 flex-shrink-0">
+            {selectedCompany.name}
+            <button onClick={() => setSelectedCompany(null)} className="ml-0.5 hover:text-red-600 leading-none">✕</button>
+          </div>
+        )}
+
+        {/* Sospese */}
+        <button
+          onClick={() => setShowSuspended(prev => !prev)}
+          className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-sm whitespace-nowrap flex-shrink-0 ${
+            showSuspended
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-slate-50 border-slate-200 text-slate-500'
+          }`}
+        >
+          <Pause size={13} /> Sospese
+        </button>
+
+        <div className="w-px h-5 bg-slate-200 mx-1 flex-shrink-0" />
+
+        {/* Density */}
+        <div className="flex border border-slate-200 rounded overflow-hidden flex-shrink-0">
+          {[
+            { cls: 'lg:grid-cols-4', Icon: Grid2X2    },
+            { cls: 'lg:grid-cols-6', Icon: Grid3X3    },
+            { cls: 'lg:grid-cols-8', Icon: LayoutGrid },
+          ].map(({ cls, Icon }) => (
+            <button
+              key={cls}
+              onClick={() => setGridCols(cls)}
+              className={`p-1.5 ${gridCols === cls ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-500'}`}
+            >
+              <Icon size={14} />
+            </button>
+          ))}
+        </div>
+
+        {/* + Struttura */}
+        {isAdmin && (
+          <button
+            onClick={() => { setSelectedFacility(null); open('facility'); }}
+            className="ml-auto flex items-center gap-1.5 bg-emerald-600 text-white text-sm rounded-full px-3 py-1.5 flex-shrink-0 whitespace-nowrap hover:bg-emerald-700 transition-colors"
+          >
+            <Plus size={13} /> Struttura
+          </button>
+        )}
+      </div>
+
+      {/* ── KPI Strip ── */}
+      {kpiStripOpen ? (
+        <div className="flex items-center gap-0 px-5 py-1.5 bg-slate-50 border-b border-slate-200 text-sm flex-wrap">
+          <div className="flex items-center gap-2 pr-4 mr-4 border-r border-slate-200">
+            <span className="text-slate-400">Posti letto attivi</span>
+            <span className="font-bold text-slate-800">{processedData.totalBeds}</span>
+          </div>
+          <div className="flex items-center gap-2 pr-4 mr-4 border-r border-slate-200">
+            <span className="text-slate-400">Survey clienti</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 transition-all" style={{ width: `${processedData.clientPct || 0}%` }} />
+              </div>
+              <span className="font-bold text-slate-700 tabular-nums">{processedData.clientPct || 0}%</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pr-4 mr-4 border-r border-slate-200">
+            <span className="text-slate-400">Survey staff</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 transition-all" style={{ width: `${processedData.staffPct || 0}%` }} />
+              </div>
+              <span className="font-bold text-slate-700 tabular-nums">{processedData.staffPct || 0}%</span>
+            </div>
+          </div>
           {['superadmin', 'admin'].includes(profile?.role) && (
             <button
               onClick={() => navigate('/documenti')}
-              className="flex flex-col items-start gap-1 bg-slate-800 border border-slate-700 px-3 py-2.5 rounded-2xl ml-2 hover:bg-slate-700 transition-colors"
-              title="DocuMASTER — Scadenze"
+              className="flex items-center gap-2 pr-4 mr-4 border-r border-slate-200 hover:text-indigo-600 transition-colors"
             >
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DocuMASTER</span>
+              <span className="text-slate-400">DocuMaster</span>
               {docScadenze.scaduti === 0 && docScadenze.docs.length === 0 ? (
-                <span className="text-[10px] font-black text-emerald-400 whitespace-nowrap">Tutti aggiornati ✓</span>
+                <span className="font-bold text-emerald-600">✓ ok</span>
               ) : (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   {docScadenze.scaduti > 0 && (
-                    <span className="bg-rose-500/25 text-rose-400 text-[10px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap">
-                      {docScadenze.scaduti} scaduti
+                    <span className="bg-red-100 text-red-700 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                      {docScadenze.scaduti} scad.
                     </span>
                   )}
                   {(docScadenze.docs.length - docScadenze.scaduti) > 0 && (
-                    <span className="bg-amber-500/25 text-amber-400 text-[10px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap">
-                      {docScadenze.docs.length - docScadenze.scaduti} in scad.
+                    <span className="bg-amber-100 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                      {docScadenze.docs.length - docScadenze.scaduti} in sc.
                     </span>
                   )}
                 </div>
               )}
             </button>
           )}
-
-          {/* Checkbox sospese — seconda riga dopo posti letto */}
-          <label className="flex items-center gap-2 bg-slate-800 border border-slate-700 px-4 py-3 rounded-2xl ml-2 cursor-pointer hover:bg-slate-700 transition-colors">
-            <input
-              type="checkbox"
-              checked={showSuspended}
-              onChange={e => setShowSuspended(e.target.checked)}
-              className="accent-emerald-500 w-4 h-4 cursor-pointer"
-            />
-            <span className="text-xs font-black text-slate-300 uppercase tracking-widest">Sospese</span>
-          </label>
-
-          <div className="flex items-center gap-2 bg-slate-800 p-2 rounded-2xl ml-2">
-            {[
-              { cols: 'lg:grid-cols-4', Icon: Grid2X2    },
-              { cols: 'lg:grid-cols-6', Icon: Grid3X3    },
-              { cols: 'lg:grid-cols-8', Icon: LayoutGrid },
-            ].map(({ cols, Icon }) => (
-              <button
-                key={cols}
-                onClick={() => setGridCols(cols)}
-                className={`p-2 rounded-xl transition-all ${gridCols === cols ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-              >
-                <Icon size={24} />
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">NC aperte</span>
+            <span className="font-bold text-red-600 tabular-nums">{badgeTotals.nc}</span>
           </div>
-        </div>{/* fine riga 2 */}
-      </header>
+          <button
+            onClick={() => setKpiStripOpen(false)}
+            className="ml-auto text-slate-400 flex items-center gap-1 text-[10px] hover:text-slate-600"
+          >
+            <ChevronUp size={10} /> comprimi
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setKpiStripOpen(true)}
+          className="w-full text-center text-[10px] text-slate-400 py-0.5 bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
+        >
+          ▼ mostra KPI
+        </button>
+      )}
 
-      <main className="px-10 py-12">
+      {/* ── Main ── */}
+      <main className="px-6 py-4">
         {dataLoading ? (
           <div className="flex items-center justify-center py-32 text-slate-400 font-black uppercase tracking-widest">
             Caricamento strutture...
@@ -439,37 +407,89 @@ export default function App() {
             }}
           />
         ) : (
-          <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 ${gridCols} gap-10`}>
-            {filteredFacilities.map(f => (
-              <FacilityCard
-                key={f.id}
-                f={f}
-                gridCols={gridCols}
-                onEdit={() => {
-                  const fresh = data.facilities.find(x => x.id === f.id) || f;
-                  setSelectedFacility(fresh);
-                  open('facility');
-                }}
-                onDirectorView={isAdmin ? handleDirectorView : undefined}
-                onHaccpClick={handleHaccpClick}
-                onSuspendToggle={handleSuspendToggle}
-                onKpiClick={(facility) => { setSelectedFacility(facility); open('kpiManager'); }}
-                onDataClick={handleDataClick}
-                isAdmin={['superadmin','admin','sede'].includes(profile?.role)}
-                kpiRecords={data.kpiRecords}
-              />
-            ))}
-          </div>
+          <>
+            {/* Strutture sospese */}
+            {facilitiesByRegion.suspended.length > 0 && (
+              <section className="mb-6 bg-amber-50 rounded-xl p-4 border border-amber-100">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Strutture sospese</span>
+                  <span className="text-[10px] text-amber-500">({facilitiesByRegion.suspended.length})</span>
+                </div>
+                <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 ${gridCols} gap-4`}>
+                  {facilitiesByRegion.suspended.map(f => (
+                    <div key={f.id} className="opacity-60">
+                      <FacilityCard
+                        f={f}
+                        gridCols={gridCols}
+                        onEdit={() => {
+                          const fresh = data.facilities.find(x => x.id === f.id) || f;
+                          setSelectedFacility(fresh);
+                          open('facility');
+                        }}
+                        onDirectorView={isAdmin ? handleDirectorView : undefined}
+                        onHaccpClick={handleHaccpClick}
+                        onSuspendToggle={handleSuspendToggle}
+                        onKpiClick={(facility) => { setSelectedFacility(facility); open('kpiManager'); }}
+                        onDataClick={handleDataClick}
+                        isAdmin={['superadmin','admin','sede'].includes(profile?.role)}
+                        kpiRecords={data.kpiRecords}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Strutture per regione */}
+            {facilitiesByRegion.regionEntries.map(([region, facs]) => {
+              const rVerde  = facs.filter(f => f.riskLevel === 'low').length;
+              const rGiallo = facs.filter(f => f.riskLevel === 'medium').length;
+              const rRosso  = facs.filter(f => f.riskLevel === 'high').length;
+
+              return (
+                <section key={region} className="mb-6">
+                  <div className="flex items-center gap-2 mb-2 px-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{region}</span>
+                    <span className="text-[10px] text-slate-400">({facs.length})</span>
+                    {rVerde  > 0 && <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-full px-1.5 py-0.5 leading-none">{rVerde} ok</span>}
+                    {rGiallo > 0 && <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-1.5 py-0.5 leading-none">{rGiallo} att.</span>}
+                    {rRosso  > 0 && <span className="text-[9px] bg-red-50 text-red-600 border border-red-200 rounded-full px-1.5 py-0.5 leading-none">{rRosso} crit.</span>}
+                  </div>
+                  <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 ${gridCols} gap-4`}>
+                    {facs.map(f => (
+                      <FacilityCard
+                        key={f.id}
+                        f={f}
+                        gridCols={gridCols}
+                        onEdit={() => {
+                          const fresh = data.facilities.find(x => x.id === f.id) || f;
+                          setSelectedFacility(fresh);
+                          open('facility');
+                        }}
+                        onDirectorView={isAdmin ? handleDirectorView : undefined}
+                        onHaccpClick={handleHaccpClick}
+                        onSuspendToggle={handleSuspendToggle}
+                        onKpiClick={(facility) => { setSelectedFacility(facility); open('kpiManager'); }}
+                        onDataClick={handleDataClick}
+                        isAdmin={['superadmin','admin','sede'].includes(profile?.role)}
+                        kpiRecords={data.kpiRecords}
+                      />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+
+            {/* Empty state */}
+            {facilitiesByRegion.regionEntries.length === 0 && facilitiesByRegion.suspended.length === 0 && (
+              <div className="flex items-center justify-center py-24 text-slate-400 text-sm">
+                Nessuna struttura trovata
+              </div>
+            )}
+          </>
         )}
       </main>
 
-      <UdoManagerModal
-        isOpen={modals.udo}
-        onClose={() => close('udo')}
-        udos={data.udos}
-        onSave={handleUdoSave}
-        onDelete={handleUdoDelete}
-      />
       <FacilityModal
         isOpen={modals.facility}
         onClose={() => close('facility')}
@@ -577,14 +597,6 @@ export default function App() {
         isOpen={modals.ranking}
         onClose={() => close('ranking')}
         facilities={processedData.list}
-        kpiRecords={data.kpiRecords}
-      />
-      <ReportHubModal
-        isOpen={modals.reportHub ?? false}
-        onClose={() => close('reportHub')}
-        facilities={processedData.list}
-        udos={data.udos}
-        surveys={data.surveys}
         kpiRecords={data.kpiRecords}
       />
     </div>
