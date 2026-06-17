@@ -217,109 +217,113 @@ export default function App() {
         semaforoFilter={semaforoFilter}
       />
 
-      {/* ── Context bar ── */}
-      <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-100">
-        <div>
-          <h1 className="text-base font-semibold text-slate-900">Dashboard strutture</h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+      {/* ── Context bar + Toolbar (unica riga) ── */}
+      <div className="flex items-center px-5 py-2 bg-white border-b border-slate-200 gap-4">
+
+        {/* SINISTRA — titolo fisso */}
+        <div className="flex-shrink-0">
+          <h1 className="text-sm font-semibold text-slate-900 whitespace-nowrap">Dashboard strutture</h1>
+          <p className="text-[11px] text-slate-400">
             {year} · {processedData.list.filter(f => !f.is_suspended).length} attive · {processedData.list.filter(f => f.is_suspended).length} sospese
           </p>
         </div>
-      </div>
 
-      {/* ── Toolbar ── */}
-      <div className="flex items-center gap-2 px-5 py-2 bg-white border-b border-slate-200 flex-nowrap">
+        {/* CENTRO — filtri centrati */}
+        <div className="flex-1 flex items-center justify-center gap-2 flex-nowrap">
 
-        {/* Ricerca */}
-        <div className="flex items-center gap-1.5 border border-slate-200 rounded-full px-3 py-1.5 bg-slate-50 flex-shrink-0 w-48">
-          <Search size={14} className="text-slate-400 flex-shrink-0" />
-          <input
-            type="text"
-            placeholder="Cerca struttura..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="bg-transparent text-sm outline-none w-full min-w-0"
-          />
-        </div>
+          {/* Ricerca */}
+          <div className="flex items-center gap-1.5 border border-slate-200 rounded-full px-3 py-1.5 bg-slate-50 w-44 flex-shrink-0">
+            <Search size={13} className="text-slate-400 flex-shrink-0" />
+            <input
+              type="text"
+              placeholder="Cerca struttura..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="bg-transparent text-xs outline-none w-full text-slate-700 placeholder-slate-300"
+            />
+          </div>
 
-        {/* UDO */}
-        <div className="relative flex-shrink-0">
-          <Building2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <select
-            value={filterUdo}
-            onChange={e => setFilterUdo(e.target.value)}
-            className="border border-slate-200 rounded-full pl-8 pr-6 py-1.5 text-sm text-slate-500 bg-slate-50 appearance-none cursor-pointer outline-none"
+          {/* UDO */}
+          <div className="relative flex-shrink-0">
+            <Building2 size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <select
+              value={filterUdo}
+              onChange={e => setFilterUdo(e.target.value)}
+              className="border border-slate-200 rounded-full pl-8 pr-6 py-1.5 text-xs text-slate-500 bg-slate-50 appearance-none cursor-pointer outline-none whitespace-nowrap"
+            >
+              <option value="all">Tutte le UDO</option>
+              {data.udos.map(u => (
+                <option key={u.id} value={String(u.id)}>{u.name}</option>
+              ))}
+            </select>
+            <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
+
+          {/* Società */}
+          <button
+            onClick={() => {
+              if (showSocieta) setSelectedCompany(null);
+              setShowSocieta(prev => !prev);
+            }}
+            className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-xs whitespace-nowrap flex-shrink-0 ${
+              showSocieta
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                : 'bg-slate-50 border-slate-200 text-slate-500'
+            }`}
           >
-            <option value="all">Tutte le UDO</option>
-            {data.udos.map(u => (
-              <option key={u.id} value={String(u.id)}>{u.name}</option>
+            <Briefcase size={12} /> Società
+          </button>
+
+          {selectedCompany && !showSocieta && (
+            <div className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-medium text-emerald-700 flex-shrink-0">
+              {selectedCompany.name}
+              <button onClick={() => setSelectedCompany(null)} className="ml-0.5 hover:text-red-600 leading-none">✕</button>
+            </div>
+          )}
+
+          {/* Sospese */}
+          <button
+            onClick={() => setShowSuspended(prev => !prev)}
+            className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-xs whitespace-nowrap flex-shrink-0 ${
+              showSuspended
+                ? 'bg-amber-50 border-amber-300 text-amber-600'
+                : 'bg-slate-50 border-slate-200 text-slate-500'
+            }`}
+          >
+            <Pause size={12} /> Sospese
+          </button>
+
+          {/* Density */}
+          <div className="flex border border-slate-200 rounded overflow-hidden flex-shrink-0">
+            {[
+              { cls: 'lg:grid-cols-4', Icon: Grid2X2    },
+              { cls: 'lg:grid-cols-6', Icon: Grid3X3    },
+              { cls: 'lg:grid-cols-8', Icon: LayoutGrid },
+            ].map(({ cls, Icon }) => (
+              <button
+                key={cls}
+                onClick={() => setGridCols(cls)}
+                className={`p-1.5 ${gridCols === cls ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+              >
+                <Icon size={13} />
+              </button>
             ))}
-          </select>
-          <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
+
         </div>
 
-        {/* Società */}
-        <button
-          onClick={() => {
-            if (showSocieta) setSelectedCompany(null);
-            setShowSocieta(prev => !prev);
-          }}
-          className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-sm whitespace-nowrap flex-shrink-0 ${
-            showSocieta
-              ? 'bg-green-50 border-green-200 text-green-700'
-              : 'bg-slate-50 border-slate-200 text-slate-500'
-          }`}
-        >
-          <Briefcase size={13} /> Società
-        </button>
-
-        {selectedCompany && !showSocieta && (
-          <div className="flex items-center gap-1 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full text-sm font-medium text-green-700 flex-shrink-0">
-            {selectedCompany.name}
-            <button onClick={() => setSelectedCompany(null)} className="ml-0.5 hover:text-red-600 leading-none">✕</button>
+        {/* DESTRA — + Struttura */}
+        {isAdmin && (
+          <div className="flex-shrink-0">
+            <button
+              onClick={() => { setSelectedFacility(null); open('facility'); }}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-full px-4 py-1.5 whitespace-nowrap transition-colors"
+            >
+              <Plus size={13} /> Struttura
+            </button>
           </div>
         )}
 
-        {/* Sospese */}
-        <button
-          onClick={() => setShowSuspended(prev => !prev)}
-          className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-sm whitespace-nowrap flex-shrink-0 ${
-            showSuspended
-              ? 'bg-green-50 border-green-200 text-green-700'
-              : 'bg-slate-50 border-slate-200 text-slate-500'
-          }`}
-        >
-          <Pause size={13} /> Sospese
-        </button>
-
-        <div className="w-px h-5 bg-slate-200 mx-1 flex-shrink-0" />
-
-        {/* Density */}
-        <div className="flex border border-slate-200 rounded overflow-hidden flex-shrink-0">
-          {[
-            { cls: 'lg:grid-cols-4', Icon: Grid2X2    },
-            { cls: 'lg:grid-cols-6', Icon: Grid3X3    },
-            { cls: 'lg:grid-cols-8', Icon: LayoutGrid },
-          ].map(({ cls, Icon }) => (
-            <button
-              key={cls}
-              onClick={() => setGridCols(cls)}
-              className={`p-1.5 ${gridCols === cls ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-500'}`}
-            >
-              <Icon size={14} />
-            </button>
-          ))}
-        </div>
-
-        {/* + Struttura */}
-        {isAdmin && (
-          <button
-            onClick={() => { setSelectedFacility(null); open('facility'); }}
-            className="ml-auto flex items-center gap-1.5 bg-emerald-600 text-white text-sm rounded-full px-3 py-1.5 flex-shrink-0 whitespace-nowrap hover:bg-emerald-700 transition-colors"
-          >
-            <Plus size={13} /> Struttura
-          </button>
-        )}
       </div>
 
       {/* ── KPI Strip ── */}
