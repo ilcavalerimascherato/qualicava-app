@@ -65,11 +65,6 @@ export default function ReportPage() {
   );
   const { totals: badgeTotals } = useBadgeCounts(allIds, year, isAdmin);
 
-  const headerFacilities = useMemo(
-    () => (data.facilities ?? []).map(f => ({ ...f, riskLevel: 'unknown' })),
-    [data.facilities],
-  );
-
   const enrichedFacilities = useMemo(() => {
     const enriched = enrichFacilitiesData(
       data.facilities ?? [],
@@ -114,17 +109,17 @@ export default function ReportPage() {
       <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-100">
         <div>
           <h1 className="text-base font-semibold text-slate-900">Centro report e analisi</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Seleziona l'area di analisi</p>
+          <p className="text-xs text-slate-500 mt-0.5">Seleziona l'area di analisi</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Intervallo:</span>
+          <span className="text-xs text-slate-500">Intervallo:</span>
           <input
             type="month"
             value={dateRange.from}
             onChange={e => setDateRange(prev => ({ ...prev, from: e.target.value }))}
             className="border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-emerald-400"
           />
-          <span className="text-xs text-slate-400">→</span>
+          <span className="text-xs text-slate-500">→</span>
           <input
             type="month"
             value={dateRange.to}
@@ -143,7 +138,7 @@ export default function ReportPage() {
         />
 
         <section className="mb-6">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
+          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">
             Reportistica di gruppo
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -165,7 +160,7 @@ export default function ReportPage() {
         </section>
 
         <section>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
+          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">
             Centro analisi direzionale
           </p>
           <div className="grid grid-cols-2 gap-3">

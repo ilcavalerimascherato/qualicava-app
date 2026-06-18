@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Sparkles, RefreshCw } from 'lucide-react';
 
 export default function AiBriefing({ facilities = [], ncRecords = [], kpiRecords = [] }) {
-  const [brief, setBrief]     = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-  const [query, setQuery]     = useState('');
+  const [brief, setBrief]               = useState(null);
+  const [lastGenerated, setLastGenerated] = useState(null);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState(null);
+  const [query, setQuery]               = useState('');
 
   const generateBrief = useCallback(async () => {
     if (!process.env.REACT_APP_ANTHROPIC_API_KEY) {
@@ -84,6 +85,7 @@ Usa il grassetto HTML <strong> solo per i nomi delle strutture critiche.`;
       const json = await res.json();
       if (json.error) throw new Error(json.error.message);
       setBrief(json.content?.[0]?.text ?? '');
+      setLastGenerated(new Date());
     } catch (err) {
       setError('Impossibile generare il briefing. Riprova.');
       console.error('AiBriefing error:', err);
@@ -91,11 +93,6 @@ Usa il grassetto HTML <strong> solo per i nomi delle strutture critiche.`;
       setLoading(false);
     }
   }, [facilities, ncRecords]);
-
-  // Genera solo al mount — non ad ogni cambio props
-  useEffect(() => {
-    if (facilities.length > 0) generateBrief();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="mb-6">
@@ -109,15 +106,18 @@ Usa il grassetto HTML <strong> solo per i nomi delle strutture critiche.`;
             </div>
             <div>
               <p className="text-sm font-medium text-slate-900">Briefing AI</p>
-              <p className="text-xs text-slate-400">
-                {new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
+              <p className="text-xs text-slate-500">
+                {lastGenerated
+                  ? `Aggiornato ${lastGenerated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
+                  : 'Non ancora generato — premi Rigenera'
+                }
               </p>
             </div>
           </div>
           <button
             onClick={generateBrief}
             disabled={loading}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-600 disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
           >
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
             {loading ? 'Generazione...' : 'Rigenera'}
@@ -126,15 +126,20 @@ Usa il grassetto HTML <strong> solo per i nomi delle strutture critiche.`;
 
         {/* Contenuto */}
         <div className="px-5 py-4 min-h-[80px]">
-          {loading && !brief && (
-            <div className="flex items-center gap-2 text-sm text-slate-400">
+          {!brief && !loading && !error && (
+            <div className="flex flex-col items-center justify-center h-16 gap-2">
+              <p className="text-sm text-slate-400">
+                Premi <span className="font-medium text-slate-600">Rigenera</span> per generare il briefing
+              </p>
+            </div>
+          )}
+          {loading && (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
               <div className="w-4 h-4 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
               Analisi in corso...
             </div>
           )}
-          {error && (
-            <p className="text-sm text-red-500">{error}</p>
-          )}
+          {error && <p className="text-sm text-red-500">{error}</p>}
           {brief && !loading && (
             <p
               className="text-sm text-slate-700 leading-relaxed"

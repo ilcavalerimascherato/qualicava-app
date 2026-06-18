@@ -24,14 +24,14 @@ const SCORE_COLOR = {
 };
 
 const UDO_COLORS = {
-  RSA: { bg: 'bg-blue-100',   text: 'text-blue-700'   },
-  CDI: { bg: 'bg-violet-100', text: 'text-violet-700' },
-  RSD: { bg: 'bg-pink-100',   text: 'text-pink-700'   },
-  SL:  { bg: 'bg-teal-100',   text: 'text-teal-700'   },
-  PSI: { bg: 'bg-orange-100', text: 'text-orange-700' },
-  CDD: { bg: 'bg-cyan-100',   text: 'text-cyan-700'   },
-  DIS: { bg: 'bg-rose-100',   text: 'text-rose-700'   },
-  NPI: { bg: 'bg-lime-100',   text: 'text-lime-700'   },
+  RSA: { bg: 'bg-blue-100',   text: 'text-blue-800'   },
+  CDI: { bg: 'bg-violet-100', text: 'text-violet-800' },
+  RSD: { bg: 'bg-pink-100',   text: 'text-pink-800'   },
+  SL:  { bg: 'bg-teal-100',   text: 'text-teal-800'   },
+  PSI: { bg: 'bg-orange-100', text: 'text-orange-800' },
+  CDD: { bg: 'bg-cyan-100',   text: 'text-cyan-800'   },
+  DIS: { bg: 'bg-rose-100',   text: 'text-rose-800'   },
+  NPI: { bg: 'bg-lime-100',   text: 'text-lime-800'   },
 };
 const DEFAULT_UDO = { bg: 'bg-slate-100', text: 'text-slate-600' };
 
@@ -46,7 +46,7 @@ const FacilityCard = memo(function FacilityCard({
   kpiRecords = [],
   isAdmin = false,
 }) {
-  const scoreColor = SCORE_COLOR[f.riskLevel] ?? 'text-slate-400';
+  const scoreColor = SCORE_COLOR[f.riskLevel] ?? 'text-slate-500';
 
   const riskScore = useMemo(() => {
     if (!isAdmin || !kpiRecords.length) return null;
@@ -90,7 +90,7 @@ const FacilityCard = memo(function FacilityCard({
         {onDirectorView && (
           <button
             onClick={() => onDirectorView(f)}
-            className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-all"
+            className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
             title="Vista direttore"
           >
             <ExternalLink size={12} />
@@ -98,7 +98,7 @@ const FacilityCard = memo(function FacilityCard({
         )}
         <button
           onClick={() => onSuspendToggle(f)}
-          className={`p-1 rounded transition-all ${
+          className={`p-1 rounded transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
             f.is_suspended
               ? 'text-amber-500 hover:bg-amber-50'
               : 'text-slate-300 hover:text-red-500 hover:bg-red-50'
@@ -109,7 +109,7 @@ const FacilityCard = memo(function FacilityCard({
         </button>
         <button
           onClick={() => onEdit(f)}
-          className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-all"
+          className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
           title="Modifica struttura"
         >
           <Settings size={12} />
@@ -141,7 +141,7 @@ const FacilityCard = memo(function FacilityCard({
 
       {/* ── Riga 2: regione · posti letto · direttore ── */}
       <div className="px-3 pt-0.5 pb-0">
-        <p className="text-[11px] text-slate-400 truncate">{metaLine}</p>
+        <p className="text-[11px] text-slate-500 truncate">{metaLine}</p>
       </div>
 
       {/* ── Riga 3: score + icone azione ── */}
@@ -164,7 +164,7 @@ const FacilityCard = memo(function FacilityCard({
           <button
             onClick={() => onHaccpClick && onHaccpClick(f)}
             disabled={!f.haccp_obbligatorio}
-            className={`flex items-center justify-center w-6 h-6 rounded transition-all
+            className={`flex items-center justify-center w-6 h-6 rounded transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1
               ${f.haccp_obbligatorio ? `${haccpCfg.bg} cursor-pointer` : 'cursor-default'}`}
             title={haccpCfg.title}
           >
@@ -175,7 +175,7 @@ const FacilityCard = memo(function FacilityCard({
           <button
             onClick={() => kpiState !== 'future' && onKpiClick(f)}
             disabled={kpiState === 'future'}
-            className={`flex items-center justify-center h-6 px-1 rounded transition-all ${
+            className={`flex items-center justify-center h-6 px-1 rounded transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
               kpiState === 'ok'     ? 'hover:bg-emerald-50' :
               kpiState === 'future' ? 'cursor-default'      :
                                      'hover:bg-indigo-50'
@@ -196,7 +196,7 @@ const FacilityCard = memo(function FacilityCard({
           {/* Dati clienti */}
           <button
             onClick={() => onDataClick(f, 'client')}
-            className={`flex items-center justify-center w-6 h-6 rounded transition-all ${
+            className={`flex items-center justify-center w-6 h-6 rounded transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
               f.clientStatus === 'completed' ? 'hover:bg-emerald-50' :
               f.clientStatus === 'pending'   ? 'hover:bg-indigo-50'  :
                                               'hover:bg-slate-100'
@@ -217,7 +217,7 @@ const FacilityCard = memo(function FacilityCard({
           {/* Dati operatori */}
           <button
             onClick={() => onDataClick(f, 'operator')}
-            className={`flex items-center justify-center w-6 h-6 rounded transition-all ${
+            className={`flex items-center justify-center w-6 h-6 rounded transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
               f.staffStatus === 'completed' ? 'hover:bg-emerald-50' :
               f.staffStatus === 'pending'   ? 'hover:bg-indigo-50'  :
                                              'hover:bg-slate-100'

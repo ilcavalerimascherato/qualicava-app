@@ -31,7 +31,7 @@ export default function AppHeader({
             <span className="text-sm font-bold text-slate-900">
               Quali<span className="text-emerald-600">CAVA</span>
             </span>
-            <span className="text-xs text-slate-400">· Gruppo Over</span>
+            <span className="text-xs text-slate-500">· Gruppo Over</span>
           </div>
         </div>
 
@@ -48,7 +48,7 @@ export default function AppHeader({
             <button
               key={id}
               onClick={() => onNavigate(id)}
-              className={`flex items-center gap-1.5 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
                 activePage === id
                   ? 'text-emerald-600 border-emerald-600'
                   : 'text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300'
@@ -71,7 +71,7 @@ export default function AppHeader({
 
           <button
             onClick={() => onNavigate('impostazioni')}
-            className={`flex items-center gap-1.5 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
               activePage === 'impostazioni'
                 ? 'text-emerald-600 border-emerald-600'
                 : 'text-slate-500 border-transparent hover:text-slate-700'
@@ -88,7 +88,7 @@ export default function AppHeader({
           <div className="relative">
             <button
               onClick={() => setUserMenuOpen(prev => !prev)}
-              className="flex items-center gap-2 border border-slate-200 rounded-full px-3 py-1.5 hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-2 border border-slate-200 rounded-full px-3 py-1.5 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
             >
               <div
                 className="flex items-center justify-center text-white font-bold flex-shrink-0 w-7 h-7"
@@ -97,19 +97,19 @@ export default function AppHeader({
                 {initials}
               </div>
               <span className="max-w-[140px] truncate text-sm font-medium text-slate-700">{user?.full_name}</span>
-              <ChevronDown size={12} className="text-slate-400" />
+              <ChevronDown size={12} className="text-slate-500" />
             </button>
             {userMenuOpen && (
               <div
                 className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[160px]"
                 onClick={() => setUserMenuOpen(false)}
               >
-                <div className="px-3 py-2 text-[11px] text-slate-400 border-b border-slate-100 truncate">
+                <div className="px-3 py-2 text-[11px] text-slate-500 border-b border-slate-100 truncate">
                   {user?.email}
                 </div>
                 <button
                   onClick={onSignOut}
-                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-b-lg flex items-center gap-1.5"
+                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-b-lg flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
                 >
                   <LogOut size={13} /> Esci
                 </button>

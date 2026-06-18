@@ -37,7 +37,7 @@ function SettingsCard({ icon, iconBg, iconColor, title, subtitle, onClick, disab
             </span>
           )}
         </div>
-        <p className="text-xs text-slate-400">{subtitle}</p>
+        <p className="text-xs text-slate-500">{subtitle}</p>
       </div>
     </div>
   );
@@ -114,7 +114,7 @@ export default function ImpostazioniPage() {
       <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-100">
         <div>
           <h1 className="text-base font-semibold text-slate-900">Impostazioni</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Configurazione anagrafica, utenti e comunicazioni</p>
+          <p className="text-xs text-slate-500 mt-0.5">Configurazione anagrafica, utenti e comunicazioni</p>
         </div>
       </div>
 
@@ -123,7 +123,7 @@ export default function ImpostazioniPage() {
 
         {/* Anagrafica */}
         <section className="mb-6">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Anagrafica</p>
+          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">Anagrafica</p>
           <div className="grid grid-cols-2 gap-2.5">
             <SettingsCard
               icon={<Building2 size={14} />}
@@ -152,7 +152,7 @@ export default function ImpostazioniPage() {
 
         {/* Comunicazioni */}
         <section className="mb-6">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Comunicazioni</p>
+          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">Comunicazioni</p>
           <div className="grid grid-cols-2 gap-2.5">
             <SettingsCard
               icon={<Mail size={14} />}
@@ -174,7 +174,7 @@ export default function ImpostazioniPage() {
 
         {/* Documenti */}
         <section>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Documenti</p>
+          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">Documenti</p>
           <div className="grid grid-cols-2 gap-2.5">
             <SettingsCard
               icon={<PenLine size={14} />}
