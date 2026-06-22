@@ -1,35 +1,52 @@
 /**
  * src/views/MasterDashboard.jsx
- * ─────────────────────────────────────────────────────────────
  * Vista MASTER HACCP — accessibile solo ad admin/superadmin/sede.
- * Mostra tutte le strutture raggruppate per regione con semaforo HACCP.
- * Cliccando su una card si apre HaccpFascicoloModal.
- *
- * Props ricevute da route: nessuna (tutto da hook)
- * Query string: ?facility=ID → apre direttamente il fascicolo di quella struttura
- * ─────────────────────────────────────────────────────────────
  */
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChefHat, ArrowLeft, Search, Filter } from 'lucide-react';
-import { useDashboardData } from '../hooks/useDashboardData';
-import { useHaccpSemafori } from '../hooks/useHaccpData';
-import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
+import { Search, MapPin, ChevronDown, Check, Pause, Building2 } from 'lucide-react';
+import { useAuth }           from '../contexts/AuthContext';
+import { useDashboardData }  from '../hooks/useDashboardData';
+import { useBadgeCounts }    from '../hooks/useBadgeCounts';
+import { useHaccpSemafori }  from '../hooks/useHaccpData';
+import AppHeader             from '../components/AppHeader';
+import HaccpFascicoloModal   from '../components/HaccpFascicoloModal';
+
+// Mappa haccpFilter → haccp_semaforo
+const HACCP_FILTER_MAP = {
+  inRegola:   'verde',
+  attenzione: 'giallo',
+  critico:    'rosso',
+  nonCensiti: 'grigio',
+};
+
+// Mappa filterStato → haccp_semaforo
+const STATO_MAP = {
+  conforme:   'verde',
+  attenzione: 'giallo',
+  critico:    'rosso',
+  non_attivo: 'grigio',
+};
 
 export default function MasterDashboard() {
   const navigate        = useNavigate();
   const [searchParams]  = useSearchParams();
   const facilityIdParam = searchParams.get('facility');
+  const { isAdmin, profile, signOut } = useAuth();
 
   const year = new Date().getFullYear();
-  const { data, loading } = useDashboardData(year);
+  const { data, loading }                        = useDashboardData(year);
   const { semafori, scadenzario, loading: loadingSem } = useHaccpSemafori();
 
-  const [search,           setSearch]           = useState('');
-  const [filterSemaforo,   setFilterSemaforo]   = useState('all');
-  const [filterRegione,    setFilterRegione]    = useState('all');
-  const [filterUdo,        setFilterUdo]        = useState('all');
-  const [selectedFacility, setSelectedFacility] = useState(null);
+  const [search,             setSearch]             = useState('');
+  const [filterUdo,          setFilterUdo]          = useState('');
+  const [selectedRegions,    setSelectedRegions]    = useState([]);
+  const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
+  const [showSuspended,      setShowSuspended]      = useState(false);
+  const [showSocieta,        setShowSocieta]        = useState(false);
+  const [filterStato,        setFilterStato]        = useState('');
+  const [haccpFilter,        setHaccpFilter]        = useState(null);
+  const [selectedFacility,   setSelectedFacility]   = useState(null);
 
   // Apri automaticamente il fascicolo se arriva da ?facility=ID
   useEffect(() => {
@@ -38,6 +55,31 @@ export default function MasterDashboard() {
       if (f) setSelectedFacility(f);
     }
   }, [facilityIdParam, data.facilities]);
+
+  const allIds = useMemo(
+    () => (data.facilities ?? []).filter(f => !f.is_suspended).map(f => f.id),
+    [data.facilities],
+  );
+  const { totals: badgeTotals } = useBadgeCounts(allIds, year, isAdmin);
+
+  const companyById = useMemo(() => {
+    const map = {};
+    (data.companies ?? []).forEach(c => { map[c.id] = c.name; });
+    return map;
+  }, [data.companies]);
+
+  const handleNavigate = (page) => {
+    const routes = {
+      dashboard:    '/admin',
+      saturazione:  '/occupazione',
+      haccp:        '/master',
+      documenti:    '/documenti',
+      nc:           '/admin',
+      report:       '/report',
+      impostazioni: '/impostazioni',
+    };
+    navigate(routes[page] ?? '/admin');
+  };
 
   // Arricchisce facilities con semaforo HACCP
   const enriched = useMemo(() => {
@@ -51,45 +93,17 @@ export default function MasterDashboard() {
     });
   }, [data.facilities, semafori, scadenzario]);
 
-  // Regioni disponibili per filtro
   const regioni = useMemo(() => {
     const set = new Set(enriched.filter(f => f.region).map(f => f.region));
     return Array.from(set).sort();
   }, [enriched]);
 
-  // UDO disponibili per filtro
   const udoNames = useMemo(() => {
     const set = new Set(enriched.map(f => f.udo_name).filter(Boolean));
     return Array.from(set).sort();
   }, [enriched]);
 
-  // Filtro strutture
-  const filtered = useMemo(() => {
-    return enriched.filter(f => {
-      if (f.is_suspended) return false;
-      if (search && !f.name.toLowerCase().includes(search.toLowerCase())) return false;
-      if (filterRegione !== 'all' && f.region !== filterRegione) return false;
-      if (filterUdo !== 'all' && f.udo_name !== filterUdo) return false;
-      if (filterSemaforo === 'haccp_only' && !f.haccp_obbligatorio) return false;
-      if (filterSemaforo !== 'all' && filterSemaforo !== 'haccp_only') {
-        if (f.haccp_semaforo !== filterSemaforo) return false;
-      }
-      return true;
-    });
-  }, [enriched, search, filterRegione, filterUdo, filterSemaforo]);
-
-  // Raggruppamento per regione
-  const byRegione = useMemo(() => {
-    const map = {};
-    for (const f of filtered) {
-      const key = f.region || 'Altre';
-      if (!map[key]) map[key] = [];
-      map[key].push(f);
-    }
-    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
-  }, [filtered]);
-
-  // Contatori semaforo
+  // Contatori semaforo (su strutture soggette, escluse sospese)
   const counts = useMemo(() => {
     const haccpOnly = enriched.filter(f => f.haccp_obbligatorio && !f.is_suspended);
     return {
@@ -101,130 +115,265 @@ export default function MasterDashboard() {
     };
   }, [enriched]);
 
+  const totalBeds = useMemo(
+    () => enriched.reduce((sum, f) => sum + (f.bed_count || 0), 0),
+    [enriched],
+  );
+
+  const totalFacilities = enriched.length;
+
+  // Filtro strutture
+  const filtered = useMemo(() => {
+    const targetSemaforo = haccpFilter
+      ? HACCP_FILTER_MAP[haccpFilter]
+      : filterStato
+        ? STATO_MAP[filterStato]
+        : null;
+    return enriched.filter(f => {
+      if (!showSuspended && f.is_suspended) return false;
+      if (search && !f.name.toLowerCase().includes(search.toLowerCase())) return false;
+      if (selectedRegions.length > 0 && !selectedRegions.includes(f.region)) return false;
+      if (filterUdo && f.udo_name !== filterUdo) return false;
+      if (targetSemaforo && f.haccp_semaforo !== targetSemaforo) return false;
+      return true;
+    });
+  }, [enriched, search, selectedRegions, filterUdo, haccpFilter, filterStato, showSuspended]);
+
+  // Raggruppamento per regione o società
+  const groupedFacilities = useMemo(() => {
+    const map = {};
+    for (const f of filtered) {
+      const key = showSocieta
+        ? (companyById[f.company_id] ?? 'Senza società')
+        : (f.region || 'Altre');
+      if (!map[key]) map[key] = [];
+      map[key].push(f);
+    }
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+  }, [filtered, showSocieta, companyById]);
+
   const isLoading = loading || loadingSem;
 
   return (
     <div className="min-h-screen bg-slate-100 pb-16 font-sans">
 
-      {/* ── Header ── */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/admin')}
-              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
-              title="Torna alla dashboard"
-            >
-              <ArrowLeft size={20} />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="bg-amber-500 p-2.5 rounded-xl text-white shadow">
-                <ChefHat size={22} />
-              </div>
-              <div>
-                <h1 className="text-lg font-black tracking-tight text-slate-900">
-                  HACCP <span className="text-amber-500">GRUPPO OVER</span>
-                </h1>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                  Gestione sicurezza alimentare · {counts.totale} strutture soggette
-                </p>
-              </div>
-            </div>
-          </div>
+      <AppHeader
+        activePage="haccp"
+        badgeCounts={badgeTotals}
+        user={profile}
+        onSignOut={signOut}
+        onNavigate={handleNavigate}
+      />
 
-          {/* Badge semaforo cliccabili */}
-          <div className="flex items-center gap-3">
-            {[
-              { key: 'verde',  label: 'In regola',   count: counts.verde,  cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-              { key: 'giallo', label: 'Attenzione',  count: counts.giallo, cls: 'bg-amber-50 border-amber-200 text-amber-700'       },
-              { key: 'rosso',  label: 'Critici',     count: counts.rosso,  cls: 'bg-red-50 border-red-200 text-red-700'             },
-              { key: 'grigio', label: 'Non censiti', count: counts.grigio, cls: 'bg-slate-100 border-slate-200 text-slate-500'      },
-            ].map(({ key, label, count, cls }) => (
-              <button
-                key={key}
-                onClick={() => setFilterSemaforo(prev => prev === key ? 'all' : key)}
-                className={`flex flex-col items-center px-4 py-2 rounded-xl border font-black transition-all ${cls} ${filterSemaforo === key ? 'ring-2 ring-offset-1 ring-current' : 'opacity-80 hover:opacity-100'}`}
-              >
-                <span className="text-2xl">{count}</span>
-                <span className="text-[10px] uppercase tracking-widest font-bold">{label}</span>
-              </button>
-            ))}
-          </div>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-5 py-2 bg-white border-b border-slate-200">
+
+        {/* SINISTRA — titolo */}
+        <div className="flex-shrink-0">
+          <h1 className="text-sm font-semibold text-slate-900">HACCP · Sicurezza alimentare</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {counts.totale} strutture soggette · {totalFacilities} totali
+          </p>
         </div>
 
-        {/* Filtri */}
-        <div className="flex items-center gap-3 mt-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+        {/* CENTRO — filtri standard */}
+        <div className="flex-1 flex items-center justify-center gap-2 flex-nowrap px-6">
+
+          {/* Ricerca */}
+          <div className="flex items-center gap-1.5 border border-slate-200 rounded-full px-3 py-1.5 bg-slate-50 w-44">
+            <Search size={13} className="text-slate-400 flex-shrink-0" />
             <input
               type="text"
               placeholder="Cerca struttura..."
+              className="bg-transparent text-xs outline-none w-full placeholder-slate-300"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:border-amber-400"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter size={14} className="text-slate-400" />
-            <select
-              value={filterRegione}
-              onChange={e => setFilterRegione(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-amber-400"
-            >
-              <option value="all">Tutte le regioni</option>
-              {regioni.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-            <select
-              value={filterUdo}
-              onChange={e => setFilterUdo(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-amber-400"
-            >
-              <option value="all">Tutte le UDO</option>
-              {udoNames.map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
-            <select
-              value={filterSemaforo}
-              onChange={e => setFilterSemaforo(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-amber-400"
-            >
-              <option value="all">Tutti gli stati</option>
-              <option value="haccp_only">Solo HACCP</option>
-              <option value="verde">🟢 In regola</option>
-              <option value="giallo">🟡 Attenzione</option>
-              <option value="rosso">🔴 Critici</option>
-              <option value="grigio">⚪ Non censiti</option>
-            </select>
-          </div>
-          <span className="text-xs font-bold text-slate-400 ml-auto">
-            {filtered.length} strutture
-          </span>
-        </div>
-      </header>
 
-      {/* ── Contenuto ── */}
-      <main className="p-4 space-y-6">
+          {/* UDO */}
+          <select
+            value={filterUdo}
+            onChange={e => setFilterUdo(e.target.value)}
+            className="border border-slate-200 rounded-full px-3 py-1.5 text-xs text-slate-500 bg-slate-50 appearance-none cursor-pointer"
+          >
+            <option value="">Tutte le UDO</option>
+            {udoNames.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+
+          {/* Regione multi-select */}
+          <div className="relative">
+            <button
+              onClick={() => setRegionDropdownOpen(prev => !prev)}
+              className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-xs whitespace-nowrap ${
+                selectedRegions.length > 0
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                  : 'bg-slate-50 border-slate-200 text-slate-500'
+              }`}
+            >
+              <MapPin size={12} />
+              {selectedRegions.length === 0 ? 'Tutte le regioni'
+                : selectedRegions.length === 1 ? selectedRegions[0]
+                : `${selectedRegions.length} regioni`}
+              <ChevronDown size={10} className="text-slate-400" />
+            </button>
+            {regionDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setRegionDropdownOpen(false)} />
+                <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-sm z-20 min-w-[160px] py-1">
+                  <button
+                    onClick={() => { setSelectedRegions([]); setRegionDropdownOpen(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-xs ${
+                      selectedRegions.length === 0 ? 'text-emerald-600 font-medium bg-emerald-50' : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >Tutte le regioni</button>
+                  <div className="h-px bg-slate-100 my-1" />
+                  {regioni.map(region => (
+                    <button
+                      key={region}
+                      onClick={() => setSelectedRegions(prev =>
+                        prev.includes(region) ? prev.filter(r => r !== region) : [...prev, region]
+                      )}
+                      className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${
+                        selectedRegions.includes(region) ? 'text-emerald-700 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
+                        selectedRegions.includes(region) ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300'
+                      }`}>
+                        {selectedRegions.includes(region) && <Check size={9} color="white" />}
+                      </span>
+                      {region}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Società */}
+          <button
+            onClick={() => setShowSocieta(prev => !prev)}
+            className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-xs whitespace-nowrap transition-colors ${
+              showSocieta
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
+            }`}
+          >
+            <Building2 size={12} />
+            Società
+          </button>
+
+          {/* Stato HACCP */}
+          <select
+            value={filterStato}
+            onChange={e => { setFilterStato(e.target.value); setHaccpFilter(null); }}
+            className="border border-slate-200 rounded-full px-3 py-1.5 text-xs text-slate-500 bg-slate-50 appearance-none cursor-pointer"
+          >
+            <option value="">Tutti gli stati</option>
+            <option value="conforme">Conforme</option>
+            <option value="attenzione">Attenzione</option>
+            <option value="critico">Critico</option>
+            <option value="non_attivo">Non attivo</option>
+          </select>
+
+          {/* Sospese */}
+          <button
+            onClick={() => setShowSuspended(prev => !prev)}
+            className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-xs whitespace-nowrap transition-colors ${
+              showSuspended
+                ? 'bg-amber-50 border-amber-300 text-amber-600'
+                : 'bg-slate-50 border-slate-200 text-slate-500'
+            }`}
+          >
+            <Pause size={12} />
+            Sospese
+          </button>
+
+        </div>
+
+        {/* DESTRA — spazio riservato */}
+        <div className="flex-shrink-0 w-24" />
+
+      </div>
+
+      {/* KPI strip */}
+      <div className="flex items-center justify-between px-5 py-1.5 bg-slate-50 border-b border-slate-200">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">Posti letto attivi</span>
+          <span className="text-sm font-semibold text-slate-800">{totalBeds}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setHaccpFilter(prev => prev === 'inRegola' ? null : 'inRegola'); setFilterStato(''); }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+              haccpFilter === 'inRegola'
+                ? 'bg-emerald-200 text-emerald-800 ring-1 ring-emerald-400'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+            {counts.verde} in regola
+          </button>
+          <button
+            onClick={() => { setHaccpFilter(prev => prev === 'attenzione' ? null : 'attenzione'); setFilterStato(''); }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+              haccpFilter === 'attenzione'
+                ? 'bg-amber-200 text-amber-800 ring-1 ring-amber-400'
+                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+            {counts.giallo} attenzione
+          </button>
+          <button
+            onClick={() => { setHaccpFilter(prev => prev === 'critico' ? null : 'critico'); setFilterStato(''); }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+              haccpFilter === 'critico'
+                ? 'bg-red-200 text-red-800 ring-1 ring-red-400'
+                : 'bg-red-50 text-red-700 hover:bg-red-100'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+            {counts.rosso} critici
+          </button>
+          <button
+            onClick={() => { setHaccpFilter(prev => prev === 'nonCensiti' ? null : 'nonCensiti'); setFilterStato(''); }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+              haccpFilter === 'nonCensiti'
+                ? 'bg-slate-200 text-slate-700 ring-1 ring-slate-400'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-slate-400 flex-shrink-0" />
+            {counts.grigio} non censiti
+          </button>
+        </div>
+      </div>
+
+      {/* Contenuto */}
+      <div className="pb-10">
         {isLoading ? (
           <div className="flex items-center justify-center py-32 text-slate-400 font-black uppercase tracking-widest animate-pulse">
             Caricamento strutture HACCP...
           </div>
-        ) : byRegione.length === 0 ? (
+        ) : groupedFacilities.length === 0 ? (
           <div className="text-center py-20 text-slate-400 font-bold">
             Nessuna struttura trovata
           </div>
         ) : (
-          byRegione.map(([regione, strutture]) => (
-            <div key={regione}>
-              {/* Separatore regione */}
-              <div className="flex items-center gap-2 mb-3">
-                <div className="h-px flex-1 bg-gray-200" />
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest px-2">
-                  {regione} · {strutture.length} strutture
+          groupedFacilities.map(([groupName, groupFacilities]) => (
+            <div key={groupName}>
+              <div className="flex items-center gap-2 px-5 py-2 mt-3">
+                <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                  {groupName}
                 </span>
-                <div className="h-px flex-1 bg-gray-200" />
+                <span className="text-xs text-slate-400">{groupFacilities.length} strutture</span>
+                <div className="flex-1 h-px bg-slate-200" />
+                <GroupSemafori facilities={groupFacilities} />
               </div>
-              {/* Griglia strutture */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                {strutture.map(f => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 px-5 pb-2">
+                {groupFacilities.map(f => (
                   <HaccpCard
                     key={f.id}
                     f={f}
@@ -236,14 +385,49 @@ export default function MasterDashboard() {
             </div>
           ))
         )}
-      </main>
+      </div>
 
-      {/* ── Modale fascicolo HACCP ── */}
       {selectedFacility && (
         <HaccpFascicoloModal
           facility={selectedFacility}
           onClose={() => setSelectedFacility(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ── GroupSemafori ─────────────────────────────────────────────
+function GroupSemafori({ facilities }) {
+  const v = facilities.filter(f => f.haccp_semaforo === 'verde').length;
+  const g = facilities.filter(f => f.haccp_semaforo === 'giallo').length;
+  const r = facilities.filter(f => f.haccp_semaforo === 'rosso').length;
+  const n = facilities.filter(f => f.haccp_semaforo === 'grigio' || !f.haccp_semaforo).length;
+  return (
+    <div className="flex items-center gap-1.5">
+      {v > 0 && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+          {v} ok
+        </span>
+      )}
+      {g > 0 && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+          {g} att.
+        </span>
+      )}
+      {r > 0 && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-50 px-1.5 py-0.5 rounded">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+          {r} critici
+        </span>
+      )}
+      {n > 0 && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0" />
+          {n} n/d
+        </span>
       )}
     </div>
   );

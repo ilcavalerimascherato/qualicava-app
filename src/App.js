@@ -42,7 +42,7 @@ export default function App() {
 
   const [year]                                  = useState(new Date().getFullYear());
   const [showSuspended, setShowSuspended]       = useState(false);
-  const [gridCols, setGridCols]                 = useState('lg:grid-cols-4');
+  const [gridCols, setGridCols]                 = useState('lg:grid-cols-6');
   const [filterUdo, setFilterUdo]               = useState('all');
   const [showSocieta, setShowSocieta]           = useState(false);
   const [selectedCompany, setSelectedCompany]   = useState(null);
