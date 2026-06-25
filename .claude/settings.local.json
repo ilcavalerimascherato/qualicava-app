@@ -46,7 +46,8 @@
       "Bash(npx --yes playwright --version)",
       "Bash(node -e \"require\\('puppeteer'\\)\")",
       "Bash(node *)",
-      "Bash(npx playwright *)"
+      "Bash(npx playwright *)",
+      "Bash(npx supabase *)"
     ]
   }
 }

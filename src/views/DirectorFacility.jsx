@@ -1,14 +1,14 @@
 /**
- * src/views/DirectorFacility.jsx  â€”  v3
+ * src/views/DirectorFacility.jsx  —  v3
  * Dashboard completa per il direttore di una struttura specifica.
- * Tab: Panoramica Â· KPI Â· Survey Â· Analisi Survey Â· Non ConformitÃ  Â· Benchmark
+ * Tab: Panoramica · KPI · Survey · Analisi Survey · Non Conformità · Benchmark
  *
  * MODIFICHE v3:
  *  - FIX CRITICO: superadmin/admin che accede via /facility/:id usava
- *    useDirectorData con facilityIds=[] â†’ query disabled â†’ facility null.
+ *    useDirectorData con facilityIds=[] → query disabled → facility null.
  *    Ora il hook di caricamento si sceglie in base al ruolo:
- *      â€¢ admin/superadmin/sede â†’ useDashboardData (carica tutto, ha accesso globale)
- *      â€¢ director              â†’ useDirectorData (carica solo le strutture assegnate)
+ *      • admin/superadmin/sede → useDashboardData (carica tutto, ha accesso globale)
+ *      • director              → useDirectorData (carica solo le strutture assegnate)
  *    L'invalidazione segue la stessa logica.
  */
 import React, { useState, useMemo, useEffect } from 'react';
@@ -50,7 +50,7 @@ import { useCdgData }        from '../hooks/useCdgData';
 import SurveysTab            from '../components/SurveysTab';
 import OverviewTab           from '../components/OverviewTab';
 
-// Mappa tab â†’ conteggio badge e colore
+// Mappa tab → conteggio badge e colore
 function getTabBadge(tabId, fBadge) {
   if (!fBadge) return { count: 0, bg: 'bg-rose-500' };
   switch (tabId) {
@@ -73,12 +73,12 @@ const TABS = [
   { id: 'kpi',              label: 'KPI Mensili',    Icon: BarChart3     },
   { id: 'surveys',          label: 'Survey',         Icon: Database      },
   { id: 'analysis',         label: 'Analisi Survey', Icon: BarChart3     },
-  { id: 'non_conformities', label: 'Non ConformitÃ ', Icon: AlertTriangle },
+  { id: 'non_conformities', label: 'Non Conformità', Icon: AlertTriangle },
   { id: 'benchmark',        label: 'Benchmark',      Icon: TrendingUp    },
   { id: 'haccp',            label: 'Documenti',      Icon: ChefHat       },
 ];
 
-// FIX v3: hook wrapper â€” sceglie la sorgente dati in base al ruolo.
+// FIX v3: hook wrapper — sceglie la sorgente dati in base al ruolo.
 // Entrambi i hook vengono chiamati incondizionatamente (rules of hooks),
 // ma solo quello corretto per il ruolo viene effettivamente usato.
 function useAdaptiveData(isAdminUser, facilityIds, year) {
@@ -126,8 +126,8 @@ export default function DirectorFacility() {
   const { perFacility: badgePerFacility } = useBadgeCounts([numericFacilityId], year);
   const fBadge = badgePerFacility[numericFacilityId];
 
-  // FIX v3: admin â†’ useDashboardData (accesso globale)
-  //         director â†’ useDirectorData (solo strutture assegnate)
+  // FIX v3: admin → useDashboardData (accesso globale)
+  //         director → useDirectorData (solo strutture assegnate)
   const facilityIds = profile?.accessibleFacilityIds ?? [];
   const { data, loading, errors, invalidate } = useAdaptiveData(isAdmin, facilityIds, year);
 
@@ -198,7 +198,7 @@ export default function DirectorFacility() {
             Struttura non trovata o accesso non autorizzato.
           </p>
           <button onClick={() => navigate('/')} className="text-indigo-600 font-bold text-sm hover:underline">
-            â† Torna alla home
+            ← Torna alla home
           </button>
         </div>
       </div>
@@ -433,7 +433,7 @@ export default function DirectorFacility() {
 }
 
 // â”€â”€ Sub-componenti â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// (invariati rispetto alla versione originale â€” solo import cambiati)
+// (invariati rispetto alla versione originale — solo import cambiati)
 
 function StatusPill({ label, isOk, isPartial }) {
   const cfg = isOk
@@ -476,7 +476,7 @@ function NonConformitiesTab({ facility, year, profile, refreshKey = 0, onNew, on
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="font-black text-slate-800 text-lg">Non ConformitÃ  {year}</h2>
+        <h2 className="font-black text-slate-800 text-lg">Non Conformità {year}</h2>
         <button onClick={onNew}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors shadow">
           <Plus size={15} /> Registra NC
@@ -490,7 +490,7 @@ function NonConformitiesTab({ facility, year, profile, refreshKey = 0, onNew, on
       ) : ncs.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
           <AlertTriangle size={40} className="mx-auto text-slate-300 mb-4" />
-          <p className="text-slate-500 font-medium">Nessuna non conformitÃ  registrata per il {year}.</p>
+          <p className="text-slate-500 font-medium">Nessuna non conformità registrata per il {year}.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -502,14 +502,14 @@ function NonConformitiesTab({ facility, year, profile, refreshKey = 0, onNew, on
               </span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-black text-slate-800 truncate">
-                  {nc.titolo || nc.classificazione || 'â€”'}
+                  {nc.titolo || nc.classificazione || '—'}
                 </p>
                 <p className="text-xs text-slate-400 mt-0.5 truncate">{nc.classificazione}</p>
               </div>
               <div className="text-right shrink-0">
                 <p className="text-xs text-slate-400">{new Date(nc.created_at).toLocaleDateString('it')}</p>
                 <p className="text-xs font-black text-indigo-600 group-hover:translate-x-0.5 transition-transform mt-1">
-                  Modifica â†’
+                  Modifica →
                 </p>
               </div>
             </button>
@@ -614,7 +614,7 @@ function KpiTab({ facility, kpiRecords, year, onOpenManager }) {
           <BarChart3 size={40} className="mx-auto text-slate-300 mb-4" />
           <p className="text-slate-500 font-medium">Nessun dato KPI inserito per il {year}.</p>
           <button onClick={onOpenManager} className="mt-4 text-indigo-600 font-bold text-sm hover:underline">
-            Apri inserimento KPI â†’
+            Apri inserimento KPI →
           </button>
         </div>
       )}
@@ -723,9 +723,7 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
   useEffect(() => {
     setLoadingBench(true);
     supabase
-      .from('v_benchmark_anonymous')
-      .select('*')
-      .eq('year', year)
+      .rpc('get_benchmark_anonymous', { p_year: year })
       .then(({ data, error }) => {
         if (!error) setBenchData(data || []);
         setLoadingBench(false);
@@ -795,7 +793,7 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
         <div>
           <h2 className="font-black text-slate-800 text-lg">Benchmark {year}</h2>
           <p className="text-sm text-slate-400 mt-0.5">
-            {facility.udo_name} â€” confronto anonimo con strutture dello stesso tipo
+            {facility.udo_name} — confronto anonimo con strutture dello stesso tipo
             {!monthBench && <span className="ml-2 text-amber-600 font-bold">(servono almeno 3 strutture con dati per il benchmark)</span>}
           </p>
         </div>
@@ -811,10 +809,10 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
       {/* Box overview: struttura vs media UDO */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <h3 className="font-black text-slate-700 mb-1">
-          Struttura vs Media UDO â€” {BENCH_MONTH_NAMES[selectedMonth - 1]} {year}
+          Struttura vs Media UDO — {BENCH_MONTH_NAMES[selectedMonth - 1]} {year}
         </h3>
         <p className="text-xs text-slate-400 mb-4">
-          {myRecord ? 'Dati inseriti per questo mese' : 'Nessun dato per questo mese â€” solo media UDO visibile'}
+          {myRecord ? 'Dati inseriti per questo mese' : 'Nessun dato per questo mese — solo media UDO visibile'}
         </p>
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
           {overviewData.map(d => (
@@ -828,7 +826,7 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
               <div className="flex items-center gap-1.5 mb-1">
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
                 <span className="text-sm font-black" style={{ color: d.color }}>
-                  {d.myValue !== null ? `${d.myValue}%` : 'â€”'}
+                  {d.myValue !== null ? `${d.myValue}%` : '—'}
                 </span>
               </div>
               {d.udoAvg !== null && (
@@ -837,7 +835,7 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
                   <span className="text-xs font-bold text-slate-400">{d.udoAvg}%</span>
                 </div>
               )}
-              <p className="text-[9px] text-slate-300 mt-1 uppercase">{d.dir === 'MAX' ? 'â†‘ max' : 'â†“ min'}</p>
+              <p className="text-[9px] text-slate-300 mt-1 uppercase">{d.dir === 'MAX' ? '↑ max' : '↓ min'}</p>
             </div>
           ))}
         </div>
@@ -850,11 +848,11 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
         </div>
       </div>
 
-      {/* Trend 12 mesi â€” KPI selezionato */}
+      {/* Trend 12 mesi — KPI selezionato */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <div>
-            <h3 className="font-black text-slate-700">Trend 12 mesi â€” {selectedKpi}</h3>
+            <h3 className="font-black text-slate-700">Trend 12 mesi — {selectedKpi}</h3>
             <p className="text-xs text-slate-400 mt-0.5">Clicca un box sopra per cambiare indicatore</p>
           </div>
           <select value={selectedKpi} onChange={e => setSelectedKpi(e.target.value)}
@@ -944,7 +942,7 @@ function SurveyAnalysisTab({ facility, surveys }) {
 
       {latest?.ai_report_direzione && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5">
-          <p className="text-xs font-black text-indigo-600 uppercase tracking-widest mb-2">Sintesi AI â€” Report Direzione</p>
+          <p className="text-xs font-black text-indigo-600 uppercase tracking-widest mb-2">Sintesi AI — Report Direzione</p>
           <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{latest.ai_report_direzione}</p>
         </div>
       )}
@@ -1004,15 +1002,23 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
   const [haccpLoading, setHaccpLoading]               = useState(true);
   const [docStatus, setDocStatus]                     = useState(null);
   const [modelloRistorazione, setModelloRistorazione] = useState(null);
+  const [regimeHaccp, setRegimeHaccp]                 = useState(null);
+  const [esoneroNote, setEsoneroNote]                 = useState(null);
+  const [cucinaCondivisa, setCucinaCondivisa]         = useState(false);
 
   useEffect(() => {
     if (!facility?.id || !facility?.haccp_obbligatorio) return;
     supabase
       .from('haccp_profili')
-      .select('modello_ristorazione')
+      .select('modello_ristorazione, regime_haccp, esonero_note, cucina_condivisa_con')
       .eq('struttura_id', facility.id)
       .maybeSingle()
-      .then(({ data }) => setModelloRistorazione(data?.modello_ristorazione ?? null));
+      .then(({ data }) => {
+        setModelloRistorazione(data?.modello_ristorazione ?? null);
+        setRegimeHaccp(data?.regime_haccp ?? null);
+        setEsoneroNote(data?.esonero_note ?? null);
+        setCucinaCondivisa(!!data?.cucina_condivisa_con);
+      });
   }, [facility?.id, facility?.haccp_obbligatorio]);
 
   useEffect(() => {
@@ -1049,6 +1055,7 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
 
   useEffect(() => {
     if (!onStatusChange) return;
+    if (cucinaCondivisa) { onStatusChange(null); return; }
     const haccpRed = haccpStatus && (
       !haccpStatus.manuale_ok ||
       haccpStatus.analisi_status === 'rosso' ||
@@ -1063,36 +1070,47 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
     if (haccpRed || docRed) onStatusChange('red');
     else if (haccpAmber || docAmber) onStatusChange('amber');
     else onStatusChange(null);
-  }, [haccpStatus, docStatus, onStatusChange]);
+  }, [haccpStatus, docStatus, onStatusChange, cucinaCondivisa]);
 
   const docBadgeLevel = (docStatus?.scaduti ?? 0) > 0 ? 'red'
     : (docStatus?.daAggiornare ?? 0) > 0 ? 'amber'
     : (docStatus?.totale ?? 0) > 0 ? 'green'
     : null;
 
-  if (!facility?.haccp_obbligatorio) {
+  if (!facility?.haccp_obbligatorio || regimeHaccp === 'esonerata') {
     return (
       <div className="space-y-4">
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <ChefHat size={48} className="text-slate-200 mb-4" />
-          <p className="font-black text-slate-400 text-lg">Struttura non soggetta a HACCP</p>
-          <p className="text-sm text-slate-300 mt-1">Questa struttura non ha l'obbligo di autocontrollo alimentare.</p>
+          {regimeHaccp === 'esonerata' ? (
+            <>
+              <p className="font-black text-slate-400 text-lg">Struttura esonerata da HACCP</p>
+              {esoneroNote && (
+                <p className="text-sm text-slate-300 mt-1 max-w-sm">{esoneroNote}</p>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="font-black text-slate-400 text-lg">Struttura non soggetta a HACCP</p>
+              <p className="text-sm text-slate-300 mt-1">Questa struttura non ha l'obbligo di autocontrollo alimentare.</p>
+            </>
+          )}
         </div>
-        {/* BOX 2 â€” Documenti */}
+        {/* BOX 2 — Documenti */}
         <div className="relative pt-3">
           {docBadgeLevel === 'red' && (
             <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              âš  Documenti scaduti
+              ⚠ Documenti scaduti
             </span>
           )}
           {docBadgeLevel === 'amber' && (
             <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              â†‘ Aggiornamenti disponibili
+              ↑ Aggiornamenti disponibili
             </span>
           )}
           {docBadgeLevel === 'green' && (
             <span className="absolute top-0 left-4 bg-emerald-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              âœ“ Tutto aggiornato
+              ✓ Tutto aggiornato
             </span>
           )}
           {(fBadge?.documenti ?? 0) > 0 && (
@@ -1148,7 +1166,7 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
             </div>
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <h2 className="text-lg font-black text-slate-800">Operatore non OSA â€” documentazione fornitore</h2>
+                <h2 className="text-lg font-black text-slate-800">Operatore non OSA — documentazione fornitore</h2>
                 <span className="text-xs font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">Non OSA</span>
               </div>
               <p className="text-sm text-slate-500">
@@ -1161,10 +1179,10 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
               <p className="text-sm font-black text-slate-700">SCIA e documentazione fornitore</p>
               <p className="text-xs text-slate-400 mt-0.5">
                 {haccpStatus?.stato_scia === 'ok'
-                  ? 'âœ… SCIA fornitore aggiornata'
+                  ? '✅ SCIA fornitore aggiornata'
                   : haccpStatus?.stato_scia
-                  ? 'âš ï¸ Verificare stato SCIA fornitore'
-                  : 'Nessun dato â€” aprire il fascicolo per configurare'}
+                  ? '⚠ï¸ Verificare stato SCIA fornitore'
+                  : 'Nessun dato — aprire il fascicolo per configurare'}
               </p>
             </div>
             <button
@@ -1181,21 +1199,21 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
             onClose={() => setShowModal(false)}
           />
         )}
-        {/* BOX 2 â€” Documenti */}
+        {/* BOX 2 — Documenti */}
         <div className="relative pt-3">
           {docBadgeLevel === 'red' && (
             <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              âš  Documenti scaduti
+              ⚠ Documenti scaduti
             </span>
           )}
           {docBadgeLevel === 'amber' && (
             <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              â†‘ Aggiornamenti disponibili
+              ↑ Aggiornamenti disponibili
             </span>
           )}
           {docBadgeLevel === 'green' && (
             <span className="absolute top-0 left-4 bg-emerald-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-              âœ“ Tutto aggiornato
+              ✓ Tutto aggiornato
             </span>
           )}
           {(fBadge?.documenti ?? 0) > 0 && (
@@ -1241,12 +1259,12 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
     );
   }
 
-  const haccpRed = haccpStatus && (
+  const haccpRed = !cucinaCondivisa && haccpStatus && (
     !haccpStatus.manuale_ok ||
     haccpStatus.analisi_status === 'rosso' ||
     haccpStatus.formazione_status === 'rosso'
   );
-  const haccpAmber = !haccpRed && haccpStatus && (
+  const haccpAmber = !cucinaCondivisa && !haccpRed && haccpStatus && (
     haccpStatus.analisi_status === 'amber' ||
     haccpStatus.formazione_status === 'amber'
   );
@@ -1254,16 +1272,16 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
   return (
     <div className="space-y-4">
 
-      {/* BOX 1 â€” HACCP */}
+      {/* BOX 1 — HACCP */}
       <div className="relative pt-3">
         {haccpStatus && haccpRed && (
           <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            âš  Attenzione
+            ⚠ Attenzione
           </span>
         )}
         {haccpStatus && !haccpRed && haccpAmber && (
           <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            âš  Verificare
+            ⚠ Verificare
           </span>
         )}
         {(fBadge?.haccp ?? 0) > 0 && (
@@ -1288,6 +1306,10 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
           <div className="flex items-center gap-4 flex-wrap justify-end">
             {haccpLoading ? (
               <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            ) : cucinaCondivisa ? (
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+                🍽️ Cucina condivisa — HACCP gestito dalla struttura capofila
+              </span>
             ) : haccpStatus ? (
               <div className="flex gap-2 flex-wrap">
                 <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
@@ -1319,21 +1341,21 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
         </div>
       </div>
 
-      {/* BOX 2 â€” Documenti */}
+      {/* BOX 2 — Documenti */}
       <div className="relative pt-3">
         {docBadgeLevel === 'red' && (
           <span className="absolute top-0 left-4 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            âš  Documenti scaduti
+            ⚠ Documenti scaduti
           </span>
         )}
         {docBadgeLevel === 'amber' && (
           <span className="absolute top-0 left-4 bg-amber-400 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            â†‘ Aggiornamenti disponibili
+            ↑ Aggiornamenti disponibili
           </span>
         )}
         {docBadgeLevel === 'green' && (
           <span className="absolute top-0 left-4 bg-emerald-500 text-white text-xs font-black px-3 py-1 rounded-full z-10">
-            âœ“ Tutto aggiornato
+            ✓ Tutto aggiornato
           </span>
         )}
         {(fBadge?.documenti ?? 0) > 0 && (
@@ -1380,7 +1402,7 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
         </div>
       </div>
 
-      {/* Documenti inline â€” header DirectorFacility rimane visibile, nessun navigate */}
+      {/* Documenti inline — header DirectorFacility rimane visibile, nessun navigate */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
         <DocMyDocumentiView facilityId={facility.id} />
       </div>

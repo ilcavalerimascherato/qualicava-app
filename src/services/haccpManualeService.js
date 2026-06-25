@@ -296,8 +296,182 @@ function dashedBox(label, sub) {
   });
 }
 
-// ── 5.1 Flusso generale pasti caldi (Pranzo) ─────────────────
-function diagramma51() {
+// ── Sezione 5 — Diagrammi di flusso condizionali per modello ─
+function buildSezione5() {
+  const modello                = _params.modello                || 'distribuzione_veicolata';
+  const cucinaObj              = _params.cucina               || {};
+  const opDisfagici            = _params.opDisfagici           || false;
+  const opDisfagiciMod         = _params.opDisfagiciModalita   || 'interna';
+  const opCenaAbbattuta        = _params.opCenaAbbattuta       || false;
+  const opMonousoInfetti       = _params.opMonousoInfetti      || false;
+  const opDistribuzioneModalita = _params.opDistribuzioneModalita || 'gastronorm';
+
+  const bx = (t, d, tipo = 'normal') => {
+    if (tipo === 'esterno') return [dashedBox(t, d || 'Fase esterna'), arrow()];
+    const clr = tipo === 'ccp' ? C.teal : tipo === 'warning' ? C.coral : C.gray;
+    return [flowBox(t, d || null, clr), arrow()];
+  };
+  const bxL = (t, d, tipo = 'normal') => {
+    const clr = tipo === 'ccp' ? C.teal : tipo === 'warning' ? C.coral : C.gray;
+    return [flowBox(t, d || null, clr)];
+  };
+
+  const distribComune = () => [
+    ...bx('Distribuzione agli ospiti — Verifica nominativo · Controllo dieta'),
+    ...bx('Raccolta stoviglie · Smaltimento umido'),
+    ...bxL('Lavaggio stoviglie ≥80°C e sanificazione'),
+  ];
+
+  const distribVarianti = (label) => [
+    h2(label),
+    ...spacer(1),
+    ...(opDistribuzioneModalita === 'gastronorm'
+      ? bx('Carico gastronorm su carrello caldo ≥65°C · Servizio in sala/reparto · Max 20 min')
+      : bx('Porzionamento in vassoi identificati', 'Celiaci per primi · Verifica allergeni · Nominativo · Carrello caldo ≥65°C · Max 20 min')
+    ),
+    ...distribComune(),
+    ...spacer(1),
+  ];
+
+  const sezCeliaci = (label) => [
+    h2(label),
+    ...spacer(1),
+    ...bx('Materie prime certificate gluten-free'),
+    ...bx('Preparazione in zona dedicata — PER PRIMA', 'Utensili dedicati · Piano lavoro sanificato · Guanti nuovi', 'warning'),
+    ...bx('Cottura separata', 'T° al cuore ≥75°C', 'ccp'),
+    ...bx('Identificazione vassoio "CELIACO — [NOME OSPITE]"'),
+    ...bxL('Distribuzione per prima — Verifica nominativo tripla', 'Nessun contatto con alimenti glutinosi'),
+    ...spacer(1),
+  ];
+
+  const sezDisfagici = (label) => [
+    h2(label),
+    ...spacer(1),
+    ...(opDisfagiciMod === 'interna'
+      ? bx('Frullatura/texturizzazione secondo livello IDDSI', 'Frullatore dedicato · Utensili igienizzati')
+      : bx('Prodotto disfagico preconfezionato da fornitore', 'Verifica etichetta: livello IDDSI · Scadenza · Allergeni')
+    ),
+    ...bx('Identificazione contenitore [IDDSI level] — [NOME OSPITE]'),
+    ...bx('Stoccaggio separato FD · Riattivazione ≥75°C'),
+    ...bxL('Distribuzione identificata — Verifica nominativo + livello IDDSI'),
+    ...spacer(1),
+  ];
+
+  const sezIsolamento = (label) => [
+    h2(label),
+    ...spacer(1),
+    ...bx('Porzionamento ULTIMO — DPI: guanti nitrile + mascherina + grembiule monouso', null, 'warning'),
+    ...bx('Vassoio monouso identificato "ISOLAMENTO — [NOME] — [STANZA]"'),
+    ...bx('Consegna diretta in stanza · Cambio guanti all\'ingresso'),
+    ...bx('Raccolta con DPI → sacchetto "BIOHAZARD"'),
+    ...bx('Smaltimento rifiuti speciali · Sanificazione cloro 0,5%'),
+    ...bxL('Registrazione modulo isolamento · Firma R-HACCP'),
+    ...spacer(1),
+  ];
+
+  const PB = () => new Paragraph({ children: [new PageBreak()] });
+  const result = [];
+
+  if (modello === 'cucina_interna') {
+    result.push(
+      h2('5.1 Ricevimento materie prime (CCP1)'),
+      ...spacer(1),
+      ...bx('Fornitore / DDT', 'Fase esterna — non gestita dall\'OSA', 'esterno'),
+      ...bx('Ricevimento materie prime (CCP1)', 'Verifica T° ingresso · Scadenze a campione · Integrità imballaggi · DDT', 'ccp'),
+      ...bxL('Stoccaggio per categoria', 'Carni/pesce: 0–4°C · Latticini/verdure: 4°C · Surgelati: -18°C · Secco: t.a.'),
+      ...spacer(1),
+    );
+    result.push(
+      PB(),
+      h2('5.2 Preparazione e cottura (CCP2)'),
+      ...spacer(1),
+      ...bx('Preparazione a freddo', 'Pulizia · Taglio · Porzionamento · Utensili dedicati per allergeni'),
+      ...bxL('Cottura (CCP2)', 'T° al cuore ≥75°C · Verifica con sonda', 'ccp'),
+      ...spacer(1),
+    );
+    const hasAbbattitore = (cucinaObj.zone || []).includes('abbattitore');
+    let n = 3;
+    if (hasAbbattitore) {
+      result.push(
+        PB(),
+        h2('5.3 Abbattimento e rigenerazione'),
+        ...spacer(1),
+        ...bx('Abbattimento rapido (Modulo 3C)', 'Da >65°C a <10°C in ≤90 min · Etichetta: prodotto, data, ora'),
+        ...bx('Stoccaggio in frigorifero dedicato', 'T° ≤4°C · Max 72h'),
+        ...bxL('Rigenerazione', 'T° al cuore ≥75°C · Max 1h prima del servizio', 'ccp'),
+        ...spacer(1),
+      );
+      n = 4;
+    }
+    result.push(PB(), ...distribVarianti('5.' + n + ' Distribuzione'));
+    n++;
+    result.push(PB(), ...sezCeliaci('5.' + n + ' Pasti celiaci'));
+    n++;
+    if (opDisfagici) { result.push(PB(), ...sezDisfagici('5.' + n + ' Pasti disfagici')); n++; }
+    if (opMonousoInfetti) { result.push(PB(), ...sezIsolamento('5.' + n + ' Isolamento infettivo')); }
+
+  } else if (modello === 'appalto_fresco_caldo') {
+    result.push(
+      h2('5.1 Ricevimento (CCP1)'),
+      ...spacer(1),
+      ...bx('Centro cottura esterno (Fornitore — SCIA esterna)', 'Non gestito dalla struttura OSA', 'esterno'),
+      ...bxL('Ricevimento contenitori isotermici (CCP1)', 'Verifica T° ≥65°C · Integrità confezione · Etichetta · Allergeni · DDT', 'ccp'),
+      ...spacer(1),
+    );
+    result.push(
+      PB(),
+      h2('5.2 Stoccaggio temporaneo'),
+      ...spacer(1),
+      ...bxL('Stoccaggio in scaldavivande di nucleo', 'T° ≥60°C · Max 30 min'),
+      ...spacer(1),
+    );
+    result.push(PB(), ...distribVarianti('5.3 Distribuzione'));
+    result.push(PB(), ...sezCeliaci('5.4 Pasti celiaci'));
+    let na = 5;
+    if (opDisfagici) { result.push(PB(), ...sezDisfagici('5.' + na + ' Pasti disfagici')); na++; }
+    if (opMonousoInfetti) { result.push(PB(), ...sezIsolamento('5.' + na + ' Isolamento infettivo')); }
+
+  } else {
+    // distribuzione_veicolata
+    result.push(
+      h2('5.1 Ricevimento (CCP1)'),
+      ...spacer(1),
+      ...bx('Centro cottura esterno (Fornitore — SCIA esterna)', 'Non gestito dalla struttura OSA', 'esterno'),
+      ...bxL('Ricevimento contenitori termici (CCP1)', 'Verifica T° caldo ≥65°C / freddo ≤4°C · Integrità · Etichetta · Allergeni', 'ccp'),
+      ...spacer(1),
+    );
+    result.push(
+      PB(),
+      h2('5.2 Stoccaggio temporaneo'),
+      ...spacer(1),
+      ...bxL('Stoccaggio in frigoriferi di nucleo ≤4°C', 'Oppure scaldavivande ≥60°C per pasti caldi'),
+      ...spacer(1),
+    );
+    let nv = 3;
+    if (opCenaAbbattuta) {
+      result.push(
+        PB(),
+        h2('5.3 Riattivazione'),
+        ...spacer(1),
+        ...bxL('Riattivazione a microonde/forno', 'T° al cuore ≥75°C · Verifica con sonda', 'ccp'),
+        ...spacer(1),
+      );
+      nv = 4;
+    }
+    result.push(PB(), ...distribVarianti('5.' + nv + ' Distribuzione'));
+    nv++;
+    result.push(PB(), ...sezCeliaci('5.' + nv + ' Pasti celiaci'));
+    nv++;
+    if (opDisfagici) { result.push(PB(), ...sezDisfagici('5.' + nv + ' Pasti disfagici')); nv++; }
+    if (opMonousoInfetti) { result.push(PB(), ...sezIsolamento('5.' + nv + ' Isolamento infettivo')); }
+  }
+
+  return result;
+}
+
+// ── PLACEHOLDER — kept for reference; replaced by buildSezione5 ──
+// eslint-disable-next-line no-unused-vars
+function _diagramma51() {
   return [
     h2('5.1 Flusso Generale — Pasti Caldi (Pranzo)'),
     ...spacer(1),
@@ -321,7 +495,8 @@ function diagramma51() {
 }
 
 // ── 5.2 Flusso pasti abbattuti (Cena) ────────────────────────
-function diagramma52() {
+// eslint-disable-next-line no-unused-vars
+function _diagramma52() {
   return [
     h2('5.2 Flusso Pasti Abbattuti — Cena'),
     ...spacer(1),
@@ -352,7 +527,8 @@ function diagramma52() {
 }
 
 // ── 5.3 Flusso pasti disfagici (Nucleo AS) ───────────────────
-function diagramma53() {
+// eslint-disable-next-line no-unused-vars
+function _diagramma53() {
   return [
     h2('5.3 Flusso Pasti Disfagici — Nucleo AS'),
     ...spacer(1),
@@ -376,7 +552,8 @@ function diagramma53() {
 }
 
 // ── 5.4 Flusso pasti celiaci ─────────────────────────────────
-function diagramma54() {
+// eslint-disable-next-line no-unused-vars
+function _diagramma54() {
   return [
     h2('5.4 Flusso Pasti Celiaci — Tutti i Nuclei'),
     ...spacer(1),
@@ -396,7 +573,8 @@ function diagramma54() {
 }
 
 // ── 5.5 Flusso isolamento infettivo ──────────────────────────
-function diagramma55() {
+// eslint-disable-next-line no-unused-vars
+function _diagramma55() {
   return [
     h2('5.5 Flusso Isolamento Infettivo — Vassoio Monouso'),
     ...spacer(1),
@@ -429,7 +607,7 @@ function diagramma55() {
 // SEZIONE 6 — Tabella analisi pericoli CCP
 // ═══════════════════════════════════════════════════════════════
 
-function tabellaCCP() {
+function tabellaCCP(modello, sa) {
   const W  = CONTENT_W;
   const c0 = Math.round(W * 0.13);
   const c1 = Math.round(W * 0.20);
@@ -469,37 +647,82 @@ function tabellaCCP() {
 
   const header = new TableRow({ tableHeader: true, children: [hCell('Fase',c0), hCell('Pericolo',c1), hCell('Tipo',c2), hCell('Misure preventive',c3), hCell('Monitoraggio',c4), hCell('Esito',c5)] });
 
+  const hasAbbattitore = (sa?.cucina?.zone || []).includes('abbattitore');
+
+  const righePerModello = {
+    cucina_interna: [
+      sezRow('RICEVIMENTO MATERIE PRIME', 6, W),
+      row('Ricevimento', 'Temperatura inadeguata T° ingresso', 'B', 'Fornitura certificata; verifica T° per categoria', 'Misurazione T° (Modulo Autoc 1); ispezione visiva', 'CCP1'),
+      row('', 'Allergeni non dichiarati', 'C', 'Schede tecniche fornitore; dichiarazione allergeni', 'Controllo etichetta 100% celiaci', 'PCC'),
+      row('', 'Danni/perdite imballaggi', 'F', 'Controllo integrità; reso merce danneggiata', 'Ispezione visiva 100%; modulo anomalia', 'PCC'),
+      sezRow('STOCCAGGIO', 6, W),
+      row('Stoccaggio', 'T° inadeguata celle frigo', 'B', 'Separazione per categoria; celle verificate', 'Verifica T° giornaliera (Modulo 2A/2B)', 'CCP'),
+      row('', 'Contaminazione crociata', 'B', 'Separazione per categoria merceologica', 'Ispezione visiva; etichettatura FIFO', 'PCC'),
+      sezRow('PREPARAZIONE', 6, W),
+      row('Preparazione', 'Contaminazione crociata allergeni', 'C', 'Utensili dedicati; zona celiaci separata; pulizia', 'Ispezione visiva; procedura scritta', 'PCC'),
+      row('', 'Contaminazione biologica', 'B', 'Igiene personale; sanificazione piani di lavoro', 'Verifica visiva; piano sanificazione', 'PCC'),
+      sezRow('COTTURA', 6, W),
+      row('Cottura', 'T° insufficiente al cuore <75°C', 'B', 'Cottura completa; verifica con sonda calibrata', 'Misurazione T° al cuore ≥75°C (Modulo 3A)', 'CCP2'),
+      ...(hasAbbattitore ? [
+        sezRow('ABBATTIMENTO E RIGENERAZIONE', 6, W),
+        row('Abbattimento', 'Raffreddamento insufficiente', 'B', 'Abbattitore dedicato; etichettatura data/ora', 'Da >65°C a <10°C in ≤90 min (Modulo 3C)', 'CCP'),
+        row('Rigenerazione', 'T° insufficiente al cuore', 'B', 'Riattivazione completa prima del servizio', 'T° al cuore ≥75°C; sonda calibrata', 'CCP'),
+      ] : []),
+      sezRow('DISTRIBUZIONE', 6, W),
+      row('Distribuzione', 'T° inadeguata carrello <65°C', 'B', 'Carrello caldo precondizionato; max 20 min', 'T° scomparto ≥65°C al carico/scarico', 'CCP'),
+      row('', 'Errore dieta / allergene', 'C', 'Identificazione vassoio; doppio controllo nominativo', 'Verifica nominativo + tipologia dieta 100%', 'PCC'),
+      row('', 'Contaminazione celiaci', 'C', 'Procedura celiaci; pasto servito per primo', 'Verifica separazione 100%; firma operatore', 'PCC'),
+      sezRow('RACCOLTA E LAVAGGIO', 6, W),
+      row('Lavaggio', 'Lavaggio stoviglie insufficiente', 'B', 'Ciclo lavastoviglie ≥80°C; verifica ugelli', 'Verifica T° ciclo mensile (Modulo 4)', 'PCC'),
+      row('Rifiuti', 'Contaminazione incrociata rifiuti', 'B', 'DPI obbligatori; raccolta separata infetti', 'Ispezione visiva; modulo isolamento', 'PCC'),
+    ],
+
+    appalto_fresco_caldo: [
+      sezRow('RICEVIMENTO PASTI CALDI', 6, W),
+      row('Ricevimento', 'T° pasti caldi <65°C', 'B', 'Fornitura min ≥65°C; ispezione visiva', 'Misurazione T° (2 punti); Modulo CCP1', 'CCP1'),
+      row('', 'Allergeni non dichiarati', 'C', 'SCIA ' + _forn + '; dichiarazione allergeni scritta', 'Controllo etichetta 100% celiaci', 'PCC'),
+      row('', 'Danni / perdite contenitori', 'F', 'Controllo integrità; reso merce danneggiata', 'Ispezione visiva 100%; modulo anomalia', 'PCC'),
+      sezRow('STOCCAGGIO TEMPORANEO', 6, W),
+      row('Stoccaggio caldo', 'T° scaldavivande <60°C', 'B', 'Preriscaldo scaldavivande; max 30 min in stoccaggio', 'Verifica T° (Modulo 2A); controllo visivo', 'CCP'),
+      row('Stoccaggio freddo', 'T° frigo >4°C', 'B', 'Frigoriferi cucinetta verificati giornalmente', 'Verifica T° giornaliera (Modulo 2A/2B)', 'PCC'),
+      sezRow('DISTRIBUZIONE', 6, W),
+      row('Distribuzione', 'T° carrello <65°C', 'B', 'Carrello caldo precondizionato; max 20 min', 'T° ≥65°C al carico/scarico; Modulo Carrello', 'CCP'),
+      row('', 'Errore dieta / allergene', 'C', 'Identificazione vassoio; doppio controllo', 'Verifica nominativo + tipologia dieta 100%', 'PCC'),
+      row('', 'Contaminazione celiaci', 'C', 'Procedura celiaci; pasto servito per primo', 'Verifica separazione 100%; firma operatore', 'PCC'),
+      sezRow('RACCOLTA E LAVAGGIO', 6, W),
+      row('Lavaggio', 'Lavaggio stoviglie insufficiente', 'B', 'Ciclo lavastoviglie ≥80°C', 'Verifica T° ciclo mensile', 'PCC'),
+      row('Rifiuti', 'Contaminazione infetti', 'B', 'DPI obbligatori; raccolta separata', 'Ispezione visiva; modulo isolamento', 'PCC'),
+    ],
+
+    distribuzione_veicolata: [
+      sezRow('RICEVIMENTO PASTI PRONTI', 6, W),
+      row('Ricevimento', 'T° caldo <65°C / freddo >4°C', 'B', 'Fornitura certificata; verifica T° bimodale', 'Misurazione T° (2 punti); Modulo CCP1', 'CCP1'),
+      row('', 'Allergeni non dichiarati', 'C', 'SCIA ' + _forn + '; dichiarazione allergeni scritta', 'Controllo etichetta 100% celiaci', 'PCC'),
+      row('', 'Danni / perdite contenitori', 'F', 'Controllo integrità sigilli; reso merce', 'Ispezione visiva 100%; modulo anomalia', 'PCC'),
+      sezRow('STOCCAGGIO TEMPORANEO', 6, W),
+      row('Stoccaggio freddo', 'T° frigo >4°C', 'B', 'Frigoriferi nucleo verificati giornalmente', 'Verifica T° giornaliera (Modulo 2A/2B)', 'CCP'),
+      row('Stoccaggio caldo', 'T° scaldavivande <60°C', 'B', 'Scaldavivande precondizionato; max 30 min', 'Controllo visivo; verifica T°', 'PCC'),
+      ...(sa?.op_cena_abbattuta ? [
+        sezRow('RIATTIVAZIONE PASTI ABBATTUTI', 6, W),
+        row('Riattivazione', 'T° insufficiente al cuore <75°C', 'B', 'Riattivazione completa a microonde/forno', 'T° al cuore ≥75°C; sonda (Modulo 3A)', 'CCP2'),
+        row('', 'Riattivazione multipla (>1)', 'B', 'Max 1 riattivazione; istruzioni operative', 'Registrazione n° riattivazioni; smaltire se >1', 'PCC'),
+      ] : []),
+      sezRow('DISTRIBUZIONE', 6, W),
+      row('Distribuzione', 'T° carrello <65°C', 'B', 'Carrello caldo precondizionato; max 20 min', 'T° ≥65°C al carico/scarico; Modulo Carrello', 'CCP'),
+      row('', 'Errore dieta / allergene', 'C', 'Identificazione vassoio; controllo nominativo', 'Verifica nominativo + tipologia dieta 100%', 'PCC'),
+      row('', 'Contaminazione celiaci', 'C', 'Procedura celiaci; pasto servito per primo', 'Verifica separazione 100%; firma operatore', 'PCC'),
+      sezRow('RACCOLTA E LAVAGGIO', 6, W),
+      row('Lavaggio', 'Lavaggio stoviglie insufficiente', 'B', 'Ciclo lavastoviglie ≥80°C', 'Verifica T° ciclo mensile', 'PCC'),
+      row('Rifiuti', 'Contaminazione infetti', 'B', 'DPI obbligatori; raccolta separata', 'Ispezione visiva; modulo isolamento', 'PCC'),
+    ],
+  };
+
+  const righe = righePerModello[modello] || righePerModello.distribuzione_veicolata;
+
   return new Table({
     width: { size: W, type: WidthType.DXA },
     columnWidths: cols,
-    rows: [
-      header,
-      sezRow('Ricevimento pasti caldi (pranzo)', 6, W),
-      row('Ricevimento','Temperatura inadeguata <65°C','B','Fornitura min ≥65°C; ispezione visiva','Misurazione T° (2 punti); Modulo CCP1','CCP1'),
-      row('','Allergeni non dichiarati','C','SCIA ' + _forn + ' con dichiarazione allergeni','Controllo etichetta 100% celiaci','PCC'),
-      row('','Danni/perdite contenitori','F','Controllo integrità; reso merce danneggiata','Ispezione visiva 100%; modulo anomalia','PCC'),
-      sezRow('Ricevimento pasti abbattuti (cena)', 6, W),
-      row('Ricevimento','Temperatura inadeguata >4°C','B','Fornitura max ≤4°C; verifica T° ricevimento','Misurazione T° (2 punti); Modulo CCP1','CCP1'),
-      row('','Rottura catena freddo','B','Ispezione confezione; trasporto ≤40 min','Controllo sigilli; orario ricezione','PCC'),
-      sezRow('Stoccaggio', 6, W),
-      row('Stoccaggio caldo','T° abbassamento <60°C','B','Manutenzione scaldavivande; max 15 min','Verifica T° scaldavivande ogni mattina','PCC'),
-      row('Stoccaggio freddo','T° innalzamento >4°C','B','Taratura termometro annuale; manutenzione','Lettura 2×/die (8:00, 18:00); Modulo Frigo','PCC'),
-      row('','Cross-contaminazione celiaci/disfagici','C','Ripiani dedicati; etichette; sanificazione','Ispezione visiva settimanale ripiani','PCC'),
-      sezRow('Riattivazione pasti abbattuti', 6, W),
-      row('Riattivazione','T° insufficiente <75°C al cuore','B','Forni calibrati; istruzioni per gastronorm','Sonda al cuore 100% riattivazioni; Modulo CCP2','CCP2'),
-      row('','Tempo riscaldamento >30 min','B','Procedure scritte; coordinamento distribuzione','Registrazione ora fine cottura / inizio distrib.','PCC'),
-      row('','Riattivazione multipla (>1)','B','Max 1 riattivazione; istruzioni operative','Registrazione n° riattivazioni; smaltire se >1','PCC'),
-      sezRow('Porzionamento', 6, W),
-      row('Porzionamento','Identificazione errata dieta/ospite','C','Etichette chiare; identificazione nominativa','Verifica etichetta 100%; registrazione distrib.','PCC'),
-      row('','Contaminazione crociata allergeni','C','Utensili dedicati celiaci; lavaggio mani','Ispezione aree porzionamento; formazione','PCC'),
-      sezRow('Distribuzione e somministrazione', 6, W),
-      row('Distribuzione','T° non mantenuta caldo <65°C','B','Carrello isolato; trasporto max 20 min','T° al caricamento/scaricamento; Modulo Carrello','PCC'),
-      row('Somministrazione','Pasto allergizzante a celiaco','C','Verifica nominativo + tipologia; doppio ctrl','Registrazione con firma operatore','PCC'),
-      row('Isolamento','Trasmissione patogeno infettivo','B','DPI obbligatori; vassoio monouso','Verifica DPI; registrazione isolamento','PCC'),
-      sezRow('Raccolta e lavaggio', 6, W),
-      row('Raccolta','Contaminazione da rifiuti','B','DPI (guanti, grembiule); lavaggio mani','Controllo uso DPI; formazione continua','PCC'),
-      row('Isolamento','Rifiuti speciali non separati','B','Sacchetti "RIFIUTI INFETTI"; smaltimento giornaliero','Ispezione sacchetti; registrazione','PCC'),
-    ],
+    rows: [header, ...righe],
   });
 }
 
@@ -655,8 +878,8 @@ function tabellaRuoli(lr, rHaccp, teamHaccp) {
     columnWidths: [c0, c1, c2],
     rows: [
       new TableRow({ tableHeader: true, children: [hCell('Ruolo',c0), hCell('Nominativo',c1), hCell('Responsabilità principali',c2)] }),
-      new TableRow({ children: [cell('Legale Rappresentante',c0,{bold:true,color:VERDE,fill:VERDE_LIGHT}), cell(lr||'—',c1), cell('Responsabilità legale del sistema HACCP; approvazione manuale; decisioni di alto livello',c2)] }),
-      new TableRow({ children: [cell('Responsabile HACCP',c0,{bold:true,color:VERDE,fill:VERDE_LIGHT}), cell(rHaccp||'—',c1), cell('Redazione e aggiornamento manuale; formazione personale; gestione non conformità; verifiche periodiche; rapporti con ASL',c2)] }),
+      new TableRow({ children: [cell('Legale Rappresentante',c0,{fill:VERDE_LIGHT}), cell(lr||'—',c1), cell('Responsabilità legale del sistema HACCP; approvazione manuale; decisioni di alto livello',c2)] }),
+      new TableRow({ children: [cell('Responsabile HACCP',c0,{fill:VERDE_LIGHT}), cell(rHaccp||'—',c1), cell('Redazione e aggiornamento manuale; formazione personale; gestione non conformità; verifiche periodiche; rapporti con ASL',c2)] }),
       ...righeTeam.map(r => new TableRow({ children: [cell(r[0],c0,{fill:VERDE_LIGHT}), cell(r[1],c1), cell(r[2],c2)] })),
     ],
   });
@@ -830,11 +1053,12 @@ export async function generaManualeHaccp(params) {
     logoVariante     = 'B',
     // Dati dal profilo HACCP
     fornitoreNome              = '',  // haccp_profili.fornitore_nome
+    fornitorePiva              = '',  // haccp_profili.fornitore_piva
     apparecchiatureFrigorifere = '',  // haccp_profili.apparecchiature_frigorifere
     orariServizio              = '',  // sa.op_orari_distribuzione
     layoutStruttura            = '',  // sa.op_nuclei_note
     opDisfagici                = false,
-    opDisfagiciNote            = '',
+    opDisfagiciModalita        = 'interna',
     opCenaAbbattuta            = false,
     opMonousoInfetti           = false,
     opCeliaciaNote             = '',
@@ -850,12 +1074,20 @@ export async function generaManualeHaccp(params) {
     sezioniManuale             = null,
     // Normativa regionale dal DB (array di { riferimento, oggetto, prescrizione, note })
     normativaRegionale         = null,
+    // Configurazione cucina interna
+    cucina                     = {},
   } = params;
 
   // Inietta variabili modulo per funzioni top-level
   _forn          = fornitoreNome || 'Fornitore esterno';
   _params        = params;
   const isCucinaInterna = modello === 'cucina_interna';
+  const MODELLO_LABEL = {
+    cucina_interna:          'Cucina interna',
+    appalto_fresco_caldo:    'Appalto fresco-caldo in struttura',
+    distribuzione_veicolata: 'Distribuzione veicolata (pasti da esterno)',
+  };
+  const modelloLabel = MODELLO_LABEL[modello] || modello;
 
   const logoCfg  = LOGOS[logoVariante] || LOGOS.B;
   const logoData = logoCfg.data();
@@ -1103,7 +1335,7 @@ export async function generaManualeHaccp(params) {
     ].join('\n')),
     tabellaRuoli(lr, rHaccp, teamHaccp),
     ...spacer(1),
-    h2('3.2 Comunicazione Interna'),
+    h2('3.2 Ruoli e Responsabilità'),
     ...textToParagraphs([
       '• Il Responsabile HACCP organizza riunioni trimestrali per revisione non conformità e aggiornamento procedure',
       '• Bacheca informativa in ogni cucinetta di nucleo con contatti R-HACCP e procedure di emergenza',
@@ -1115,12 +1347,15 @@ export async function generaManualeHaccp(params) {
     h1('4. DESCRIZIONE DELLA STRUTTURA E LOCALI'),
     h2('4.1 Anagrafica'),
     tabellaDati([
-      ['Struttura',          nomestruttura],
-      ['Ragione sociale OSA',osa],
-      ['P.IVA',              pivaOsa],
-      ['Modello ristorazione', modello],
-      ['Fornitore pasti',    fornitoreNome || '—'],
-      ['Referente HACCP',    rHaccp],
+      ['Struttura',            nomestruttura],
+      ['Ragione sociale OSA',  osa],
+      ['P.IVA',                pivaOsa],
+      ['Modello ristorazione', modelloLabel],
+      ...(modello !== 'cucina_interna' ? [
+        ['Fornitore pasti',    fornitoreNome || '—'],
+        ['P.IVA fornitore',    fornitorePiva || '—'],
+      ] : []),
+      ['Referente HACCP',      rHaccp],
     ]),
     ...spacer(1),
     h2('4.2 Layout Nuclei e Locali'),
@@ -1132,16 +1367,11 @@ export async function generaManualeHaccp(params) {
     ...textToParagraphs(orariServizio || 'Orari di distribuzione definiti dalla struttura.'),
     new Paragraph({ children: [new PageBreak()] }),
 
-    // ── SEZ 5: Diagrammi di flusso (condizionali da profilo) ──
+    // ── SEZ 5: Diagrammi di flusso (condizionali per modello) ──
     h1('5. DIAGRAMMI DI FLUSSO'),
     txt('I seguenti diagrammi illustrano i flussi operativi di competenza dell\'OSA ' + nomestruttura + '. I CCP (Punti Critici di Controllo) sono evidenziati in verde acqua.'),
     ...spacer(1),
-    ...diagramma51(),                                          // sempre: flusso pasti caldi
-    ...(opCenaAbbattuta ? [new Paragraph({ children: [new PageBreak()] }), ...diagramma52()] : []),  // cena abbattuta
-    ...(opDisfagici     ? [new Paragraph({ children: [new PageBreak()] }), ...diagramma53()] : []),  // disfagici
-    new Paragraph({ children: [new PageBreak()] }),
-    ...diagramma54(),                                          // celiaci: sempre
-    ...(opMonousoInfetti ? [new Paragraph({ children: [new PageBreak()] }), ...diagramma55()] : []), // isolamento
+    ...buildSezione5(),
     new Paragraph({ children: [new PageBreak()] }),
 
     // ── SEZ 6: Analisi pericoli CCP ──────────────────────────
@@ -1149,11 +1379,23 @@ export async function generaManualeHaccp(params) {
     h2('6.1 Metodologia HACCP'),
     txt('Per ciascuna fase identificata nei diagrammi di flusso, è stata effettuata un\'analisi qualitativa del rischio secondo la formula Rischio = Probabilità × Severità. Sono stati identificati i pericoli biologici (B), chimici (C) e fisici (F). Le misure di controllo sono state classificate come CCP (Punto Critico di Controllo — limite misurabile con azione correttiva immediata) o PCC (misura preventiva senza limite critico formale).'),
     h2('6.2 CCP Identificati'),
-    txt('**CCP1 — Ricevimento pasti:** verifica temperatura al ricevimento (pranzo caldo ≥65°C; cena abbattuta ≤4°C). Azione correttiva: rifiuto e restituzione al fornitore con compilazione modulo non conformità.'),
-    txt('**CCP2 — Riattivazione pasti abbattuti:** raggiungimento T° ≥75°C al cuore. Azione correttiva: riscaldamento supplementare; se non raggiungibile dopo 2 cicli → smaltimento e segnalazione.'),
+    ...(isCucinaInterna ? [
+      txt('**CCP1 — Ricevimento materie prime:** verifica temperatura T° ingresso per categoria (carni/pesce 0–4°C, latticini 4°C, surgelati ≤-18°C, secco t.a.). Azione correttiva: rifiuto fornitore + modulo non conformità.'),
+      txt('**CCP2 — Cottura:** raggiungimento T° al cuore ≥75°C verificato con sonda calibrata. Azione correttiva: prolungamento cottura; se non raggiungibile → smaltimento e segnalazione R-HACCP.'),
+      ...((cucina?.zone || []).includes('abbattitore') ? [
+        txt('**CCP Abbattimento:** raffreddamento da >65°C a <10°C in ≤90 min (Modulo 3C). **CCP Rigenerazione:** T° al cuore ≥75°C verificato con sonda. Azione correttiva: smaltimento se tempi o temperature non rispettati.'),
+      ] : []),
+    ] : modello === 'appalto_fresco_caldo' ? [
+      txt('**CCP1 — Ricevimento pasti caldi:** verifica temperatura ≥65°C al ricevimento (2 punti di misurazione). Azione correttiva: rifiuto e restituzione al fornitore con compilazione Modulo CCP1.'),
+    ] : [
+      txt('**CCP1 — Ricevimento pasti:** verifica temperatura bimodale — caldo ≥65°C / freddo ≤4°C al ricevimento (2 punti di misurazione). Azione correttiva: rifiuto e restituzione al fornitore con compilazione Modulo CCP1.'),
+      ...(opCenaAbbattuta ? [
+        txt('**CCP2 — Riattivazione pasti abbattuti:** raggiungimento T° al cuore ≥75°C a microonde o forno. Azione correttiva: riscaldamento supplementare; se non raggiungibile dopo 2 cicli → smaltimento e segnalazione R-HACCP.'),
+      ] : []),
+    ]),
     h2('6.3 Matrice Analisi Pericoli per Fase'),
     ...spacer(1),
-    tabellaCCP(),
+    tabellaCCP(modello, { cucina, op_cena_abbattuta: opCenaAbbattuta }),
     ...spacer(1),
     new Paragraph({ children: [new PageBreak()] }),
 
@@ -1173,21 +1415,27 @@ export async function generaManualeHaccp(params) {
       '',
       'Il registro è conservato in formato cartaceo (fascicolo paziente) e digitale per l\'intero periodo di ospitalità più 2 anni dalla dimissione. Accesso limitato a R-HACCP, Responsabile di struttura e medico.',
     ].join('\n')),
-    h2('7.3 Ricezione Pasti Celiaci e Stoccaggio'),
-    ...textToParagraphs([
-      'Il fornitore ' + fornitoreNome + ' fornisce pasti gluten-free in contenitore dedicato con etichetta "GLUTEN-FREE – [NOME OSPITE]".',
-      '• Verifica etichetta al ricevimento: nome, data preparazione, integrità confezione',
-      '• Stoccaggio nel ripiano SUPERIORE del frigorifero di nucleo in contenitore identificato "CELIACO – [NOME]"',
-      '• Segregazione da pane, pasta e cereali contenenti glutine',
-    ].join('\n')),
+    h2('7.3 ' + (modello === 'cucina_interna'
+      ? 'Preparazione Pasti Celiaci in Zona Dedicata'
+      : 'Ricezione Pasti Celiaci e Stoccaggio')),
+    ...(modello === 'cucina_interna' ? [
+      bullet('Piano lavoro sanificato con detergente neutro + carta monouso prima dell\'uso'),
+      bullet('Utensili e teglie dedicati con etichetta verde "CELIACO"'),
+      bullet('Preparazione sempre per prima, prima di qualsiasi altro alimento'),
+      bullet('Guanti nuovi dopo lavaggio mani'),
+    ] : [
+      bullet('Al ricevimento: verifica etichetta e dichiarazione allergeni del fornitore ' + fornitoreNome),
+      bullet('Stoccaggio: contenitore etichettato "CELIACO – [NOME OSPITE]" nel ripiano SUPERIORE del frigorifero di nucleo; segregazione da pane, pasta e cereali'),
+      bullet('Distribuzione: vassoio identificato con nome e allergeni; verifica tripla nominativo prima della consegna'),
+    ]),
     h2('7.4 Procedura d\'Oro — Servizio Celiaci'),
     ...textToParagraphs([
       'REGOLA ASSOLUTA: il pasto celiaco deve essere servito PER PRIMO nel nucleo, prima di qualsiasi altro ospite.',
       '',
-      '1. Estrai contenitore pasto celiaco dal frigo; igienizza mani',
+      '1. Identificare il pasto celiaco — da frigorifero dedicato o direttamente dalla cucina — verificando etichetta nominativo e livello IDDSI se applicabile.',
       '2. Guanti monouso nuovi',
       '3. Porzionamento su vassoio BLU dedicato etichettato "CELIACO"',
-      '4. Consegna in camera all\'ospite celiaco',
+      '4. Distribuzione: consegna diretta all\'ospite con vassoio identificato; l\'ospite può consumare il pasto in sala insieme agli altri — verificare che non avvenga scambio di alimenti con altri commensali.',
       '5. Cambio guanti + igiene mani prima di servire altri ospiti',
     ].join('\n')),
     h2('7.5 Gestione Contaminazione Incrociata'),
@@ -1216,97 +1464,105 @@ export async function generaManualeHaccp(params) {
     ].join('\n')),
     new Paragraph({ children: [new PageBreak()] }),
 
-    // ── SEZ 8: Disfagici (solo se op_disfagici) ──────────────
-    ...(opDisfagici ? [
+    // ── SEZ 8: Disfagici ──────────────────────────────────────
     h1('8. GESTIONE OSPITI DISFAGICI'),
-    h2('8.1 Classificazione IDDSI'),
-    txt('La disfagia (difficoltà di deglutizione) richiede alimenti di consistenza modificata secondo la International Dysphagia Diet Standardization Initiative (IDDSI):'),
-    ...spacer(1),
-    (() => {
-      const c0 = Math.round(CONTENT_W * 0.08);
-      const c1 = Math.round(CONTENT_W * 0.22);
-      const c2 = Math.round(CONTENT_W * 0.22);
-      const c3 = CONTENT_W - c0 - c1 - c2;
-      return new Table({
-        width: { size: CONTENT_W, type: WidthType.DXA },
-        columnWidths: [c0, c1, c2, c3],
-        rows: [
-          new TableRow({ tableHeader: true, children: [hCell('Lvl',c0), hCell('Nome IDDSI',c1), hCell('Consistenza',c2), hCell('Esempi',c3)] }),
-          ...[ ['3','Minced & Moist','Tritato e umido','Carne tritata, pasta piccoli pezzi'],
-               ['4','Puree','Purea omogenea senza grumi','Verdure passate, frutta frullata'],
-               ['5','Soft & Bite-Sized','Morbido tagliato a pezzetti','Alimenti soft già porzionati'],
-               ['6','Chewed (Easy to Chew)','Facile masticazione','Cibo morbido per anziani'],
-          ].map(([l,n,c,e]) => new TableRow({ children: [
-            cell(l,c0,{align:AlignmentType.CENTER,bold:true,color:VERDE}),
-            cell(n,c1,{bold:true}), cell(c,c2), cell(e,c3),
-          ]})),
-        ],
-      });
-    })(),
-    ...spacer(1),
-    h2('8.2 Ricezione e Stoccaggio Pasti Disfagici'),
-    ...textToParagraphs(opDisfagiciNote || 'I pasti disfagici abbattuti sono consegnati dal fornitore in contenitori separati identificati con il livello IDDSI. Stoccaggio in frigorifero dedicato FD a ≤4°C.'),
-    h2('8.3 Riattivazione e Identificazione'),
-    ...textToParagraphs([
-      'Circa 30 min prima della cena (ore 18:00 per servizio 18:30):',
-      '1. Prelievo teglione da FD; verifica etichetta IDDSI, scadenza, allergeni',
-      '2. Riscaldamento: forno 160-180°C per 20-25 min oppure microonde 70% per 10-15 min con mescolamento ogni 3 min',
-      '3. Verifica T° al cuore ≥75°C con sonda sterile (CCP2)',
-      '4. Trasferimento in gastronorm monoporzionata identificata con nome ospite, IDDSI, allergeni, T° riattivazione',
-      '5. Mantenimento in scaldavivande ≥65°C — distribuzione entro 30 min',
-      '6. Compilazione modulo riattivazione pasti',
-    ].join('\n')),
-    h2('8.4 Distribuzione e Somministrazione'),
-    ...textToParagraphs([
-      '• Operatore ASA/OSS specializzato preleva gastronorm; verifica: nominativo = ospite, IDDSI = prescrizione, T° ≥55°C',
-      '• Consegna diretta in camera/a letto — mai in area comune',
-      '• Ospite in posizione seduta o semiseduta ≥30°; supervisione nei primi minuti',
-      '• In caso di anomalie (tosse, soffocamento, rifiuto): bloccare somministrazione, contattare infermiere/medico, compilare modulo NC Disfagia, conservare campione 24h',
-    ].join('\n')),
-    h2('8.5 Documentazione e Modifiche IDDSI Level'),
-    ...textToParagraphs([
-      'Ogni ospite disfagico ha cartella dietetica visibile in cucinetta con: nome, IDDSI level prescritto, allergie, note deglutizione, data prescrizione, firma medico.',
-      '',
-      'In caso di variazione IDDSI: comunicazione scritta + email a ' + fornitoreNome + ' entro 24h + aggiornamento cartella + comunicazione ai turni ASA/OSS.',
-    ].join('\n')),
-    new Paragraph({ children: [new PageBreak()] }),
+    ...(opDisfagici ? [
+      h2('8.1 Classificazione IDDSI'),
+      txt('La struttura adotta la classificazione internazionale IDDSI (International Dysphagia Diet Standardisation Initiative) per la gestione dei pasti texturizzati. I livelli applicabili in struttura sono definiti dal medico responsabile per ogni ospite.'),
+      ...spacer(1),
+      (() => {
+        const c0 = Math.round(CONTENT_W * 0.08);
+        const c1 = Math.round(CONTENT_W * 0.22);
+        const c2 = Math.round(CONTENT_W * 0.22);
+        const c3 = CONTENT_W - c0 - c1 - c2;
+        return new Table({
+          width: { size: CONTENT_W, type: WidthType.DXA },
+          columnWidths: [c0, c1, c2, c3],
+          rows: [
+            new TableRow({ tableHeader: true, children: [hCell('Lvl',c0), hCell('Nome IDDSI',c1), hCell('Consistenza',c2), hCell('Esempi',c3)] }),
+            ...[ ['3','Minced & Moist','Tritato e umido','Carne tritata, pasta piccoli pezzi'],
+                 ['4','Puree','Purea omogenea senza grumi','Verdure passate, frutta frullata'],
+                 ['5','Soft & Bite-Sized','Morbido tagliato a pezzetti','Alimenti soft già porzionati'],
+                 ['6','Chewed (Easy to Chew)','Facile masticazione','Cibo morbido per anziani'],
+            ].map(([l,n,c,e]) => new TableRow({ children: [
+              cell(l,c0,{align:AlignmentType.CENTER,bold:true,color:VERDE}),
+              cell(n,c1,{bold:true}), cell(c,c2), cell(e,c3),
+            ]})),
+          ],
+        });
+      })(),
+      ...spacer(1),
+      h2('8.2 ' + (modello === 'cucina_interna' && opDisfagiciModalita === 'interna'
+        ? 'Preparazione e Texturizzazione Pasti Disfagici'
+        : 'Ricezione e Stoccaggio Pasti Disfagici')),
+      ...(modello === 'cucina_interna' && opDisfagiciModalita === 'interna' ? [
+        bullet('Frullatura/texturizzazione eseguita dopo cottura standard con frullatore dedicato'),
+        bullet('Utensili igienizzati prima e dopo ogni utilizzo'),
+        bullet('Texturizzazione secondo livello IDDSI prescritto — verificare consistenza prima del servizio'),
+        bullet('Etichettatura immediata: contenitore con nome ospite, livello IDDSI, data e ora preparazione'),
+        bullet('Stoccaggio in frigorifero dedicato FD a ≤4°C se non servito immediatamente'),
+      ] : [
+        bullet('Al ricevimento: verifica etichetta con livello IDDSI, nominativo ospite, scadenza e allergeni'),
+        bullet('Verifica integrità confezione e temperatura di consegna'),
+        bullet('Stoccaggio in frigorifero dedicato FD a ≤4°C'),
+        bullet('Separazione fisica dai pasti standard — ripiano o contenitore dedicato'),
+      ]),
+      h2('8.3 ' + (modello === 'cucina_interna' && opDisfagiciModalita === 'interna'
+        ? 'Identificazione e Stoccaggio'
+        : 'Riattivazione e Identificazione')),
+      ...(modello === 'cucina_interna' && opDisfagiciModalita === 'interna' ? [
+        bullet('Ogni contenitore etichettato con: nome ospite · livello IDDSI · data e ora preparazione'),
+        bullet('Verifica visiva consistenza prima del servizio'),
+        bullet('Se non conforme: rifacimento immediato — non servire mai prodotto di consistenza dubbia'),
+      ] : [
+        bullet('Riattivazione a microonde o forno: T° al cuore ≥75°C verificata con sonda'),
+        bullet('Verifica consistenza post-riattivazione — la textura non deve modificarsi con il calore'),
+        bullet('Etichetta nominativo verificata prima del servizio: nome ospite · livello IDDSI'),
+      ]),
+      h2('8.4 Distribuzione e Somministrazione'),
+      bullet('Distribuzione sempre identificata: vassoio/contenitore con nome ospite e livello IDDSI visibile'),
+      bullet('Consegna diretta all\'operatore o all\'infermiere responsabile — mai lasciato incustodito'),
+      bullet('Verifica nominativo + livello IDDSI prima della somministrazione'),
+      bullet('In caso di dubbio sulla consistenza: non somministrare, avvisare il R-HACCP'),
+      bullet('Modifiche al livello IDDSI: solo su prescrizione medica — aggiornare immediatamente scheda ospite'),
+      h2('8.5 Documentazione e Modifiche IDDSI Level'),
+      bullet('Registro ospiti disfagici aggiornato dal R-HACCP con: nome · livello IDDSI · data prescrizione · medico'),
+      bullet('Ogni modifica di livello documentata su scheda individuale e comunicata al fornitore (se appalto/veicolata)'),
+      bullet('Registrazione NC su modulo dedicato in caso di errore di livello o consistenza non conforme'),
+      new Paragraph({ children: [new PageBreak()] }),
+    ] : [
+      txt('La struttura non accoglie al momento ospiti con disfagia. In caso di ammissione di ospiti con necessità di dieta texturizzata, il R-HACCP provvederà ad attivare le procedure specifiche e ad aggiornare il presente manuale.'),
+      new Paragraph({ children: [new PageBreak()] }),
+    ]),
 
-    ] : []),  // fine §8 condizionale
-
-    // ── SEZ 9: Isolamento infettivo (solo se op_monouso_infetti) ─
-    ...(opMonousoInfetti ? [
+    // ── SEZ 9: Isolamento infettivo ───────────────────────────
     h1('9. GESTIONE ISOLAMENTO INFETTIVO'),
-    h2('9.1 Protocollo e Notifica'),
-    ...textToParagraphs([
-      'Quando un ospite è in isolamento infettivo (C. difficile, SARS-CoV-2, Norovirus, VRE ecc.), il Medico curante o il Responsabile di struttura emette il modulo "Avviso Isolamento Infettivo" affisso in cucinetta nucleo, bacheca portineria e inviato via email al team HACCP.',
-    ].join('\n')),
-    h2('9.2 Approvvigionamento Monouso'),
-    ...textToParagraphs([
-      'Il magazzino mantiene scorta per almeno 5 giorni di: vassoi monouso bianchi (cartone + PE), piatti piani e fondi monouso, bicchieri, posate, contenitori rossi "RIFIUTI BIOLOGICI".',
-    ].join('\n')),
-    h2('9.3 Preparazione e Consegna Pasto'),
-    ...textToParagraphs([
-      '1. Porzionamento pasto ULTIMO dopo tutti gli altri ospiti',
-      '2. DPI obbligatori: guanti nitrile nuovi per ogni pasto, mascherina chirurgica, grembiule monouso',
-      '3. Vassoio monouso bianco con stoviglie monouso e coperchio sigillo',
-      '4. Identificazione vassoio "ISOLAMENTO INFETTIVO" con nome ospite, stanza, ora preparazione',
-      '5. Cambio guanti prima ingresso stanza; consegna diretta; nessun contatto con stoviglie riutilizzabili',
-    ].join('\n')),
-    h2('9.4 Smaltimento e Sanificazione'),
-    ...textToParagraphs([
-      '• Raccolta vassoio con DPI da parte dello stesso operatore',
-      '• Inserimento in sacchetto separato etichettato "BIOHAZARD ISOLAMENTO"',
-      '• Conferimento giornaliero a ditta smaltimento rifiuti speciali autorizzata',
-      '• Sanificazione stanza con cloro 0,5% o equivalente, contatto minimo 10 min, asciugatura',
-      '• Registrazione su modulo isolamento; firma R-HACCP; archiviazione',
-    ].join('\n')),
-    new Paragraph({ children: [new PageBreak()] }),
-
-    ] : []),  // fine §9 condizionale
+    ...(opMonousoInfetti ? [
+      h2('9.1 Protocollo e Notifica'),
+      txt('Quando un ospite è in isolamento infettivo (C. difficile, SARS-CoV-2, Norovirus, VRE ecc.), il Medico curante o il Responsabile di struttura emette il modulo "Avviso Isolamento Infettivo" affisso in cucinetta nucleo, bacheca portineria e inviato via email al team HACCP.'),
+      h2('9.2 Approvvigionamento Monouso'),
+      txt('Il magazzino mantiene scorta per almeno 5 giorni di: vassoi monouso bianchi (cartone + PE), piatti piani e fondi monouso, bicchieri, posate, contenitori rossi "RIFIUTI BIOLOGICI".'),
+      h2('9.3 Preparazione e Consegna Pasto'),
+      numbered(1, 'Porzionamento pasto ULTIMO dopo tutti gli altri ospiti'),
+      numbered(2, 'DPI obbligatori: guanti nitrile nuovi per ogni pasto, mascherina chirurgica, grembiule monouso'),
+      numbered(3, 'Vassoio monouso bianco con stoviglie monouso e coperchio sigillo'),
+      numbered(4, 'Identificazione vassoio "ISOLAMENTO INFETTIVO" con nome ospite, stanza, ora preparazione'),
+      numbered(5, 'Cambio guanti prima ingresso stanza; consegna diretta; nessun contatto con stoviglie riutilizzabili'),
+      h2('9.4 Smaltimento e Sanificazione'),
+      bullet('Raccolta vassoio con DPI da parte dello stesso operatore'),
+      bullet('Inserimento in sacchetto separato etichettato "BIOHAZARD ISOLAMENTO"'),
+      bullet('Conferimento giornaliero a ditta smaltimento rifiuti speciali autorizzata'),
+      bullet('Sanificazione stanza con cloro 0,5% o equivalente, contatto minimo 10 min, asciugatura'),
+      bullet('Registrazione su modulo isolamento; firma R-HACCP; archiviazione'),
+      new Paragraph({ children: [new PageBreak()] }),
+    ] : [
+      txt('La struttura non gestisce al momento situazioni di isolamento infettivo con protocollo pasti dedicato. In caso di attivazione di isolamento infettivo, il R-HACCP provvederà ad attivare le procedure specifiche e ad aggiornare il presente manuale.'),
+      new Paragraph({ children: [new PageBreak()] }),
+    ]),
 
     // ── SEZ 10: Piano analisi microbiologiche ────────────────────
-    ...(!sezioniManuale || sezioniManuale.includes('microbio') ? [
     h1('10. PIANO ANALISI MICROBIOLOGICHE'),
+    ...(!sezioniManuale || sezioniManuale.includes('microbio') ? [
     h2('10.1 Responsabilità e perimetri'),
     ...(() => {
       const c0 = Math.round(CONTENT_W * 0.22);
@@ -1392,9 +1648,7 @@ export async function generaManualeHaccp(params) {
     ...(() => {
       if (!normReg || normReg.length === 0) {
         return [
-          txt('La normativa regionale specifica applicabile alla struttura ' + nomestruttura + ' è in corso di definizione. Fare riferimento al Dipartimento di Prevenzione ATS/ASL competente per territorio.'),
-          ...spacer(0.5),
-          p([r('⚠️ Dato mancante: inserire la normativa regionale applicabile tramite il pannello di amministrazione QualiCAVA → HACCP → Normative Regionali.',{size:17,italic:true,color:'A32D2D'})]),
+          txt('Fare riferimento al Dipartimento di Prevenzione ATS/ASL competente per territorio per la normativa regionale applicabile.'),
         ];
       }
       const c0=Math.round(CONTENT_W*0.22);
@@ -1424,13 +1678,19 @@ export async function generaManualeHaccp(params) {
       ];
     })(),
     new Paragraph({ children: [new PageBreak()] }),
-    ] : []),  // fine SEZ 10 condizionale (microbio)
+    ] : [
+      txt('La struttura ha valutato che al momento non è necessario ricorrere a piani di analisi microbiologiche periodiche. In caso di variazione delle condizioni operative o su indicazione dell\'autorità sanitaria competente, il R-HACCP provvederà ad attivare il piano e ad aggiornare il presente manuale.'),
+      new Paragraph({ children: [new PageBreak()] }),
+    ]),  // fine SEZ 10 condizionale (microbio)
 
     // ── SEZ 11: Piano formazione ─────────────────────────────
     ...(!sezioniManuale || sezioniManuale.includes('formazione') ? [
     h1('11. PIANO DI FORMAZIONE DEL PERSONALE'),
     txt('La formazione continua del personale ASA/OSS è requisito fondamentale del sistema HACCP. Il R-HACCP pianifica e documenta tutte le attività formative secondo il seguente schema:'),
     ...spacer(1),
+    // TODO SPRINT FUTURO: frequenze e durate formazione variano per regione.
+    // Integrare haccp_normative_regionali con categoria 'formazione' e
+    // aggiornare la tabella dinamicamente per regione struttura.
     tabellaFormazione(),
     ...spacer(1),
     txt('La documentazione di ogni corso (registro presenze, attestati, test di valutazione) è archiviata nel fascicolo formazione individuale conservato presso il R-HACCP. L\'idoneità sanitaria del personale a contatto con alimenti è verificata annualmente secondo D.Lgs 81/2008.'),
@@ -1442,14 +1702,29 @@ export async function generaManualeHaccp(params) {
     h1('12. MANUTENZIONE E TARATURA ATTREZZATURE'),
     txt('La manutenzione preventiva e la taratura periodica delle attrezzature è essenziale per garantire l\'efficacia del sistema HACCP, in particolare per le attrezzature che influenzano direttamente i CCP (frigoriferi, termometri a sonda, forni, scaldavivande).'),
     ...spacer(1),
+    txt('Le attività di verifica e manutenzione sono affidate all\'ASA incaricato (Addetto Servizio Alimentare) nominato dal R-HACCP, salvo dove indicato diversamente nella tabella seguente.'),
     tabellaManutenzione(apparecchiatureFrigorifere),
     ...spacer(1),
     txt('I rapporti di manutenzione e i certificati di taratura sono conservati dal R-HACCP per almeno 5 anni. Le attrezzature fuori tolleranza vengono messe fuori servizio fino a riparazione/sostituzione e sostituite con attrezzature di riserva documentate.'),
     new Paragraph({ children: [new PageBreak()] }),
     ] : []),  // fine SEZ 12 condizionale (manutenzione)
 
-    // ── MOCA ─────────────────────────────────────────────────
+    // ── SEZ 13: Gestione Fornitori (placeholder) ─────────────
+    h1('13. GESTIONE FORNITORI'),
+    txt('La struttura ha valutato che al momento non è necessario attivare procedure specifiche di qualifica fornitori nell\'ambito del presente manuale HACCP. I fornitori vengono selezionati sulla base della disponibilità di SCIA o equivalente documentazione di autocontrollo.'),
     new Paragraph({ children: [new PageBreak()] }),
+
+    // ── SEZ 14: Gestione NC alimentari (placeholder) ─────────
+    h1('14. GESTIONE NON CONFORMITÀ ALIMENTARI'),
+    txt('La struttura gestisce le non conformità alimentari attraverso il Registro Generale NC (Autoc 6). In caso di non conformità rilevante il R-HACCP attiva le azioni correttive previste, documenta l\'evento e comunica all\'autorità sanitaria competente nei tempi prescritti.'),
+    new Paragraph({ children: [new PageBreak()] }),
+
+    // ── SEZ 15: Rintracciabilità (placeholder) ───────────────
+    h1('15. RINTRACCIABILITÀ'),
+    txt('La rintracciabilità degli alimenti è garantita attraverso: conservazione delle bolle di consegna del fornitore per almeno 2 anni; registrazione sui moduli di autocontrollo delle partite in ingresso; applicazione della procedura FIFO in stoccaggio.'),
+    new Paragraph({ children: [new PageBreak()] }),
+
+    // ── MOCA ─────────────────────────────────────────────────
     h1('M.O.C.A. — MATERIALI E OGGETTI A CONTATTO CON ALIMENTI'),
     txt('I materiali e oggetti a contatto con gli alimenti (MOCA) sono regolamentati dal Reg. CE 1935/2004 e dai regolamenti specifici per ogni tipologia di materiale. Scopo: garantire che i MOCA non trasferiscano sostanze agli alimenti in quantità tali da rappresentare un pericolo per la salute umana.'),
     h2('Obblighi operativi'),
@@ -1538,8 +1813,32 @@ export async function generaModulisticaHaccp({
   op_monouso_infetti          = false,
   op_srtr                     = false,
   op_riabilitazione           = false,
+  opDistribuzioneModalita     = 'gastronorm',
+  logoUrl                     = null,
   logoVariante                = 'B',
 }) {
+  // Logo: usa URL aziendale se disponibile, altrimenti fallback base64
+  let logoData = null;
+  if (logoUrl) {
+    try {
+      const resp        = await fetch(logoUrl);
+      const blob        = await resp.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+      logoData = {
+        data: new Uint8Array(arrayBuffer),
+        type: logoUrl.split('.').pop().toLowerCase().replace('jpg', 'jpeg'),
+        w: 150,
+        h: 75,
+      };
+    } catch {
+      logoData = null;
+    }
+  }
+  if (!logoData) {
+    const cfg = LOGOS[logoVariante] || LOGOS.B;
+    logoData = { data: cfg.data(), type: cfg.type, w: cfg.w, h: cfg.h };
+  }
+
   const isCucinaInterna = modello === 'cucina_interna';
   const isAppalto       = modello === 'appalto_fresco_caldo';
   const isVeicolata     = modello === 'distribuzione_veicolata';
@@ -1629,13 +1928,6 @@ export async function generaModulisticaHaccp({
   // ── INTESTAZIONE SCHEDA ──────────────────────────────────────
   // Header professionale: logo + struttura + codice + titolo + campo mese
   function intestazione(autoc, titolo, W, landscape = false) {
-    const logoData = (() => {
-      try {
-        const cfg = LOGOS[logoVariante] || LOGOS.B;
-        return { data: cfg.data(), type: cfg.type, w: cfg.w, h: cfg.h };
-      } catch { return null; }
-    })();
-
     const cLogo = 1400;
     const cCode = 900;
     const cMese = 1600;
@@ -1741,7 +2033,7 @@ export async function generaModulisticaHaccp({
 
   // ── RIGHE MENSILI (31 righe con alternanza colore) ───────────
   function righeGiornaliere(colWidths, W, landscape) {
-    const spazio    = landscape ? 5800 : 8000;
+    const spazio    = landscape ? 5800 : 10500;
     const altezza   = Math.max(Math.floor((spazio - 2000) / 31), 270);
     return Array.from({ length: 31 }, (_, i) => {
       const fill = i % 2 === 0 ? W_ : VL;
@@ -1758,11 +2050,6 @@ export async function generaModulisticaHaccp({
   // ── COPERTINA MODULISTICA ────────────────────────────────────
   function copertina() {
     const W = W_P;
-    const logoData = (() => {
-      try { const cfg = LOGOS[logoVariante] || LOGOS.B; return { data: cfg.data(), type: cfg.type, w: cfg.w, h: cfg.h }; }
-      catch { return null; }
-    })();
-
     const children = [
       // Banda verde top
       new Table({
@@ -1828,6 +2115,7 @@ export async function generaModulisticaHaccp({
           ['Autoc 4',  'Comunicazione variazioni menù'],
           ['Autoc 7',  'Elenco fornitori qualificati'],
           ['Autoc 6',  'Registro generale non conformità'],
+          ['Autoc 6M', 'Registro manutenzione e taratura attrezzature'],
         ];
         const c0 = Math.round(W * 0.18);
         const c1 = W - c0;
@@ -1910,7 +2198,7 @@ export async function generaModulisticaHaccp({
     const tCols = Array.from({ length: nF }, (_, i) => i === nF - 1 ? W - cFix - tW * (nF - 1) : tW);
     const colWidths = [700, 700, ...tCols, 1500, 1600];
     const noteApp = frigoCucina.length ? frigoCucina.map((r, i) => `${i + 1} = ${getCodice(r)} (${getDesc(r)})`).join(' | ') : '1 = Frigorifero cucina';
-    return { properties: { page: pLand }, children: [
+    return { properties: { page: pPort }, children: [
       intestazione('Autoc 2A', 'TEMPERATURE FRIGORIFERI CUCINA', W),
       sp(0.5),
       new Paragraph({ children: [new TextRun({ text: `Apparecchiature: ${noteApp}`, font: 'Arial', size: 17, bold: true, color: V })] }),
@@ -1919,8 +2207,8 @@ export async function generaModulisticaHaccp({
         width: { size: W, type: WidthType.DXA }, columnWidths: colWidths,
         rows: [
           new TableRow({ children: [hC('Giorno', 700), hC('Ora', 700), hC('Temperatura (°C)', tW * nF, nF), hC('Anomalia / Guasto', 1500), hC('Firma', 1600)] }),
-          new TableRow({ children: [eC(700), eC(700), ...tCols.map((w, i) => cell(frigoCucina[i] ? getCodice(frigoCucina[i]) : String(i + 1), w, { bold: true, align: AlignmentType.CENTER, size: 16, fill: VL, bc: 'DDDDDD' })), eC(1500), cell('Apporre firma →', 1600, { size: 14, italic: true, color: GS })] }),
-          ...righeGiornaliere(colWidths, W, true),
+          new TableRow({ height: { value: 260, rule: 'exact' }, children: [eC(700), eC(700), ...tCols.map((w, i) => cell(frigoCucina[i] ? getCodice(frigoCucina[i]) : String(i + 1), w, { bold: true, align: AlignmentType.CENTER, size: 16, fill: VL, bc: 'DDDDDD' })), eC(1500), cell('Apporre firma →', 1600, { size: 14, italic: true, color: GS })] }),
+          ...righeGiornaliere(colWidths, W, false),
         ],
       }),
       sp(),
@@ -2167,7 +2455,7 @@ export async function generaModulisticaHaccp({
         width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5],
         rows: [
           new TableRow({ children: [hC('Data', c0), hC('Preparazione', c1), hC('T° cuore (°C)', c2), hC('Ora fine cottura', c3), hC('Esito ✓/✗', c4), hC('Firma', c5)] }),
-          ...Array.from({ length: 25 }, (_, i) => new TableRow({
+          ...Array.from({ length: 21 }, (_, i) => new TableRow({
             height: { value: 340, rule: 'exact' },
             children: [c0, c1, c2, c3, c4, c5].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
           })),
@@ -2190,7 +2478,7 @@ export async function generaModulisticaHaccp({
         width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5],
         rows: [
           new TableRow({ children: [hC('Data', c0), hC('Preparazione', c1), hC('T° inizio (°C)', c2), hC('T° fine (°C)', c3), hC('Durata (min)', c4), hC('Firma', c5)] }),
-          ...Array.from({ length: 25 }, (_, i) => new TableRow({
+          ...Array.from({ length: 21 }, (_, i) => new TableRow({
             height: { value: 340, rule: 'exact' },
             children: [c0, c1, c2, c3, c4, c5].map(w => eC(w, i % 2 === 0 ? W_ : VL)),
           })),
@@ -2647,6 +2935,56 @@ export async function generaModulisticaHaccp({
     ]};
   }
 
+  // ── Autoc 6M — Registro Manutenzione e Taratura (Portrait) ────
+  function autoc6M() {
+    const W  = W_P;
+    const c0 = 900;
+    const c1 = Math.floor(W * 0.28);
+    const c2 = Math.floor(W * 0.25);
+    const c3 = 900;
+    const c4 = Math.floor(W * 0.10);
+    const c5 = 950;
+    const c6 = W - c0 - c1 - c2 - c3 - c4 - c5;
+
+    const appRighe = righeApp.length > 0
+      ? righeApp.map(r => [getCodice(r) + ' — ' + getDesc(r), 'Verifica T° con sonda esterna'])
+      : [['Frigoriferi in gestione', 'Verifica T° con sonda esterna']];
+
+    const righeFixed = [
+      ...appRighe,
+      ['Termometri a sonda', 'Taratura vs riferimento certificato'],
+      ['Forno / Microonde riattivazione', 'Verifica funzionamento + pulizia interna'],
+      ['Lavastoviglie', 'Verifica T° ciclo lavaggio ≥80°C'],
+    ];
+    const righeVuote = Array.from({ length: 6 }, () => ['', '']);
+    const tutteRighe = [...righeFixed, ...righeVuote];
+
+    return { properties: { page: pPort }, children: [
+      intestazione('Autoc 6M', 'REGISTRO MANUTENZIONE E TARATURA ATTREZZATURE', W),
+      sp(0.5),
+      new Table({
+        width: { size: W, type: WidthType.DXA }, columnWidths: [c0, c1, c2, c3, c4, c5, c6],
+        rows: [
+          new TableRow({ children: [hC('Data', c0), hC('Attrezzatura', c1), hC('Attività svolta', c2), hC('Esito OK/NC', c3), hC('Note', c4), hC('Firma ASA', c5), hC('Firma R-HACCP', c6)] }),
+          ...tutteRighe.map(([att, attSvolta], i) => new TableRow({
+            height: { value: 480, rule: 'exact' },
+            children: [
+              eC(c0, i % 2 === 0 ? VL : W_),
+              cell(att       || '', c1, { size: 15, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD', bold: !!att }),
+              cell(attSvolta || '', c2, { size: 15, fill: i % 2 === 0 ? VL : W_, bc: 'DDDDDD' }),
+              eC(c3, i % 2 === 0 ? VL : W_),
+              eC(c4, i % 2 === 0 ? VL : W_),
+              eC(c5, i % 2 === 0 ? VL : W_),
+              eC(c6, i % 2 === 0 ? VL : W_),
+            ],
+          })),
+        ],
+      }),
+      sp(),
+      noteFooter('NC = Non Conforme. In caso di NC mettere attrezzatura fuori servizio fino a riparazione. Conservare rapporti di taratura per almeno 5 anni.', W),
+    ]};
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // ASSEMBLAGGIO DOCUMENTO
   // ═══════════════════════════════════════════════════════════════
@@ -2674,6 +3012,7 @@ export async function generaModulisticaHaccp({
     autoc4(),
     autoc7(),
     autoc6(),
+    autoc6M(),
   ].filter(Boolean);
 
   const doc = new Document({

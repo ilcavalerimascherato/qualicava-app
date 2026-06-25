@@ -56,14 +56,16 @@ const FacilityCard = memo(function FacilityCard({
   const kpiState = f._kpiFuture ? 'future' : f.isKpiGreen ? 'ok' : 'todo';
 
   const haccpCfg = !f.haccp_obbligatorio
-    ? { color: 'text-slate-300', bg: 'hover:bg-slate-50', title: 'Non soggetta a HACCP' }
+    ? { color: 'text-slate-300',  bg: 'hover:bg-slate-50',  title: 'Non soggetta a HACCP' }
     : f.haccp_semaforo === 'verde'
     ? { color: 'text-emerald-500', bg: 'hover:bg-emerald-50', title: 'HACCP in regola' }
     : f.haccp_semaforo === 'giallo'
-    ? { color: 'text-amber-400',   bg: 'hover:bg-amber-50',   title: 'HACCP — attenzione scadenze' }
+    ? { color: 'text-amber-400',  bg: 'hover:bg-amber-50',  title: 'HACCP — attenzione scadenze' }
     : f.haccp_semaforo === 'rosso'
-    ? { color: 'text-red-500',     bg: 'hover:bg-red-50',     title: 'HACCP — situazione critica' }
-    : { color: 'text-slate-300',   bg: 'hover:bg-slate-50',   title: 'HACCP non censito' };
+    ? { color: 'text-red-500',    bg: 'hover:bg-red-50',    title: 'HACCP — situazione critica' }
+    : f.haccp_semaforo === 'blu'
+    ? { color: 'text-blue-500',   bg: 'hover:bg-blue-50',   title: 'Cucina condivisa — HACCP gestito dalla struttura capofila' }
+    : { color: 'text-slate-300',  bg: 'hover:bg-slate-50',  title: 'HACCP non censito' };
 
   const metaLine = [
     f.region,

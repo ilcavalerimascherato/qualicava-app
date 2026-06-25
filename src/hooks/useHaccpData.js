@@ -16,21 +16,39 @@ export function useHaccpSemafori() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['haccp', 'semafori'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('haccp_scadenzario')
-        .select('struttura_id, semaforo, stato_scia, manuale_scadenza, r_haccp_scadenza, prossima_analisi');
-      if (error) throw error;
-      return data ?? [];
+      const [scadenzarioRes, profiliRes] = await Promise.all([
+        supabase
+          .from('haccp_scadenzario')
+          .select('struttura_id, semaforo, stato_scia, manuale_scadenza, r_haccp_scadenza, prossima_analisi'),
+        supabase
+          .from('haccp_profili')
+          .select('struttura_id, cucina_condivisa_con')
+          .not('cucina_condivisa_con', 'is', null),
+      ]);
+      if (scadenzarioRes.error) throw scadenzarioRes.error;
+      return {
+        scadenzario: scadenzarioRes.data ?? [],
+        profiliCondivisi: profiliRes.data ?? [],
+      };
     },
-    staleTime: 5 * 60 * 1000, // 5 minuti
+    staleTime: 5 * 60 * 1000,
   });
 
-  const semafori = {};
+  const semafori   = {};
   const scadenzario = {};
   if (data) {
-    data.forEach(row => {
-      semafori[row.struttura_id]    = row.semaforo;
+    const cucinaCondivisaIds = new Set(
+      data.profiliCondivisi.map(p => p.struttura_id)
+    );
+    data.scadenzario.forEach(row => {
       scadenzario[row.struttura_id] = row;
+      semafori[row.struttura_id] = cucinaCondivisaIds.has(row.struttura_id)
+        ? 'blu'
+        : row.semaforo;
+    });
+    // Strutture con cucina condivisa ma senza riga in haccp_scadenzario
+    data.profiliCondivisi.forEach(p => {
+      if (!(p.struttura_id in semafori)) semafori[p.struttura_id] = 'blu';
     });
   }
 

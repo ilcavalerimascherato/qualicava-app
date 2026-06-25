@@ -17,6 +17,7 @@ const HACCP_FILTER_MAP = {
   inRegola:   'verde',
   attenzione: 'giallo',
   critico:    'rosso',
+  condivise:  'blu',
   nonCensiti: 'grigio',
 };
 
@@ -25,6 +26,7 @@ const STATO_MAP = {
   conforme:   'verde',
   attenzione: 'giallo',
   critico:    'rosso',
+  condivisa:  'blu',
   non_attivo: 'grigio',
 };
 
@@ -112,6 +114,7 @@ export default function MasterDashboard() {
       giallo: haccpOnly.filter(f => f.haccp_semaforo === 'giallo').length,
       rosso:  haccpOnly.filter(f => f.haccp_semaforo === 'rosso').length,
       grigio: haccpOnly.filter(f => f.haccp_semaforo === 'grigio' || !f.haccp_semaforo).length,
+      blu:    haccpOnly.filter(f => f.haccp_semaforo === 'blu').length,
     };
   }, [enriched]);
 
@@ -337,6 +340,19 @@ export default function MasterDashboard() {
             <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
             {counts.rosso} critici
           </button>
+          {counts.blu > 0 && (
+            <button
+              onClick={() => { setHaccpFilter(prev => prev === 'condivise' ? null : 'condivise'); setFilterStato(''); }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                haccpFilter === 'condivise'
+                  ? 'bg-blue-200 text-blue-800 ring-1 ring-blue-400'
+                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+              {counts.blu} condivise
+            </button>
+          )}
           <button
             onClick={() => { setHaccpFilter(prev => prev === 'nonCensiti' ? null : 'nonCensiti'); setFilterStato(''); }}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
@@ -402,6 +418,7 @@ function GroupSemafori({ facilities }) {
   const v = facilities.filter(f => f.haccp_semaforo === 'verde').length;
   const g = facilities.filter(f => f.haccp_semaforo === 'giallo').length;
   const r = facilities.filter(f => f.haccp_semaforo === 'rosso').length;
+  const b = facilities.filter(f => f.haccp_semaforo === 'blu').length;
   const n = facilities.filter(f => f.haccp_semaforo === 'grigio' || !f.haccp_semaforo).length;
   return (
     <div className="flex items-center gap-1.5">
@@ -423,6 +440,12 @@ function GroupSemafori({ facilities }) {
           {r} critici
         </span>
       )}
+      {b > 0 && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+          {b} condivisa
+        </span>
+      )}
       {n > 0 && (
         <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
           <span className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0" />
@@ -439,10 +462,11 @@ function HaccpCard({ f, udos, onClick }) {
   const udoColor = f.udo_color || '#6366f1';
 
   const semaforoConfig = {
-    verde:  { dot: 'bg-green-500',  bg: 'bg-green-50',  border: 'border-green-200',  label: 'Conforme',   text: 'text-green-700'  },
-    giallo: { dot: 'bg-yellow-400', bg: 'bg-yellow-50', border: 'border-yellow-200', label: 'Attenzione', text: 'text-yellow-700' },
-    rosso:  { dot: 'bg-red-500',    bg: 'bg-red-50',    border: 'border-red-200',    label: 'Critico',    text: 'text-red-700'    },
-    grigio: { dot: 'bg-gray-300',   bg: 'bg-gray-50',   border: 'border-gray-200',   label: 'Non attivo', text: 'text-gray-400'   },
+    verde:  { dot: 'bg-green-500',  bg: 'bg-green-50',  border: 'border-green-200',  label: 'Conforme',        text: 'text-green-700'  },
+    giallo: { dot: 'bg-yellow-400', bg: 'bg-yellow-50', border: 'border-yellow-200', label: 'Attenzione',      text: 'text-yellow-700' },
+    rosso:  { dot: 'bg-red-500',    bg: 'bg-red-50',    border: 'border-red-200',    label: 'Critico',         text: 'text-red-700'    },
+    blu:    { dot: 'bg-blue-500',   bg: 'bg-blue-50',   border: 'border-blue-200',   label: 'Cucina condivisa', text: 'text-blue-700'  },
+    grigio: { dot: 'bg-gray-300',   bg: 'bg-gray-50',   border: 'border-gray-200',   label: 'Non attivo',      text: 'text-gray-400'   },
   };
   const s = semaforoConfig[f.haccp_semaforo] || semaforoConfig.grigio;
 
@@ -481,9 +505,11 @@ function HaccpCard({ f, udos, onClick }) {
       {/* Footer: stato + manuale */}
       <div className="flex items-center justify-between gap-1 pt-1 border-t border-black/5">
         <span className={`text-[9px] font-medium ${s.text}`}>{s.label}</span>
-        {f.manuale_presente
-          ? <span className="text-[9px] text-green-600 font-medium">📋 Manuale</span>
-          : <span className="text-[9px] text-red-400 font-medium">📋 Mancante</span>
+        {f.haccp_semaforo === 'blu'
+          ? null
+          : f.manuale_presente
+            ? <span className="text-[9px] text-green-600 font-medium">📋 Manuale</span>
+            : <span className="text-[9px] text-red-400 font-medium">📋 Mancante</span>
         }
       </div>
     </div>

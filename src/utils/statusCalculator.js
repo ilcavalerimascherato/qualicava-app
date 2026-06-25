@@ -83,6 +83,20 @@ export const enrichFacilitiesData = (facilities, surveys, kpiRecords, year, udos
   });
 };
 
+// Se la struttura ha cucina condivisa con un'altra struttura, il semaforo HACCP
+// diventa blu indipendentemente da qualsiasi altro calcolo.
+export const getHaccpSemaforoOverride = (profilo) => {
+  if (profilo?.cucina_condivisa_con) {
+    return {
+      semaforo:    'blu',
+      label:       'Cucina condivisa',
+      color:       '#3B82F6',
+      descrizione: 'La gestione HACCP è affidata alla struttura capofila',
+    };
+  }
+  return null;
+};
+
 export const calculateDashboardStats = (enrichedFacilities, activeUdo = 'all') => {
   const active = enrichedFacilities.filter(f =>
     !f.is_suspended &&

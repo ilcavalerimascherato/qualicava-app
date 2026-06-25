@@ -9,7 +9,7 @@
  *  - FacilityCard (click sul cappello, via App.js → navigate /master?facility=ID)
  * ─────────────────────────────────────────────────────────────
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X, ChefHat, ClipboardList, FileText, FlaskConical,
   GraduationCap, Save, Loader2, Plus,
@@ -29,10 +29,9 @@ const TABS = [
 ];
 
 const MODELLI = [
-  { value: 'cucina_interna',        label: 'Cucina interna' },
-  { value: 'appalto_fresco_caldo',  label: 'Appalto fresco-caldo in struttura' },
+  { value: 'cucina_interna',          label: 'Cucina interna' },
+  { value: 'appalto_fresco_caldo',    label: 'Appalto fresco-caldo in struttura' },
   { value: 'distribuzione_veicolata', label: 'Distribuzione veicolata (pasti da esterno)' },
-  { value: 'non_osa',               label: 'Operatore non OSA (global service / fornitore esterno)' },
 ];
 
 const STATI_SCIA = [
@@ -45,11 +44,22 @@ const STATI_SCIA = [
 ];
 
 const SEMAFORO_CFG = {
-  verde:  { color: 'text-emerald-500', bg: 'bg-emerald-50',  border: 'border-emerald-200', label: 'In regola'  },
-  giallo: { color: 'text-amber-400',   bg: 'bg-amber-50',    border: 'border-amber-200',   label: 'Attenzione' },
-  rosso:  { color: 'text-red-500',     bg: 'bg-red-50',      border: 'border-red-200',     label: 'Critico'    },
-  grigio: { color: 'text-slate-400',   bg: 'bg-slate-50',    border: 'border-slate-200',   label: 'Non censito'},
+  verde:  { color: 'text-emerald-500', bg: 'bg-emerald-50',  border: 'border-emerald-200', label: 'In regola'       },
+  giallo: { color: 'text-amber-400',   bg: 'bg-amber-50',    border: 'border-amber-200',   label: 'Attenzione'      },
+  rosso:  { color: 'text-red-500',     bg: 'bg-red-50',      border: 'border-red-200',     label: 'Critico'         },
+  grigio: { color: 'text-slate-400',   bg: 'bg-slate-50',    border: 'border-slate-200',   label: 'Non censito'     },
+  blu:    { color: 'text-blue-600',    bg: 'bg-blue-50',     border: 'border-blue-200',    label: 'Cucina condivisa' },
 };
+
+const DISFAGICI_MODALITA = [
+  { value: 'interna',   label: 'Frullatura/texturizzazione interna' },
+  { value: 'fornitore', label: 'Prodotto disfagico da fornitore esterno' },
+];
+
+const DISTRIBUZIONE_MODALITA = [
+  { value: 'gastronorm', label: 'Gastronorm multiporzione su carrello caldo' },
+  { value: 'vassoi',     label: 'Vassoi individualizzati identificati' },
+];
 
 const INP  = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:border-amber-400 outline-none text-slate-700';
 const INP2 = 'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-amber-400 outline-none text-slate-700';
@@ -133,8 +143,50 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
       });
   }, [facility?.udo_id]);
 
-  const semaforo = data.scadenzario?.semaforo ?? 'grigio';
+  // Cucina condivisa — stato sincronizzato da profilo DB
+  const [cucinaCondivisa,    setCucinaCondivisa]    = useState(false);
+  const [cucinaCondivisaCon, setCucinaCondivisaCon] = useState(null);
+  const [struttureCollegate, setStruttureCollegate] = useState([]);
+
+  useEffect(() => {
+    setCucinaCondivisa(!!data.profilo?.cucina_condivisa_con);
+    setCucinaCondivisaCon(data.profilo?.cucina_condivisa_con ?? null);
+  }, [data.profilo?.cucina_condivisa_con]);
+
+  useEffect(() => {
+    if (!facility?.company_id) return;
+    supabase
+      .from('facilities')
+      .select('id, name')
+      .eq('company_id', facility.company_id)
+      .neq('id', facility.id)
+      .then(({ data: rows }) => setStruttureCollegate(rows ?? []));
+  }, [facility?.company_id, facility?.id]);
+
+  const semaforo = (cucinaCondivisa && cucinaCondivisaCon)
+    ? 'blu'
+    : (data.scadenzario?.semaforo ?? 'grigio');
   const semCfg   = SEMAFORO_CFG[semaforo] ?? SEMAFORO_CFG.grigio;
+
+  const headerColor = useMemo(() => {
+    if (semaforo === 'blu')    return '#3B82F6';
+    if (semaforo === 'verde')  return '#1D6F42';
+    if (semaforo === 'rosso')  return '#DC2626';
+    if (semaforo === 'grigio') return '#6B7280';
+    return '#F59E0B';
+  }, [semaforo]);
+
+  const tabsVisibili = useMemo(() => {
+    if (cucinaCondivisa && cucinaCondivisaCon) return ['scia'];
+    const regime = data.profilo?.regime_haccp;
+    if (regime === 'esonerata') return ['profilo'];
+    if (regime === 'non_osa')   return ['profilo', 'scia'];
+    return ['profilo', 'scia', 'manuale', 'analisi', 'formazione'];
+  }, [data.profilo?.regime_haccp, cucinaCondivisa, cucinaCondivisaCon]);
+
+  useEffect(() => {
+    if (!tabsVisibili.includes(activeTab)) setActiveTab(tabsVisibili[0] ?? 'profilo');
+  }, [tabsVisibili, activeTab]);
 
   if (!facility) return null;
 
@@ -143,7 +195,7 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
       <div className="bg-white rounded-2xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden font-sans">
 
         {/* ── Header ── */}
-        <div className="bg-amber-500 px-8 py-5 flex items-center justify-between shrink-0">
+        <div className="px-8 py-5 flex items-center justify-between shrink-0" style={{ backgroundColor: headerColor }}>
           <div className="flex items-center gap-4">
             <div className="p-2.5 bg-white/20 rounded-xl">
               <ChefHat size={22} className="text-white" />
@@ -152,7 +204,7 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
               <h2 className="text-xl font-black text-white uppercase tracking-wider">
                 Fascicolo HACCP
               </h2>
-              <p className="text-xs text-amber-100 font-bold">{facility.name}</p>
+              <p className="text-xs font-bold text-white/70">{facility.name}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -167,9 +219,19 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
           </div>
         </div>
 
+        {/* ── Banner cucina condivisa ── */}
+        {cucinaCondivisa && cucinaCondivisaCon && (
+          <div style={{ background: '#DBEAFE', borderBottom: '2px solid #3B82F6', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#1D4ED8', fontWeight: 600, fontSize: 13 }}>
+              🍽️ Cucina gestita da: {struttureCollegate.find(f => f.id === cucinaCondivisaCon)?.name ?? '—'}
+              {' '}— il fascicolo HACCP completo è gestito dalla struttura capofila.
+            </span>
+          </div>
+        )}
+
         {/* ── Tab nav ── */}
         <div className="bg-slate-50 border-b border-slate-200 px-8 flex gap-1 pt-3 shrink-0 overflow-x-auto">
-          {TABS.map(({ id, label, Icon }) => (
+          {TABS.filter(t => tabsVisibili.includes(t.id)).map(({ id, label, Icon }) => (
             <button key={id} onClick={() => setActiveTab(id)}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-xs font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${
                 activeTab === id
@@ -190,7 +252,11 @@ export default function HaccpFascicoloModal({ facility, onClose }) {
           ) : (
             <>
               {activeTab === 'profilo'    && <ProfiloTab    facility={facility} profilo={data.profilo}       invalidate={invalidate} isDirector={isDirector} isUdoPsi={isUdoPsi} onSaved={() => setActiveTab('scia')} />}
-              {activeTab === 'scia'       && <SciaTab       facility={facility} scia={data.scia}             invalidate={invalidate} canEdit={canEdit} />}
+              {activeTab === 'scia'       && <SciaTab       facility={facility} scia={data.scia}             invalidate={invalidate} canEdit={canEdit}
+                                               profilo={data.profilo}
+                                               cucinaCondivisa={cucinaCondivisa} setCucinaCondivisa={setCucinaCondivisa}
+                                               cucinaCondivisaCon={cucinaCondivisaCon} setCucinaCondivisaCon={setCucinaCondivisaCon}
+                                               struttureCollegate={struttureCollegate} />}
               {activeTab === 'manuale'    && <ManualeTab    facility={facility} manuali={data.manuali}       profilo={data.profilo}  invalidate={invalidate} canGenerate={canGenerate} canRequest={canRequest} isUdoPsi={isUdoPsi} />}
               {activeTab === 'analisi'    && <AnalisiTab    facility={facility} analisi={data.analisi}       invalidate={invalidate} canEdit={canEdit} />}
               {activeTab === 'formazione' && <FormazioneTab facility={facility} formazione={data.formazione} invalidate={invalidate} canEdit={canEdit} />}
@@ -236,6 +302,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
     op_ricevimento_pasti:        '',
     op_nuclei_note:              '',
     op_disfagici:                false,
+    op_disfagici_modalita:       'interna',
     op_disfagici_note:           '',
     op_cena_abbattuta:           false,
     op_cena_abbattuta_note:      '',
@@ -252,6 +319,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
     op_distributore_acqua:       false,
     op_distributore_acqua_note:  '',
     op_celiachia_note:           '',
+    op_distribuzione_modalita:   'gastronorm',
     // Cucina interna — sezioni aggiuntive
     op_abbattitore:              false,
     op_abbattitore_note:         '',
@@ -261,6 +329,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
     op_accesso_esterni:          false,
     op_moca_note:                '',
     descrizione_ambienti:        '',
+    cucina:                      { zone: [], distribuzione: [], capacita_pasti: '' },
     // Piano analisi microbiologiche
     analisi_problemi_recenti:    false,
     analisi_acqua_bottiglia:     null,   // null = non ancora risposto
@@ -270,6 +339,10 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
       stoviglie:    'annuale',
       acqua:        'annuale',
     },
+    regime_haccp:         'soggetta',
+    esonero_note:         '',
+    esonero_data:         '',
+    esonero_responsabile: '',
   };
 
   const [form, setForm]     = useState(EMPTY);
@@ -304,7 +377,9 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_ricevimento_pasti:        sa.op_ricevimento_pasti             || '',
         op_nuclei_note:              sa.op_nuclei_note                   || '',
         op_disfagici:                sa.op_disfagici                     || false,
+        op_disfagici_modalita:       sa.op_disfagici_modalita            || 'interna',
         op_disfagici_note:           sa.op_disfagici_note                || '',
+        op_distribuzione_modalita:   sa.op_distribuzione_modalita        || 'gastronorm',
         op_cena_abbattuta:           sa.op_cena_abbattuta                || false,
         op_cena_abbattuta_note:      sa.op_cena_abbattuta_note           || '',
         op_carrello_termico:         sa.op_carrello_termico              || false,
@@ -328,9 +403,14 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_accesso_esterni:          sa.op_accesso_esterni          || false,
         op_moca_note:                sa.op_moca_note                || '',
         descrizione_ambienti:        sa.descrizione_ambienti        || '',
+        cucina:                      sa.cucina                      || { zone: [], distribuzione: [], capacita_pasti: '' },
         analisi_problemi_recenti:    sa.analisi_problemi_recenti    || false,
         analisi_acqua_bottiglia:     sa.analisi_acqua_bottiglia     ?? null,
         analisi_frequenze:           sa.analisi_frequenze           || { superfici:'annuale', mani:'annuale', stoviglie:'annuale', acqua:'annuale' },
+        regime_haccp:                profilo.regime_haccp           || 'soggetta',
+        esonero_note:                profilo.esonero_note           || '',
+        esonero_data:                profilo.esonero_data           || '',
+        esonero_responsabile:        profilo.esonero_responsabile   || '',
       });
     }
   }, [profilo]);
@@ -340,6 +420,10 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
   const hasFornitore = ['appalto_fresco_caldo', 'distribuzione_veicolata', 'non_osa'].includes(form.modello_ristorazione);
 
   const handleSave = async () => {
+    if (form.regime_haccp === 'esonerata' && (!form.esonero_note || !form.esonero_data || !form.esonero_responsabile)) {
+      alert('Compilare tutti i campi obbligatori per documentare l\'esonero.');
+      return;
+    }
     setSaving(true);
     try {
       // Costruisco sezioni_attive jsonb con tutti i campi operativi
@@ -356,7 +440,9 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_ricevimento_pasti:    form.op_ricevimento_pasti,
         op_nuclei_note:          form.op_nuclei_note,
         op_disfagici:            form.op_disfagici,
-        op_disfagici_note:       form.op_disfagici_note,
+        op_disfagici_modalita:     form.op_disfagici_modalita,
+        op_disfagici_note:         form.op_disfagici_note,
+        op_distribuzione_modalita: form.op_distribuzione_modalita,
         op_cena_abbattuta:       form.op_cena_abbattuta,
         op_cena_abbattuta_note:  form.op_cena_abbattuta_note,
         op_carrello_termico:     form.op_carrello_termico,
@@ -380,6 +466,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         op_accesso_esterni:      form.op_accesso_esterni,
         op_moca_note:            form.op_moca_note,
         descrizione_ambienti:    form.descrizione_ambienti,
+        cucina:                  form.cucina || {},
         analisi_problemi_recenti: form.analisi_problemi_recenti,
         analisi_acqua_bottiglia:  form.analisi_acqua_bottiglia,
         analisi_frequenze:        form.analisi_frequenze,
@@ -398,6 +485,10 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         unita_cucina:                form.n_cucina ? parseInt(form.n_cucina) : null,
         sezioni_attive,
         note_operative:              form.note_operative              || null,
+        regime_haccp:                form.regime_haccp,
+        esonero_note:                form.regime_haccp === 'esonerata' ? form.esonero_note         || null : null,
+        esonero_data:                form.regime_haccp === 'esonerata' ? form.esonero_data         || null : null,
+        esonero_responsabile:        form.regime_haccp === 'esonerata' ? form.esonero_responsabile || null : null,
         updated_at:                  new Date().toISOString(),
       };
       const { error } = profilo
@@ -454,9 +545,81 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
   return (
     <div className="p-8 space-y-8">
 
-      {/* Modello ristorazione */}
+      {/* ── Regime HACCP ── */}
+      <section className="space-y-3">
+        <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest border-b border-[#1D6F42]/20 pb-2">
+          Regime HACCP
+        </h3>
+        <div className="flex flex-col gap-2">
+          {[
+            { value: 'soggetta',  label: 'Struttura soggetta HACCP',                           desc: 'Gestione diretta o in appalto — fascicolo completo obbligatorio',               accent: 'amber' },
+            { value: 'non_osa',   label: 'Non OSA — Global service / Fornitore esterno totale', desc: 'Tutto esternalizzato inclusa somministrazione — documentare SCIA fornitore',   accent: 'amber' },
+            { value: 'esonerata', label: 'Esonerata da HACCP',                                  desc: 'La struttura non svolge alcuna attività alimentare — documentare motivazione', accent: 'slate' },
+          ].map(opt => (
+            <label key={opt.value}
+              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                form.regime_haccp === opt.value
+                  ? opt.accent === 'slate' ? 'border-slate-400 bg-slate-100' : 'border-amber-400 bg-amber-50'
+                  : 'border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <input type="radio" name="regime_haccp" value={opt.value}
+                checked={form.regime_haccp === opt.value}
+                onChange={() => {
+                  if (opt.value === 'non_osa') {
+                    setForm(p => ({ ...p, regime_haccp: 'non_osa', modello_ristorazione: 'non_osa' }));
+                  } else {
+                    setForm(p => ({ ...p, regime_haccp: opt.value }));
+                  }
+                }}
+                className="mt-0.5 accent-amber-500"
+              />
+              <div>
+                <p className="text-sm font-medium text-slate-900">{opt.label}</p>
+                <p className="text-xs text-slate-500">{opt.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        {form.regime_haccp === 'esonerata' && (
+          <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-3">
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Documentazione esonero obbligatoria
+            </p>
+            <div>
+              <label className="text-xs text-slate-600 mb-1 block">Motivazione *</label>
+              <textarea
+                value={form.esonero_note}
+                onChange={set('esonero_note')}
+                rows={3}
+                placeholder="Descrivere perché la struttura è esonerata dagli obblighi HACCP..."
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-slate-400"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">Data delibera *</label>
+                <input type="date" value={form.esonero_data} onChange={set('esonero_data')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-400" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 mb-1 block">Responsabile delibera *</label>
+                <input type="text" value={form.esonero_responsabile} onChange={set('esonero_responsabile')}
+                  placeholder="Nome e ruolo"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-400" />
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {form.regime_haccp !== 'esonerata' && (<>
+
+      {/* Modello ristorazione — solo se soggetta */}
+      {form.regime_haccp === 'soggetta' && (
       <section className="space-y-4">
-        <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2">
+        <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest border-b border-[#1D6F42]/20 pb-2">
           Modello ristorazione
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -477,11 +640,12 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
           ))}
         </div>
       </section>
+      )}
 
       {/* Fornitore — solo se non cucina interna */}
       {hasFornitore && (
         <section className="space-y-4">
-          <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2">
+          <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest border-b border-[#1D6F42]/20 pb-2">
             Fornitore ristorazione
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -509,7 +673,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
 
       {/* Responsabili e Gruppo HACCP */}
       <section className="space-y-5">
-        <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2">
+        <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest border-b border-[#1D6F42]/20 pb-2">
           Responsabili
         </h3>
 
@@ -622,7 +786,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
 
       {/* Sezioni manuale e dati revisione */}
       <section className="space-y-5">
-        <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2">
+        <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest border-b border-[#1D6F42]/20 pb-2">
           Dati revisione manuale
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -641,7 +805,7 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
           </div>
         </div>
 
-        <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2 mt-2">
+        <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest border-b border-[#1D6F42]/20 pb-2 mt-2">
           Sezioni manuale da includere
         </h3>
 
@@ -808,6 +972,8 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
         </p>
       </section>
 
+      </>)}
+
       {/* Salva */}
       <div className="flex justify-end pt-2">
         <button onClick={handleSave} disabled={saving}
@@ -823,7 +989,11 @@ function ProfiloTab({ facility, profilo, invalidate, isDirector, isUdoPsi, onSav
 // ══════════════════════════════════════════════════════════════
 // TAB 2 — SCIA
 // ══════════════════════════════════════════════════════════════
-function SciaTab({ facility, scia, invalidate, canEdit }) {
+function SciaTab({ facility, scia, invalidate, canEdit,
+                   profilo,
+                   cucinaCondivisa, setCucinaCondivisa,
+                   cucinaCondivisaCon, setCucinaCondivisaCon,
+                   struttureCollegate }) {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving]     = useState(false);
   const [form, setForm]         = useState({
@@ -833,6 +1003,39 @@ function SciaTab({ facility, scia, invalidate, canEdit }) {
   });
 
   const set = f => e => setForm(p => ({ ...p, [f]: e.target.value }));
+
+  const [savingCucina, setSavingCucina] = useState(false);
+  const [savedCucina,  setSavedCucina]  = useState(false);
+
+  const handleSaveCucinaCondivisa = async () => {
+    if (cucinaCondivisa && !cucinaCondivisaCon) {
+      alert('Seleziona la struttura capofila prima di salvare.');
+      return;
+    }
+    setSavingCucina(true);
+    try {
+      const { error } = await supabase
+        .from('haccp_profili')
+        .upsert(
+          {
+            struttura_id:         facility.id,
+            modello_ristorazione: profilo?.modello_ristorazione || 'distribuzione_veicolata',
+            regime_haccp:         profilo?.regime_haccp         || 'soggetta',
+            cucina_condivisa_con: cucinaCondivisa ? cucinaCondivisaCon : null,
+          },
+          { onConflict: 'struttura_id' }
+        );
+      if (error) throw error;
+      await invalidate.profilo();
+      await invalidate.semafori?.();
+      setSavedCucina(true);
+      setTimeout(() => setSavedCucina(false), 2000);
+    } catch (err) {
+      alert('Errore salvataggio: ' + err.message);
+    } finally {
+      setSavingCucina(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -878,10 +1081,58 @@ function SciaTab({ facility, scia, invalidate, canEdit }) {
   return (
     <div className="p-8 space-y-6">
 
+      {/* Cucina condivisa */}
+      <div style={{ padding: 12, border: '1px solid #3B82F6', borderRadius: 8, background: '#EFF6FF' }}>
+        <label style={{ fontWeight: 600, color: '#1D4ED8', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={!!cucinaCondivisa}
+            onChange={e => { setCucinaCondivisa(e.target.checked); if (!e.target.checked) setCucinaCondivisaCon(null); }}
+          />
+          Cucina condivisa con altra struttura
+        </label>
+        {cucinaCondivisa && (
+          <select
+            value={cucinaCondivisaCon || ''}
+            onChange={e => setCucinaCondivisaCon(Number(e.target.value) || null)}
+            style={{ marginTop: 8, width: '100%', padding: 8, borderRadius: 6, border: '1px solid #BFDBFE', fontSize: 13 }}
+          >
+            <option value="">— Seleziona struttura capofila —</option>
+            {struttureCollegate.map(f => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+        )}
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={handleSaveCucinaCondivisa}
+            disabled={savingCucina}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: savedCucina ? '#16A34A' : '#1D4ED8',
+              color: '#fff', border: 'none', borderRadius: 8,
+              padding: '7px 16px', fontSize: 13, fontWeight: 700,
+              cursor: savingCucina ? 'not-allowed' : 'pointer',
+              opacity: savingCucina ? 0.7 : 1, transition: 'background 0.2s',
+            }}
+          >
+            {savingCucina
+              ? <Loader2 size={14} className="animate-spin" />
+              : savedCucina
+                ? <span style={{ fontSize: 14 }}>✓</span>
+                : <Save size={14} />}
+            {savingCucina ? 'Salvataggio...' : savedCucina ? 'Salvato' : 'Salva impostazione cucina'}
+          </button>
+        </div>
+      </div>
+
+      {/* Contenuto SCIA — nascosto se cucina condivisa attiva */}
+      {!cucinaCondivisa && <>
+
       {/* Notifica 852 — sempre la più importante */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest">
+          <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest">
             Notifica 852/2004 (registrazione OSA)
           </h3>
           {canEdit && !notifica && (
@@ -914,7 +1165,7 @@ function SciaTab({ facility, scia, invalidate, canEdit }) {
       {/* Altre SCIA */}
       {altre.length > 0 && (
         <section>
-          <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest mb-4">
+          <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest mb-4">
             Altre SCIA / documentazione
           </h3>
           <div className="space-y-3">
@@ -945,7 +1196,7 @@ function SciaTab({ facility, scia, invalidate, canEdit }) {
       {/* Form nuova SCIA */}
       {showForm && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-4">
-          <h4 className="font-black text-amber-700 text-sm uppercase tracking-widest">Nuova SCIA</h4>
+          <h4 className="font-black text-[#1D6F42] text-sm uppercase tracking-widest">Nuova SCIA</h4>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={LBL}>Tipo</label>
@@ -992,6 +1243,8 @@ function SciaTab({ facility, scia, invalidate, canEdit }) {
           </div>
         </div>
       )}
+
+      </>}
     </div>
   );
 }
@@ -1055,7 +1308,7 @@ function UploadPdf({ facilityId, sciaId, tipoLabel, onDone, onCancel }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-black text-amber-700 uppercase tracking-widest">
+      <p className="text-xs font-black text-[#1D6F42] uppercase tracking-widest">
         Allega PDF — {tipoLabel}
       </p>
 
@@ -1339,6 +1592,11 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
     try {
       const sa  = profilo?.sezioni_attive || {};
       const oggi = new Date().toISOString().split('T')[0];
+      const logoUrl = logoVariante === 'C'
+        ? await supabase.from('companies').select('logo_url')
+            .eq('id', facility.company_id).single()
+            .then(({ data }) => data?.logo_url || null)
+        : null;
       const { generaModulisticaHaccp } = await import('../services/haccpManualeService');
       const modBuffer = await generaModulisticaHaccp({
         nomestruttura:               facility.name,
@@ -1355,6 +1613,9 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         op_srtr:                     sa.op_srtr                     || false,
         op_monouso_infetti:          sa.op_monouso_infetti          || false,
         op_riabilitazione:           sa.op_riabilitazione           || false,
+        cucina:                      sa.cucina                      || {},
+        opDistribuzioneModalita:     sa.op_distribuzione_modalita   || 'gastronorm',
+        logoUrl,
         logoVariante:                logoVariante,
       });
 
@@ -1458,11 +1719,15 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         noteRevisione:             revNote                       || 'Prima emissione',
         revStorico:                revStorico,
         // Dati dal profilo HACCP — SSOT
+        fornitoreNome:             profilo.fornitore_nome              || '',
+        fornitorePiva:             profilo.fornitore_piva              || '',
         apparecchiatureFrigorifere: profilo.apparecchiature_frigorifere || '',
         layoutStruttura:           sa.op_nuclei_note              || '',
         orariServizio:             sa.op_orari_distribuzione      || '',
         opDisfagici:               sa.op_disfagici                || false,
         opDisfagiciNote:           sa.op_disfagici_note           || '',
+        opDisfagiciModalita:       sa.op_disfagici_modalita       || 'interna',
+        opDistribuzioneModalita:   sa.op_distribuzione_modalita   || 'gastronorm',
         opCenaAbbattuta:           sa.op_cena_abbattuta           || false,
         opCenaAbbatutaNote:        sa.op_cena_abbattuta_note      || '',
         opMonousoInfetti:          sa.op_monouso_infetti          || false,
@@ -1487,6 +1752,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         logoVariante:              logoVariante,
         sezioniManuale:            sa.sezioni_manuale             || null,
         normativaRegionale:        normativaRegionale,
+        cucina:                    sa.cucina                      || {},
       });
 
       // 2. Upload .docx manuale in Storage
@@ -1508,6 +1774,11 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       // 3. Genera modulistica (Autoc 1, 2A, 2B, 7) e upload
       let modulisticaUrl = null;
       try {
+        const logoUrl = logoVariante === 'C'
+          ? await supabase.from('companies').select('logo_url')
+              .eq('id', facility.company_id).single()
+              .then(({ data }) => data?.logo_url || null)
+          : null;
         const { generaModulisticaHaccp } = await import('../services/haccpManualeService');
         const modBuffer = await generaModulisticaHaccp({
           nomestruttura:               facility.name,
@@ -1521,6 +1792,9 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
           op_macchina_colazioni_note:  sa.op_macchina_colazioni_note   || '',
           op_cena_abbattuta:           sa.op_cena_abbattuta           || false,
           op_carrello_termico:         sa.op_carrello_termico         || false,
+          cucina:                      sa.cucina                      || {},
+          opDistribuzioneModalita:     sa.op_distribuzione_modalita   || 'gastronorm',
+          logoUrl,
         });
         const modPath = `${facility.id}/manuali/${nomeFile}_modulistica_${oggi}.docx`;
         const { error: modErr } = await supabase.storage
@@ -1571,7 +1845,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
 
       {/* Stato manuale corrente */}
       <section>
-        <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2 mb-4">
+        <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest border-b border-[#1D6F42]/20 pb-2 mb-4">
           Manuale corrente
         </h3>
         {ultimo ? (
@@ -1697,7 +1971,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
             </div>
             {logoVariante === 'C' && (
               <p className="text-xs text-amber-600 mt-2 italic">
-                Logo personalizzato: funzionalità in sviluppo — verrà usato il logo OVER come fallback.
+                Logo personalizzato: funzionalità in Beta.
               </p>
             )}
           </div>
@@ -1819,7 +2093,7 @@ function AnalisiTab({ facility, analisi, invalidate, canEdit }) {
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest">
+        <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest">
           Analisi microbiologiche — {analisi.length} registrate
         </h3>
         {canEdit && (
@@ -1863,7 +2137,7 @@ function AnalisiTab({ facility, analisi, invalidate, canEdit }) {
 
       {showForm && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-4">
-          <h4 className="font-black text-amber-700 text-sm uppercase tracking-widest">Nuova analisi</h4>
+          <h4 className="font-black text-[#1D6F42] text-sm uppercase tracking-widest">Nuova analisi</h4>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={LBL}>Data campionamento *</label>
@@ -1969,7 +2243,7 @@ function FormazioneTab({ facility, formazione, invalidate, canEdit }) {
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest">
+        <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest">
           Piano formazione HACCP — {formazione.length} record
         </h3>
         {canEdit && (
@@ -2037,7 +2311,7 @@ function FormazioneTab({ facility, formazione, invalidate, canEdit }) {
 
       {showForm && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-4">
-          <h4 className="font-black text-amber-700 text-sm uppercase tracking-widest">Nuovo record formazione</h4>
+          <h4 className="font-black text-[#1D6F42] text-sm uppercase tracking-widest">Nuovo record formazione</h4>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={LBL}>Persona *</label>
@@ -2094,17 +2368,124 @@ function FormazioneTab({ facility, formazione, invalidate, canEdit }) {
 // COMPONENTE NOTE OPERATIVE — campi specifici per modello
 // Alimentano direttamente il prompt di generazione del manuale
 // ══════════════════════════════════════════════════════════════
+const ZONE_CUCINA = [
+  { key: 'magazzino_secco',       label: 'Magazzino secco' },
+  { key: 'dispensa',              label: 'Dispensa' },
+  { key: 'cella_frigo_carni',     label: 'Cella frigo carni/pesce' },
+  { key: 'cella_frigo_latticini', label: 'Cella frigo latticini/verdure' },
+  { key: 'cella_surgelati',       label: 'Cella surgelati' },
+  { key: 'abbattitore',           label: 'Abbattitore' },
+  { key: 'cucina_calda',          label: 'Cucina calda (fuochi/forni)' },
+  { key: 'zona_preparazione',     label: 'Zona preparazione a freddo' },
+  { key: 'zona_lavaggio',         label: 'Zona lavaggio stoviglie' },
+  { key: 'zona_ufficio',          label: 'Zona ufficio' },
+  { key: 'spogliatoi',            label: 'Spogliatoi personale' },
+  { key: 'deposito_pulizie',      label: 'Deposito prodotti pulizia' },
+  { key: 'locale_rifiuti',        label: 'Locale rifiuti' },
+];
+
+const DISTRIBUZIONI_CUCINA = [
+  { key: 'carrello_caldo',          label: 'Carrello caldo' },
+  { key: 'carrello_freddo',         label: 'Carrello freddo' },
+  { key: 'sala_ristorante',         label: 'Sala ristorante centralizzata' },
+  { key: 'distribuzione_reparti',   label: 'Distribuzione ai reparti' },
+  { key: 'vassoi_individualizzati', label: 'Vassoi individualizzati' },
+];
+
 function NoteOperativeSection({ form, set, setForm, modello }) {
   const isCucinaInterna = modello === 'cucina_interna';
   const isAppalto       = modello === 'appalto_fresco_caldo';
   const isVeicolato     = modello === 'distribuzione_veicolata';
   const isNonOsa        = modello === 'non_osa';
 
+  const cucina = form.cucina || { zone: [], distribuzione: [], capacita_pasti: '' };
+  const updateCucina = (field, value) => {
+    setForm(prev => ({ ...prev, cucina: { ...(prev.cucina || {}), [field]: value } }));
+  };
+  const toggleCucinaArray = (field, value) => {
+    const arr = cucina[field] || [];
+    const next = arr.includes(value) ? arr.filter(x => x !== value) : [...arr, value];
+    updateCucina(field, next);
+  };
+
   return (
     <section className="space-y-6">
-      <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest border-b border-amber-100 pb-2">
+      <h3 className="text-xs font-black text-[#1D6F42] uppercase tracking-widest border-b border-[#1D6F42]/20 pb-2">
         Dati operativi struttura — alimentano il manuale
       </h3>
+
+      {/* ── CAMPO DI APPLICAZIONE (solo cucina interna) ── */}
+      {isCucinaInterna && (
+        <div className="space-y-5">
+          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Campo di applicazione</p>
+
+          <div>
+            <label className="block text-[10px] font-black text-[#1D6F42] uppercase tracking-wider mb-2">
+              Zone presenti in cucina
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {ZONE_CUCINA.map(z => {
+                const checked = (cucina.zone || []).includes(z.key);
+                return (
+                  <label key={z.key}
+                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-sm transition-colors ${
+                      checked ? 'border-amber-400 bg-amber-50' : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleCucinaArray('zone', z.key)}
+                      className="accent-amber-500 w-4 h-4 shrink-0"
+                    />
+                    <span className={checked ? 'text-slate-800 font-medium' : 'text-slate-600'}>{z.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black text-[#1D6F42] uppercase tracking-wider mb-2">
+              Modalità di distribuzione
+            </label>
+            <div className="flex flex-col gap-2">
+              {DISTRIBUZIONI_CUCINA.map(d => {
+                const checked = (cucina.distribuzione || []).includes(d.key);
+                return (
+                  <label key={d.key}
+                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-sm transition-colors ${
+                      checked ? 'border-amber-400 bg-amber-50' : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleCucinaArray('distribuzione', d.key)}
+                      className="accent-amber-500 w-4 h-4 shrink-0"
+                    />
+                    <span className={checked ? 'text-slate-800 font-medium' : 'text-slate-600'}>{d.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black text-[#1D6F42] uppercase tracking-wider mb-1.5">
+              Capacità produttiva (pasti/giorno)
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={cucina.capacita_pasti || ''}
+              onChange={e => updateCucina('capacita_pasti', e.target.value)}
+              className={INP}
+              placeholder="es. 120"
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── DESCRIZIONE CUCINA / LOCALI (comune a tutti i modelli) ── */}
       <div className="space-y-4">
@@ -2116,6 +2497,14 @@ function NoteOperativeSection({ form, set, setForm, modello }) {
              isNonOsa        ? 'Descrizione del servizio fornitore (modalità, flussi, locali di pertinenza OSA)' :
                                'Descrizione locali di distribuzione (dove avviene, layout)'}
           </label>
+          {isCucinaInterna && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-2">
+              <p className="text-xs font-black text-amber-700 mb-1">Cosa descrivere</p>
+              <p className="text-xs text-amber-700">
+                Descrivi la cucina indicando: ubicazione all&apos;interno della struttura &middot; layout degli spazi e flussi di lavoro &middot; zone presenti non elencate sopra &middot; eventuali criticità strutturali &middot; accessi e percorsi sporco/pulito.
+              </p>
+            </div>
+          )}
           <textarea
             value={form.op_nuclei_note}
             onChange={set('op_nuclei_note')}
@@ -2178,6 +2567,28 @@ function NoteOperativeSection({ form, set, setForm, modello }) {
           <p className="text-[10px] text-slate-400 mt-1.5">
             Formato: <strong>Codice – Descrizione</strong> · Una riga per apparecchiatura · Il codice determina quale scheda viene generata
           </p>
+        </div>
+      </div>
+
+      {/* ── MODALITÀ DI DISTRIBUZIONE PASTI ── */}
+      <div className="space-y-3">
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Modalità di distribuzione pasti</p>
+        <div className="flex flex-col gap-2">
+          {DISTRIBUZIONE_MODALITA.map(opt => (
+            <label key={opt.value}
+              className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                form.op_distribuzione_modalita === opt.value
+                  ? 'border-amber-400 bg-amber-50'
+                  : 'border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <input type="radio" name="op_distribuzione_modalita" value={opt.value}
+                checked={form.op_distribuzione_modalita === opt.value}
+                onChange={() => setForm(p => ({ ...p, op_distribuzione_modalita: opt.value }))}
+                className="accent-amber-500" />
+              <span className="text-sm font-bold text-slate-700">{opt.label}</span>
+            </label>
+          ))}
         </div>
       </div>
 
@@ -2322,10 +2733,33 @@ function NoteOperativeSection({ form, set, setForm, modello }) {
           </div>
         </label>
         {form.op_disfagici && (
-          <div>
-            <label className={LBL}>Descrizione gestione disfagici (locale, frigo, identificazione pasto)</label>
-            <textarea value={form.op_disfagici_note} onChange={set('op_disfagici_note')} rows={2} className={INP}
-              placeholder="es. Locale disfagici al piano interrato con frigorifero dedicato (FD). Pasti nominali con etichetta. Frullati preparati al momento." />
+          <div className="space-y-3">
+            <div>
+              <label className={LBL}>Descrizione gestione disfagici (locale, frigo, identificazione pasto)</label>
+              <textarea value={form.op_disfagici_note} onChange={set('op_disfagici_note')} rows={2} className={INP}
+                placeholder="es. Locale disfagici al piano interrato con frigorifero dedicato (FD). Pasti nominali con etichetta. Frullati preparati al momento." />
+            </div>
+            <div>
+              <label className={LBL}>Modalità gestione pasti disfagici</label>
+              <div className="flex flex-col gap-2">
+                {DISFAGICI_MODALITA.map(opt => (
+                  <label key={opt.value}
+                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      form.op_disfagici_modalita === opt.value
+                        ? 'border-amber-400 bg-amber-50'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input type="radio" name="op_disfagici_modalita" value={opt.value}
+                      checked={form.op_disfagici_modalita === opt.value}
+                      onChange={() => setForm(p => ({ ...p, op_disfagici_modalita: opt.value }))}
+                      className="mt-0.5 accent-amber-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
