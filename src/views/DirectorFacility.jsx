@@ -151,8 +151,8 @@ export default function DirectorFacility() {
     facility ? [facility.id] : [],
     year
   );
-  const cdgRecords = cdgData?.cdgByFacility?.[facility?.id]
-    ?? cdgData?.cdgByFacility?.[String(facility?.id)]
+  const cdgRecords = cdgData?.cdgByFacility?.[String(facility?.id)]
+    ?? cdgData?.cdgByFacility?.[facility?.id]
     ?? [];
 
   const handleFacilityUpdate = async (payload) => {

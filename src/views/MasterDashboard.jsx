@@ -4,11 +4,12 @@
  */
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, MapPin, ChevronDown, Check, Pause, Building2 } from 'lucide-react';
+import { Search, MapPin, ChevronDown, Check, Pause, Building2, AlertTriangle } from 'lucide-react';
 import { useAuth }           from '../contexts/AuthContext';
 import { useDashboardData }  from '../hooks/useDashboardData';
 import { useBadgeCounts }    from '../hooks/useBadgeCounts';
 import { useHaccpSemafori }  from '../hooks/useHaccpData';
+import { supabase }          from '../supabaseClient';
 import AppHeader             from '../components/AppHeader';
 import HaccpFascicoloModal   from '../components/HaccpFascicoloModal';
 
@@ -49,6 +50,7 @@ export default function MasterDashboard() {
   const [filterStato,        setFilterStato]        = useState('');
   const [haccpFilter,        setHaccpFilter]        = useState(null);
   const [selectedFacility,   setSelectedFacility]   = useState(null);
+  const [pendingCount,       setPendingCount]       = useState(0);
 
   // Apri automaticamente il fascicolo se arriva da ?facility=ID
   useEffect(() => {
@@ -57,6 +59,16 @@ export default function MasterDashboard() {
       if (f) setSelectedFacility(f);
     }
   }, [facilityIdParam, data.facilities]);
+
+  // Contatore richieste manuale HACCP pending (solo superadmin)
+  useEffect(() => {
+    if (profile?.role !== 'superadmin') return;
+    supabase
+      .from('haccp_manuali')
+      .select('facility_id', { count: 'exact', head: true })
+      .eq('richiesta_pending', true)
+      .then(({ count }) => setPendingCount(count ?? 0));
+  }, [profile?.role]);
 
   const allIds = useMemo(
     () => (data.facilities ?? []).filter(f => !f.is_suspended).map(f => f.id),
@@ -366,6 +378,16 @@ export default function MasterDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Banner richieste manuale pending — solo superadmin */}
+      {profile?.role === 'superadmin' && pendingCount > 0 && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-300 rounded-xl px-5 py-3 mx-5 mt-4 mb-0">
+          <AlertTriangle size={18} className="text-amber-500 shrink-0" />
+          <p className="text-sm font-bold text-amber-700">
+            {pendingCount} {pendingCount === 1 ? 'struttura ha richiesto' : 'strutture hanno richiesto'} la generazione del manuale HACCP
+          </p>
+        </div>
+      )}
 
       {/* Contenuto */}
       <div className="pb-10">

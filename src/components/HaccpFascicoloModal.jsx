@@ -1573,6 +1573,13 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       }]);
       if (error) throw error;
       await invalidate.manuali();
+
+      // Notifica ai superadmin
+      await supabase.rpc('notify_superadmin_haccp', {
+        p_facility_id:   facility.id,
+        p_facility_name: facility.name,
+      });
+
       alert('Richiesta inviata. Il superadmin riceverà notifica e provvederà alla generazione del manuale.');
     } catch (err) {
       alert('Errore richiesta: ' + err.message);
@@ -1982,21 +1989,26 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
 
       {/* Tasto richiedi — admin / sede / director */}
       {canRequest && !canGenerate && (
-        <div className="flex flex-col items-center gap-3 pt-4">
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-6 py-4 text-center max-w-md">
-            <p className="text-sm font-bold text-indigo-700 mb-1">Generazione manuale riservata al superadmin</p>
-            <p className="text-xs text-indigo-500">Puoi inviare una richiesta che verrà notificata al responsabile qualità di gruppo.</p>
+        <div className="flex flex-col items-center gap-4 pt-4">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-6 py-4 text-center max-w-md">
+            <p className="text-sm font-bold text-emerald-800 mb-1">
+              Generazione manuale gestita centralmente
+            </p>
+            <p className="text-xs text-emerald-600">
+              Il responsabile qualità di gruppo riceverà una notifica e genererà il manuale entro 5 giorni lavorativi.
+            </p>
           </div>
-          {/* Controlla se c'è già una richiesta pending */}
+
           {manuali.some(m => m.richiesta_pending) ? (
             <div className="flex items-center gap-2 text-sm font-bold text-amber-600">
-              <Loader2 size={15} /> Richiesta già inviata — in attesa di elaborazione
+              <Loader2 size={15} className="animate-spin" />
+              Richiesta inviata — in attesa di elaborazione
             </div>
           ) : (
             <button
               onClick={handleRichiedi}
               disabled={requesting || !profiloCompleto}
-              className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-all text-sm"
+              className="flex items-center gap-3 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-all text-sm"
             >
               {requesting
                 ? <><Loader2 size={18} className="animate-spin" /> Invio richiesta...</>
