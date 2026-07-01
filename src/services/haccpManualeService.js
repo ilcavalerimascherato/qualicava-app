@@ -1051,6 +1051,7 @@ export async function generaManualeHaccp(params) {
     revStorico       = [],
     testoManuale     = '',   // testo AI puro, senza markdown strutturale
     logoVariante     = 'B',
+    logoUrl          = null,
     // Dati dal profilo HACCP
     fornitoreNome              = '',  // haccp_profili.fornitore_nome
     fornitorePiva              = '',  // haccp_profili.fornitore_piva
@@ -1089,8 +1090,27 @@ export async function generaManualeHaccp(params) {
   };
   const modelloLabel = MODELLO_LABEL[modello] || modello;
 
-  const logoCfg  = LOGOS[logoVariante] || LOGOS.B;
-  const logoData = logoCfg.data();
+  // Logo: usa URL aziendale se disponibile, altrimenti fallback base64
+  let logoData = null;
+  if (logoUrl) {
+    try {
+      const resp        = await fetch(logoUrl);
+      const blob        = await resp.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+      logoData = {
+        data: new Uint8Array(arrayBuffer),
+        type: logoUrl.split('.').pop().toLowerCase().replace('jpg', 'jpeg'),
+        w: 150,
+        h: 75,
+      };
+    } catch {
+      logoData = null;
+    }
+  }
+  if (!logoData) {
+    const cfg = LOGOS[logoVariante] || LOGOS.B;
+    logoData = { data: cfg.data(), type: cfg.type, w: cfg.w, h: cfg.h };
+  }
   const revLabel = numRev;
 
   // ── HEADER ────────────────────────────────────────────────────
@@ -1099,7 +1119,7 @@ export async function generaManualeHaccp(params) {
       border:   { bottom: { style: BorderStyle.SINGLE, size: 6, color: VERDE, space: 4 } },
       spacing:  { after: 100 },
       children: [
-        new ImageRun({ data: logoData, transformation: { width: Math.round(logoCfg.w * 0.6), height: Math.round(logoCfg.h * 0.6) }, type: logoCfg.type }),
+        new ImageRun({ data: logoData.data, transformation: { width: Math.round(logoData.w * 0.6), height: Math.round(logoData.h * 0.6) }, type: logoData.type }),
         r('   MANUALE HACCP — ' + nomestruttura.toUpperCase(), { size: 16, color: VERDE, bold: true }),
       ],
     })],
@@ -1130,7 +1150,7 @@ export async function generaManualeHaccp(params) {
 
   const copertina = [
     // Logo
-    new Paragraph({ spacing: { after: 0 }, children: [new ImageRun({ data: logoData, transformation: { width: logoCfg.w, height: logoCfg.h }, type: logoCfg.type })] }),
+    new Paragraph({ spacing: { after: 0 }, children: [new ImageRun({ data: logoData.data, transformation: { width: logoData.w, height: logoData.h }, type: logoData.type })] }),
     ...spacer(1),
     p([r('')], { borderBottom: true, borderSize: 14, after: 80 }),
     ...spacer(1),

@@ -47,7 +47,17 @@
       "Bash(node -e \"require\\('puppeteer'\\)\")",
       "Bash(node *)",
       "Bash(npx playwright *)",
-      "Bash(npx supabase *)"
+      "Bash(npx supabase *)",
+      "Bash(node_modules/.bin/react-scripts build *)",
+      "Bash(Select-String -Pattern \"error|warning|compiled|failed\")",
+      "Bash(npx --yes acorn --ecma2020 --module src/components/HaccpFascicoloModal.jsx)",
+      "Bash(npx --yes @babel/parser --help)",
+      "Skill(run)",
+      "Bash(dir C:\\\\primo\\\\QualiCAVA\\\\src)",
+      "Skill(claude-in-chrome)",
+      "Bash(curl -s \"https://ibgbejvqujgiovxnhsuz.supabase.co/rest/v1/facilities?id=eq.64&select=id,name,company_id,companies\\(logo_url\\)\" -H \"apikey: sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\" -H \"Authorization: Bearer sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\")",
+      "Bash(curl -s \"https://ibgbejvqujgiovxnhsuz.supabase.co/rest/v1/facilities?id=eq.64&select=id,name,company_id\" -H \"apikey: sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\" -H \"Authorization: Bearer sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\")",
+      "Bash(curl -s \"https://ibgbejvqujgiovxnhsuz.supabase.co/rest/v1/facilities?name=ilike.*gabbiano*&select=id,name,company_id\" -H \"apikey: sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\" -H \"Authorization: Bearer sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\")"
     ]
   }
 }

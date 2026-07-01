@@ -1548,15 +1548,15 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
   const [revNote, setRevNote]         = useState('');
   const [saving, setSaving]           = useState(false);
   const [savingMod, setSavingMod]     = useState(false);
-  const [logoVariante, setLogoVariante] = useState('B');
+  const [logoVariante, setLogoVariante] = useState('C');
   const [requesting, setRequesting]   = useState(false);
   const ultimo = manuali[0] ?? null;
 
   const profiloCompleto = profilo?.modello_ristorazione && profilo?.r_haccp && profilo?.lr_attuale;
 
   const LOGO_OPTIONS = [
-    { value: 'B', label: 'Pittogramma gruppo OVER' },
     { value: 'C', label: 'Logo personalizzato struttura' },
+    { value: 'B', label: 'Pittogramma gruppo OVER' },
     { value: 'A', label: 'OVER scarl' },
   ];
 
@@ -1708,6 +1708,12 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         normativaRegionale = normData && normData.length > 0 ? normData : null;
       }
 
+      const logoUrl = logoVariante === 'C'
+        ? await supabase.from('companies').select('logo_url')
+            .eq('id', facility.company_id).single()
+            .then(({ data }) => data?.logo_url || null)
+        : null;
+
       const { generaManualeHaccp } = await import('../services/haccpManualeService');
       const docxBuffer = await generaManualeHaccp({
         nomestruttura: facility.name,
@@ -1757,6 +1763,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         opDistributoreNote:        sa.op_distributore_acqua_note  || '',
         testoManuale:              '',   // niente AI — tutto dal profilo
         logoVariante:              logoVariante,
+        logoUrl,
         sezioniManuale:            sa.sezioni_manuale             || null,
         normativaRegionale:        normativaRegionale,
         cucina:                    sa.cucina                      || {},
@@ -1781,11 +1788,6 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       // 3. Genera modulistica (Autoc 1, 2A, 2B, 7) e upload
       let modulisticaUrl = null;
       try {
-        const logoUrl = logoVariante === 'C'
-          ? await supabase.from('companies').select('logo_url')
-              .eq('id', facility.company_id).single()
-              .then(({ data }) => data?.logo_url || null)
-          : null;
         const { generaModulisticaHaccp } = await import('../services/haccpManualeService');
         const modBuffer = await generaModulisticaHaccp({
           nomestruttura:               facility.name,
@@ -1834,6 +1836,13 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         richiesta_pending:       false,
       }]);
       if (dbErr) throw dbErr;
+
+      // Resetta richiesta_pending su tutti i record pending di questa struttura
+      await supabase
+        .from('haccp_manuali')
+        .update({ richiesta_pending: false })
+        .eq('struttura_id', facility.id)
+        .eq('richiesta_pending', true);
 
       await invalidate.manuali();
       await invalidate.semafori();

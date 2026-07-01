@@ -31,6 +31,14 @@ const SCALE_SINON = [
   { label: 'No', color: '#E24B4A' },
 ];
 
+const SCALE_NUMERIC_10 = [
+  { label: 'Eccellente (9-10)', color: '#3B6D11', min: 9, max: 10 },
+  { label: 'Buono (7-8)',       color: '#639922', min: 7, max: 8  },
+  { label: 'Sufficiente (5-6)', color: '#EF9F27', min: 5, max: 6  },
+  { label: 'Insufficiente (3-4)', color: '#E24B4A', min: 3, max: 4 },
+  { label: 'Scarso (0-2)',      color: '#A32D2D', min: 0, max: 2  },
+];
+
 const SCALE_NPS_TEXT = [
   { label: 'Certamente',       color: '#3B6D11', score: 2  },
   { label: 'Sì',               color: '#639922', score: 1  },
@@ -39,16 +47,28 @@ const SCALE_NPS_TEXT = [
   { label: 'No',               color: '#A32D2D', score: -2 },
 ];
 
-// ORDINE CANONICO domande — Restituzione Clienti
-const QUESTION_ORDER_CLIENT = [
-  'attivita', 'animazione', 'laboratori', 'uscite_territoriali',
-  'alloggio', 'bagno', 'spazio_eterno', 'manutenzione',
-  'personale_assistenza', 'personale_pulizie', 'soddisfazione_pulizia', 'amministrazione',
-  'orario_pasti', 'quantita_cibo', 'varieta_cibo', 'qualita_cibo',
-  'servizio', 'apparecchiatura_tavolo', 'soddisfazione_personale',
-  'soddisfazione_complessiva',
-  'nps', 'consiglio_struttura',
-  'bracciale', 'sos',
+const CATEGORY_ORDER_CLIENT = [
+  'accoglienza',
+  'struttura',
+  'etica',
+  'personale',
+  'servizi',
+  'ristorazione',
+  'organizzazione',
+  'qualita',
+  'generale',
+  'reputazione',
+];
+
+const CATEGORY_ORDER_OPERATOR = [
+  'generale',
+  'ambiente',
+  'clima',
+  'management',
+  'organizzazione',
+  'qualita',
+  'etica',
+  'reputazione',
 ];
 
 function detectScale(values) {
@@ -68,6 +88,20 @@ function detectScale(values) {
 }
 
 function calcDistribuzione(righe, colonna, scale) {
+  if (scale === SCALE_NUMERIC_10) {
+    const values = righe.map(r => parseFloat(r[colonna])).filter(n => !isNaN(n));
+    const total = values.length;
+    return scale.map(bucket => {
+      const count = values.filter(n => n >= bucket.min && n <= bucket.max).length;
+      return {
+        label: bucket.label,
+        color: bucket.color,
+        count,
+        pct: total > 0 ? Math.round((count / total) * 100) : 0,
+      };
+    });
+  }
+
   const counts = {};
   for (const row of righe) {
     const v = String(row[colonna] || '').trim();
@@ -301,13 +335,32 @@ export default function RestituzioneModal({
   const [companyLogoUrl, setCompanyLogoUrl] = useState(null);
   const [aperturaText,    setAperturaText]    = useState('');
   const [aperturaLoading, setAperturaLoading] = useState(false);
+  const [sourceTable,     setSourceTable]     = useState(null);
+  const [colCategory,     setColCategory]     = useState({});
 
   const survey = useMemo(
     () => surveys?.find(s => s.type === type) || null,
     [surveys, type]
   );
 
-  const sourceTable = survey?.summary_stats?.source;
+  // Risolve sourceTable: prima da summary_stats.source (già persistito),
+  // poi tramite lookup su survey_source_configs.
+  useEffect(() => {
+    console.log('[restituzione] isOpen:', isOpen, 'type:', type, 'survey:', survey?.type);
+    console.log('[restituzione] direct source:', survey?.summary_stats?.source);
+    if (!isOpen) { setSourceTable(null); return; }
+    const direct = survey?.summary_stats?.source;
+    if (direct) { setSourceTable(direct); return; }
+    supabase
+      .from('survey_source_configs')
+      .select('source_table')
+      .eq('survey_type', type)
+      .single()
+      .then(({ data, error }) => {
+        console.log('[source_configs] data:', data, 'error:', error);
+        setSourceTable(data?.source_table ?? null);
+      });
+  }, [isOpen, survey, type]);
 
   const toggleChartType = (col) => {
     setChartTypes(prev => {
@@ -339,6 +392,7 @@ export default function RestituzioneModal({
   }, [isOpen, year, month]);
 
   useEffect(() => {
+    console.log('[restituzione fetch] sourceTable:', sourceTable, 'facilityId:', facility?.id, 'dateStart:', dateStart, 'dateEnd:', dateEnd);
     if (!isOpen || !sourceTable || !facility?.id || !dateStart || !dateEnd) return;
     setLoading(true);
 
@@ -362,6 +416,20 @@ export default function RestituzioneModal({
     }
 
     supabase
+      .from('survey_source_configs')
+      .select('field_map')
+      .eq('source_table', sourceTable)
+      .single()
+      .then(({ data: cfg }) => {
+        const fieldMap = cfg?.field_map || {};
+        const map = {};
+        Object.entries(fieldMap).forEach(([col, def]) => {
+          map[col] = def.category || 'generale';
+        });
+        setColCategory(map);
+      });
+
+    supabase
       .from('survey_facility_mapping')
       .select('nome_survey')
       .eq('facility_id', facility.id)
@@ -377,6 +445,7 @@ export default function RestituzioneModal({
           .lte('created_at', dateEnd + 'T23:59:59')
           .then(({ data }) => {
             setRawData(data || []);
+            console.log('[RestituzioneModal] rawData.length:', (data || []).length, '| sourceTable:', sourceTable, '| nomi:', nomi, '| primo elemento:', data?.[0] ?? null);
             if (data?.length) {
               const cols = Object.keys(data[0]).filter(k => !META.includes(k));
               const newDomande = cols.map(col => ({
@@ -398,9 +467,10 @@ export default function RestituzioneModal({
   const selectedDomande = domande.filter(d => selected[d.col]);
   const nRisposte = rawData.length;
 
+  const categoryOrder = type === 'operator' ? CATEGORY_ORDER_OPERATOR : CATEGORY_ORDER_CLIENT;
   const sortedSelected = [...selectedDomande].sort((a, b) => {
-    const ia = QUESTION_ORDER_CLIENT.indexOf(a.col);
-    const ib = QUESTION_ORDER_CLIENT.indexOf(b.col);
+    const ia = categoryOrder.indexOf(colCategory[a.col] || 'generale');
+    const ib = categoryOrder.indexOf(colCategory[b.col] || 'generale');
     if (ia === -1 && ib === -1) return 0;
     if (ia === -1) return 1;
     if (ib === -1) return -1;
@@ -680,9 +750,10 @@ export default function RestituzioneModal({
                       {/* Domande non-partecipazione */}
                       {altreDomande.map(d => {
                         const scale =
-                          d.scale === 'nps_text' ? SCALE_NPS_TEXT :
-                          d.scale === 'sinon'    ? SCALE_SINON :
-                                                   SCALE_STANDARD;
+                          d.scale === 'nps_text'   ? SCALE_NPS_TEXT  :
+                          d.scale === 'sinon'       ? SCALE_SINON     :
+                          d.scale === 'numeric_10'  ? SCALE_NUMERIC_10 :
+                                                      SCALE_STANDARD;
 
                         const dist      = calcDistribuzione(rawData, d.col, scale);
                         const chartType = chartTypes[d.col] || 'bar';
@@ -764,21 +835,84 @@ export default function RestituzioneModal({
           </div>
         )}
 
-        {sortedSelected.filter(d => d.scale !== 'partecipazione').map(d => {
-          const scale =
-            d.scale === 'nps_text' ? SCALE_NPS_TEXT :
-            d.scale === 'sinon'    ? SCALE_SINON :
-                                     SCALE_STANDARD;
-          const dist = calcDistribuzione(rawData, d.col, scale);
-          return (
-            <div key={d.col} style={{ marginBottom: 20, pageBreakInside: 'avoid' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', marginBottom: 8 }}>
-                {d.label}
-              </h3>
-              <SimplePdfBar data={dist} />
-            </div>
+        {/* Loop PDF spezzato: before animazione / blocco partecipazione / after animazione */}
+        {(() => {
+          const animIdx = sortedSelected.findIndex(d =>
+            d.col === 'animazione' || d.col === 'voto_animazione'
           );
-        })}
+          const beforeAnim = (animIdx >= 0
+            ? sortedSelected.slice(0, animIdx + 1)
+            : sortedSelected
+          ).filter(d => d.scale !== 'partecipazione');
+          const afterAnim = animIdx >= 0
+            ? sortedSelected.slice(animIdx + 1).filter(d => d.scale !== 'partecipazione')
+            : [];
+          const partecipazione = sortedSelected.filter(d => d.scale === 'partecipazione');
+
+          const renderDomanda = d => {
+            const scale =
+              d.scale === 'nps_text'   ? SCALE_NPS_TEXT   :
+              d.scale === 'sinon'      ? SCALE_SINON       :
+              d.scale === 'numeric_10' ? SCALE_NUMERIC_10  :
+                                         SCALE_STANDARD;
+            const dist = calcDistribuzione(rawData, d.col, scale);
+            return (
+              <div key={d.col} style={{ marginBottom: 20, pageBreakInside: 'avoid' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', marginBottom: 8 }}>
+                  {d.label}
+                </h3>
+                <SimplePdfBar data={dist} />
+              </div>
+            );
+          };
+
+          const renderPartecipazione = () => {
+            if (!partecipazione.length) return null;
+            return (
+              <div style={{ marginBottom: 24, pageBreakInside: 'avoid' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', marginBottom: 12 }}>
+                  Attività — confronto partecipazione
+                </h3>
+                {partecipazione.map(d => {
+                  const dist = calcDistribuzione(rawData, d.col, SCALE_PARTECIPAZIONE);
+                  const tot = dist.reduce((s, x) => s + x.count, 0) || 1;
+                  return (
+                    <div key={d.col} style={{ marginBottom: 8, pageBreakInside: 'avoid' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
+                        {d.label}
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, height: 14 }}>
+                        {dist.map(item => (
+                          <div key={item.label} style={{
+                            width: `${(item.count / tot) * 100}%`,
+                            background: item.color ?? '#6b7280',
+                            borderRadius: 2,
+                          }} />
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, marginTop: 4, fontSize: 10, color: '#6b7280' }}>
+                        {dist.map(item => (
+                          <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: item.color, display: 'inline-block' }} />
+                            {item.label}: {Math.round((item.count / tot) * 100)}%
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          };
+
+          return (
+            <>
+              {beforeAnim.map(renderDomanda)}
+              {renderPartecipazione()}
+              {afterAnim.map(renderDomanda)}
+            </>
+          );
+        })()}
       </div>
     </div>
   );

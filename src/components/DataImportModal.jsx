@@ -234,7 +234,8 @@ const normalizeValue = (raw, mappingRule) => {
           responses_json: processedData,
           summary_stats: {
             total_responses: processedData.length,
-            mapping_used: activeMapping.mapping_name
+            mapping_used: activeMapping.mapping_name,
+            source: activeMapping.source_table ?? activeMapping.table_name ?? 'survey_data',
           }
         };
 
