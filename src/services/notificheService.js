@@ -17,7 +17,7 @@ export async function getNotifiche(userId, soloNonLette = false) {
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(20);
+    .limit(50);
   if (soloNonLette) q = q.eq('letta', false);
   const { data, error } = await q;
   if (error) throw error;

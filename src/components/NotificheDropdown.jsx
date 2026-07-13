@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getNotifiche,
@@ -8,6 +7,7 @@ import {
   markAsRead,
   markAllAsRead,
 } from '../services/notificheService';
+import NotifichePanel from './NotifichePanel';
 
 function tempoRelativo(isoString) {
   if (!isoString) return '';
@@ -26,12 +26,13 @@ const TIPO_ICONA = { info: 'ℹ️', warning: '⚠️', success: '✅', error: '
 
 export default function NotificheDropdown() {
   const { session }  = useAuth();
-  const navigate     = useNavigate();
   const userId       = session?.user?.id;
 
   const [isOpen, setIsOpen]               = useState(false);
   const [notifiche, setNotifiche]         = useState([]);
   const [countNonLette, setCountNonLette] = useState(0);
+  const [selectedNotifica, setSelectedNotifica] = useState(null);
+  const [showPanel, setShowPanel]         = useState(false);
   const ref = useRef(null);
 
   const refreshCount = useCallback(async () => {
@@ -69,14 +70,14 @@ export default function NotificheDropdown() {
     return () => document.removeEventListener('mousedown', handler);
   }, [isOpen]);
 
-  const handleClickNotifica = async (n) => {
+  const handleClickNotifica = (n) => {
     if (!n.letta) {
       markAsRead(n.id).catch(() => {});
       setNotifiche(prev => prev.map(x => x.id === n.id ? { ...x, letta: true } : x));
       setCountNonLette(prev => Math.max(0, prev - 1));
     }
-    setIsOpen(false);
-    if (n.link) navigate(n.link);
+    setSelectedNotifica(n);
+    setShowPanel(true);
   };
 
   const handleMarkAll = async () => {
@@ -87,6 +88,7 @@ export default function NotificheDropdown() {
   };
 
   return (
+    <>
     <div ref={ref} className="relative">
       <button
         onClick={() => setIsOpen(o => !o)}
@@ -102,7 +104,7 @@ export default function NotificheDropdown() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-96 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl z-50 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
             <span className="text-xs font-black text-slate-300 uppercase tracking-widest">Notifiche</span>
             {countNonLette > 0 && (
@@ -132,10 +134,10 @@ export default function NotificheDropdown() {
                       {TIPO_ICONA[n.tipo] ?? '🔔'}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-black truncate ${n.letta ? 'text-slate-400' : 'text-white'}`}>
+                      <p className={`text-xs font-black line-clamp-2 ${n.letta ? 'text-slate-400' : 'text-white'}`}>
                         {n.titolo}
                       </p>
-                      <p className="text-[11px] text-slate-500 truncate mt-0.5">{n.messaggio}</p>
+                      <p className="text-[11px] text-slate-500 line-clamp-3 mt-0.5">{n.messaggio}</p>
                       <p className="text-[10px] text-slate-600 mt-1">{tempoRelativo(n.created_at)}</p>
                     </div>
                     {!n.letta && (
@@ -160,5 +162,14 @@ export default function NotificheDropdown() {
         </div>
       )}
     </div>
+
+    <NotifichePanel
+      isOpen={showPanel}
+      onClose={() => setShowPanel(false)}
+      userId={userId}
+      selectedNotifica={selectedNotifica}
+      onReadChange={refreshCount}
+    />
+    </>
   );
 }

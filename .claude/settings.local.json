@@ -57,7 +57,9 @@
       "Skill(claude-in-chrome)",
       "Bash(curl -s \"https://ibgbejvqujgiovxnhsuz.supabase.co/rest/v1/facilities?id=eq.64&select=id,name,company_id,companies\\(logo_url\\)\" -H \"apikey: sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\" -H \"Authorization: Bearer sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\")",
       "Bash(curl -s \"https://ibgbejvqujgiovxnhsuz.supabase.co/rest/v1/facilities?id=eq.64&select=id,name,company_id\" -H \"apikey: sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\" -H \"Authorization: Bearer sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\")",
-      "Bash(curl -s \"https://ibgbejvqujgiovxnhsuz.supabase.co/rest/v1/facilities?name=ilike.*gabbiano*&select=id,name,company_id\" -H \"apikey: sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\" -H \"Authorization: Bearer sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\")"
+      "Bash(curl -s \"https://ibgbejvqujgiovxnhsuz.supabase.co/rest/v1/facilities?name=ilike.*gabbiano*&select=id,name,company_id\" -H \"apikey: sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\" -H \"Authorization: Bearer sb_publishable_R58dnnB-Dki55JVYLmqLrA_3SIX4nof\")",
+      "Bash(echo \"exit:$?\")",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }

@@ -15,13 +15,13 @@
 import { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
 
 /**
- * @typedef {'udo'|'facility'|'questionnaire'|'dataImport'|'analytics'|
+ * @typedef {'udo'|'facility'|'analytics'|
  *   'kpiManager'|'kpiDashboard'|'kpiCharts'|'kpiHub'|'kpiLaser'|
  *   'kpiXray'|'globalReport'|'userManager'|'nonConformity'|'qualityDashboard'|
  *   'ranking'|'reportHub'} ModalId
  */
 export const MODAL_IDS = /** @type {const} */ ([
-  'udo', 'facility', 'questionnaire', 'dataImport', 'analytics',
+  'udo', 'facility', 'analytics',
   'kpiManager', 'kpiDashboard', 'kpiCharts', 'kpiHub', 'kpiLaser',
   'kpiXray', 'globalReport', 'userManager', 'nonConformity', 'qualityDashboard',
   'ranking', 'reportHub'

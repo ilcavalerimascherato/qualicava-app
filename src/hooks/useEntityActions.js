@@ -11,7 +11,7 @@
  */
 import { useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { facilityService, questionnaireService, udoService } from '../services/supabaseService';
+import { facilityService, udoService } from '../services/supabaseService';
 import { useInvalidate } from './useDashboardData';
 import { useModals } from '../contexts/ModalContext';
 
@@ -62,16 +62,6 @@ export function useEntityActions() {
       onSuccess:   () => invalidate.facilities(),
     }), [run, invalidate]);
 
-  // ── questionnaire ────────────────────────────────────────────
-  const saveQuestionnaire = useCallback((data, year) =>
-    run({
-      fn: () => questionnaireService.upsert(data),
-      successMsg:  'Questionario salvato',
-      errorPrefix: 'Errore DB questionario',
-      closeModal:  'questionnaire',
-      onSuccess:   () => invalidate.questionnaires(year),
-    }), [run, invalidate]);
-
   // ── udo ──────────────────────────────────────────────────────
   const saveUdo = useCallback((data) =>
     run({
@@ -93,7 +83,6 @@ export function useEntityActions() {
     saveFacility,
     deleteFacility,
     toggleSuspendFacility,
-    saveQuestionnaire,
     saveUdo,
     deleteUdo,
   };

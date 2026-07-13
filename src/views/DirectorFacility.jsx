@@ -42,7 +42,6 @@ import { KPI_RULES, isNumericSettore } from '../config/kpiRules';
 import { computeKpiValue }  from '../utils/kpiFormulaEngine';
 import { getTimeHorizon }   from '../utils/kpiTimeHorizon';
 import KpiManagerModal      from '../components/KpiManagerModal';
-import DataImportModal      from '../components/DataImportModal';
 import AnalyticsModal       from '../components/AnalyticsModal';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
 import DocMyDocumentiView   from './DocMyDocumentiView';
@@ -175,9 +174,8 @@ export default function DirectorFacility() {
   };
 
   const handleDataClick = (type, periodo = {}) => {
-    const hasData = facilitySurveys.some(s => s.type === type);
     setDataTarget({ facility, type });
-    open(hasData ? 'analytics' : 'dataImport');
+    open('analytics');
   };
 
   if (loading) {
@@ -362,27 +360,16 @@ export default function DirectorFacility() {
       />
 
       {dataTarget && (
-        <>
-          <DataImportModal
-            isOpen={modals.dataImport}
-            onClose={() => close('dataImport')}
-            facility={dataTarget.facility}
-            type={dataTarget.type}
-            year={year}
-            onUploadSuccess={() => { invalidate.surveys(); toast.success('Dati caricati'); }}
-          />
-          <AnalyticsModal
-            isOpen={modals.analytics}
-            onClose={() => close('analytics')}
-            facility={dataTarget.facility}
-            type={dataTarget.type}
-            surveys={facilitySurveys}
-            facilities={data.facilities}
-            udos={data.udos}
-            onOpenImport={() => { close('analytics'); open('dataImport'); }}
-            onUpdateSuccess={() => invalidate.surveys()}
-          />
-        </>
+        <AnalyticsModal
+          isOpen={modals.analytics}
+          onClose={() => close('analytics')}
+          facility={dataTarget.facility}
+          type={dataTarget.type}
+          surveys={facilitySurveys}
+          facilities={data.facilities}
+          udos={data.udos}
+          onUpdateSuccess={() => invalidate.surveys()}
+        />
       )}
 
       {modals.nonConformity && (

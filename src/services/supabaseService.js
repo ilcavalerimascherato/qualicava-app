@@ -57,28 +57,6 @@ export const facilityService = {
   },
 };
 
-// ─── Questionnaire service ────────────────────────────────────
-export const questionnaireService = {
-  upsert: async (payload) => {
-    const { data, error } = await supabase
-      .from('questionnaires')
-      .upsert({
-        facility_id: payload.facility_id,
-        year:        payload.year,
-        type:        payload.type,
-        calendar_id: `${payload.year}-12`,
-        start_date:  payload.start_date  || null,
-        end_date:    payload.end_date    || null,
-        esiti_pdf:   payload.esiti_pdf   || null,
-      }, { onConflict: 'facility_id, type, calendar_id' })
-      .select()
-      .single();
-    if (error) throw error;
-    log('UPSERT_QUESTIONNAIRE', { facility_id: payload.facility_id, type: payload.type });
-    return data;
-  },
-};
-
 // ─── User management service (solo admin/superadmin) ──────────
 export const userService = {
   // Crea utente + profilo in un'unica operazione

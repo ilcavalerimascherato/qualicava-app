@@ -9,6 +9,9 @@ import {
   Stethoscope, Utensils, BarChart2
 } from 'lucide-react';
 import { useAuth }             from '../contexts/AuthContext';
+import { useDashboardData }    from '../hooks/useDashboardData';
+import { useBadgeCounts }      from '../hooks/useBadgeCounts';
+import AppHeader               from '../components/AppHeader';
 import DocMasterModal          from '../components/DocMasterModal';
 import DocDistribuzioneModal   from '../components/DocDistribuzioneModal';
 import DocAccessiModal         from '../components/DocAccessiModal';
@@ -320,7 +323,7 @@ function ComingSoon({ label }) {
 
 export default function DocumentiPage() {
   const navigate    = useNavigate();
-  const { profile } = useAuth();
+  const { profile, isAdmin, signOut } = useAuth();
 
   const isAdminRole    = ['superadmin', 'admin'].includes(profile?.role);
   const isSedeRole     = profile?.role === 'sede';
@@ -329,6 +332,27 @@ export default function DocumentiPage() {
 
   // facility dell'utente corrente (per direttori/sede)
   const userFacilityId = (profile?.accessibleFacilityIds ?? [])[0] ?? null;
+
+  const year = new Date().getFullYear();
+  const { data: dashboardData } = useDashboardData(year);
+  const allIds = useMemo(
+    () => (dashboardData.facilities ?? []).filter(f => !f.is_suspended).map(f => f.id),
+    [dashboardData.facilities],
+  );
+  const { totals: badgeTotals } = useBadgeCounts(allIds, year, isAdmin);
+
+  const handleNavigate = (page) => {
+    const routes = {
+      dashboard:    '/admin',
+      saturazione:  '/occupazione',
+      haccp:        '/master',
+      documenti:    '/documenti',
+      nc:           '/admin',
+      report:       '/report',
+      impostazioni: '/impostazioni',
+    };
+    navigate(routes[page] ?? '/admin');
+  };
 
   const [activeTab,         setActiveTab]        = useState('libreria');
   const [showUploadModal,   setShowUploadModal]   = useState(false);
@@ -509,6 +533,13 @@ export default function DocumentiPage() {
   if (isUserView) {
     return (
       <div className="min-h-screen bg-slate-100 pb-10 text-slate-900 font-sans">
+        <AppHeader
+          activePage="documenti"
+          badgeCounts={badgeTotals}
+          user={profile}
+          onSignOut={signOut}
+          onNavigate={handleNavigate}
+        />
         {/* Tasto X per tornare indietro — stile HaccpFascicoloModal */}
         <button
           onClick={() => navigate(-1)}
@@ -528,80 +559,31 @@ export default function DocumentiPage() {
   return (
     <div className="min-h-screen bg-slate-100 pb-10 text-slate-900 font-sans">
 
-      {/* ── Nav bar admin/superadmin ─────────────────────── */}
-      <nav className="bg-slate-900 text-white px-6 py-3 sticky top-0 z-40 flex items-center justify-between">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 text-white/70 hover:text-white text-xs font-black uppercase tracking-wider transition-colors"
-        >
-          <ArrowLeft size={14} /> Indietro
-        </button>
+      <AppHeader
+        activePage="documenti"
+        badgeCounts={badgeTotals}
+        user={profile}
+        onSignOut={signOut}
+        onNavigate={handleNavigate}
+      />
 
-        <div className="flex items-center gap-1.5 text-xs font-bold text-white/50 uppercase tracking-widest">
-          <span>QualiCAVA</span>
-          <ChevronRight size={11} className="text-white/30" />
-          <span className="text-white/90">DocuMASTER</span>
+      {/* Context bar */}
+      <div className="flex items-center justify-between px-5 py-2 bg-white border-b border-slate-200">
+        <div className="flex-shrink-0">
+          <h1 className="text-sm font-semibold text-slate-900">DocuMASTER · Gestione documentale</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Distribuzione e archiviazione documenti · {docAttivi.length} document{docAttivi.length === 1 ? 'o' : 'i'} attiv{docAttivi.length === 1 ? 'o' : 'i'}
+          </p>
         </div>
-
-        {profile?.full_name && (
-          <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-xl">
-            <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white font-black text-[10px]">
-              {profile.full_name[0].toUpperCase()}
-            </div>
-            <span className="text-xs font-bold text-white/80 max-w-[120px] truncate">
-              {profile.full_name}
-            </span>
-          </div>
+        {isAdminRole && (
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow hover:bg-indigo-700 transition-colors"
+          >
+            <Plus size={14} /> Nuovo documento
+          </button>
         )}
-      </nav>
-
-      {/* ── Header ────────────────────────────────────────── */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-10 z-30 shadow-md">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/admin')}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-              title="Torna alla dashboard"
-            >
-              <ArrowLeft size={18} />
-            </button>
-
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-widest">
-              <span className="hover:text-slate-600 cursor-pointer transition-colors" onClick={() => navigate('/admin')}>
-                QualiCAVA
-              </span>
-              <ChevronRight size={12} />
-              <span className="text-indigo-600">Documenti</span>
-            </div>
-
-            <div className="w-px h-6 bg-slate-200 mx-1" />
-
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-indigo-600 rounded-xl text-white">
-                <FileText size={18} />
-              </div>
-              <div>
-                <h1 className="text-lg font-black tracking-tighter text-slate-900">DocuMASTER</h1>
-                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest -mt-0.5">
-                  Gestione documentale centralizzata
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {isAdminRole && (
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl
-                text-xs font-black uppercase shadow hover:bg-indigo-700 transition-colors"
-            >
-              <Plus size={14} /> Nuovo documento
-            </button>
-          )}
-        </div>
-      </header>
+      </div>
 
       {/* ── Tab bar ──────────────────────────────────────── */}
       <div className="bg-white border-b border-slate-200 px-6">

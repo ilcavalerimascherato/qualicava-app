@@ -1698,14 +1698,25 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
       // Fetch normativa regionale dal DB
       const regione = facility.region || facility.regione || null;
       let normativaRegionale = null;
+      let formazioneRegionale = null;
       if (regione) {
         const { data: normData } = await supabase
           .from('haccp_normative_regionali')
           .select('riferimento, oggetto, prescrizione, note')
           .eq('regione', regione)
           .eq('attiva', true)
+          .eq('tipo', 'normativa')
           .order('ordine', { ascending: true });
         normativaRegionale = normData && normData.length > 0 ? normData : null;
+
+        const { data: formData } = await supabase
+          .from('haccp_normative_regionali')
+          .select('formazione_ruoli, formazione_note')
+          .eq('regione', regione)
+          .eq('attiva', true)
+          .eq('tipo', 'formazione')
+          .maybeSingle();
+        formazioneRegionale = formData?.formazione_ruoli ?? null;
       }
 
       const logoUrl = logoVariante === 'C'
@@ -1766,6 +1777,7 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         logoUrl,
         sezioniManuale:            sa.sezioni_manuale             || null,
         normativaRegionale:        normativaRegionale,
+        formazioneRegionale:       formazioneRegionale,
         cucina:                    sa.cucina                      || {},
       });
 
@@ -1845,6 +1857,10 @@ function ManualeTab({ facility, manuali, profilo, invalidate, canGenerate, canRe
         .eq('richiesta_pending', true);
 
       await invalidate.manuali();
+      await supabase.rpc('notify_facility_director_haccp', {
+        p_facility_id:   facility.id,
+        p_facility_name: facility.name,
+      });
       await invalidate.semafori();
       setRevNote('');
       const revLabel = numRev;

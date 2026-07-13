@@ -305,6 +305,7 @@ function buildSezione5() {
   const opCenaAbbattuta        = _params.opCenaAbbattuta       || false;
   const opMonousoInfetti       = _params.opMonousoInfetti      || false;
   const opDistribuzioneModalita = _params.opDistribuzioneModalita || 'gastronorm';
+  const fornitoreNome          = _params.fornitoreNome          || 'Fornitore esterno';
 
   const bx = (t, d, tipo = 'normal') => {
     if (tipo === 'esterno') return [dashedBox(t, d || 'Fase esterna'), arrow()];
@@ -412,20 +413,20 @@ function buildSezione5() {
 
   } else if (modello === 'appalto_fresco_caldo') {
     result.push(
-      h2('5.1 Ricevimento (CCP1)'),
+      h2('5.1 Cottura e preparazione (CCP1)'),
       ...spacer(1),
-      ...bx('Centro cottura esterno (Fornitore — SCIA esterna)', 'Non gestito dalla struttura OSA', 'esterno'),
-      ...bxL('Ricevimento contenitori isotermici (CCP1)', 'Verifica T° ≥65°C · Integrità confezione · Etichetta · Allergeni · DDT', 'ccp'),
+      ...bx('Personale fornitore (' + fornitoreNome + ')', 'Cucina interna gestita in appalto — cottura in loco', 'esterno'),
+      ...bxL('Cottura in cucina interna (CCP1)', 'T° al cuore ≥75°C · Verifica con sonda · Responsabilità fornitore', 'ccp'),
       ...spacer(1),
     );
     result.push(
       PB(),
-      h2('5.2 Stoccaggio temporaneo'),
+      h2('5.2 Distribuzione immediata'),
       ...spacer(1),
-      ...bxL('Stoccaggio in scaldavivande di nucleo', 'T° ≥60°C · Max 30 min'),
+      ...bxL('Trasporto diretto cucina → nucleo', 'Pasti caldi consegnati immediatamente · Nessuno stoccaggio intermedio'),
       ...spacer(1),
     );
-    result.push(PB(), ...distribVarianti('5.3 Distribuzione'));
+    result.push(PB(), ...distribVarianti('5.3 Somministrazione'));
     result.push(PB(), ...sezCeliaci('5.4 Pasti celiaci'));
     let na = 5;
     if (opDisfagici) { result.push(PB(), ...sezDisfagici('5.' + na + ' Pasti disfagici')); na++; }
@@ -678,16 +679,12 @@ function tabellaCCP(modello, sa) {
     ],
 
     appalto_fresco_caldo: [
-      sezRow('RICEVIMENTO PASTI CALDI', 6, W),
-      row('Ricevimento', 'T° pasti caldi <65°C', 'B', 'Fornitura min ≥65°C; ispezione visiva', 'Misurazione T° (2 punti); Modulo CCP1', 'CCP1'),
-      row('', 'Allergeni non dichiarati', 'C', 'SCIA ' + _forn + '; dichiarazione allergeni scritta', 'Controllo etichetta 100% celiaci', 'PCC'),
-      row('', 'Danni / perdite contenitori', 'F', 'Controllo integrità; reso merce danneggiata', 'Ispezione visiva 100%; modulo anomalia', 'PCC'),
-      sezRow('STOCCAGGIO TEMPORANEO', 6, W),
-      row('Stoccaggio caldo', 'T° scaldavivande <60°C', 'B', 'Preriscaldo scaldavivande; max 30 min in stoccaggio', 'Verifica T° (Modulo 2A); controllo visivo', 'CCP'),
-      row('Stoccaggio freddo', 'T° frigo >4°C', 'B', 'Frigoriferi cucinetta verificati giornalmente', 'Verifica T° giornaliera (Modulo 2A/2B)', 'PCC'),
-      sezRow('DISTRIBUZIONE', 6, W),
-      row('Distribuzione', 'T° carrello <65°C', 'B', 'Carrello caldo precondizionato; max 20 min', 'T° ≥65°C al carico/scarico; Modulo Carrello', 'CCP'),
-      row('', 'Errore dieta / allergene', 'C', 'Identificazione vassoio; doppio controllo', 'Verifica nominativo + tipologia dieta 100%', 'PCC'),
+      sezRow('COTTURA (gestita dal fornitore in cucina interna)', 6, W),
+      row('Cottura', 'T° al cuore <75°C', 'B', 'Cottura completa; verifica con sonda calibrata', 'T° al cuore ≥75°C; Modulo CCP1 fornitore', 'CCP1'),
+      row('', 'Contaminazione crociata', 'B', 'Separazione materie prime/cotto; FIFO', 'Ispezione visiva; registro fornitore', 'PCC'),
+      sezRow('DISTRIBUZIONE IMMEDIATA', 6, W),
+      row('Trasporto cucina→nucleo', 'Abbassamento T° durante trasporto', 'B', 'Trasporto immediato; percorso breve; contenitori coperti', 'Verifica T° ≥65°C prima somministrazione; Modulo 2A', 'PCC'),
+      row('Somministrazione', 'Errore dieta / allergene', 'C', 'Identificazione vassoio; doppio controllo nominativo', 'Verifica nominativo + tipologia dieta 100%', 'PCC'),
       row('', 'Contaminazione celiaci', 'C', 'Procedura celiaci; pasto servito per primo', 'Verifica separazione 100%; firma operatore', 'PCC'),
       sezRow('RACCOLTA E LAVAGGIO', 6, W),
       row('Lavaggio', 'Lavaggio stoviglie insufficiente', 'B', 'Ciclo lavastoviglie ≥80°C', 'Verifica T° ciclo mensile', 'PCC'),
@@ -800,25 +797,46 @@ function tabellaApparecchiature(rawApparecchiature) {
 // SEZIONE 11 — Piano formazione
 // ═══════════════════════════════════════════════════════════════
 
-function tabellaFormazione() {
-  const c0 = Math.round(CONTENT_W * 0.25);
+function tabellaFormazioneDinamica(ruoli) {
+  const c0 = Math.round(CONTENT_W * 0.28);
   const c1 = Math.round(CONTENT_W * 0.12);
-  const c2 = Math.round(CONTENT_W * 0.12);
-  const c3 = Math.round(CONTENT_W * 0.22);
+  const c2 = Math.round(CONTENT_W * 0.15);
+  const c3 = Math.round(CONTENT_W * 0.12);
   const c4 = CONTENT_W - c0 - c1 - c2 - c3;
+
+  // Se non ci sono dati regionali, usa tabella generica
+  const righeRegionali = ruoli && ruoli.length > 0
+    ? ruoli.map(r => [
+        r.ruolo || '—',
+        r.ore_base ? `${r.ore_base}h` : 'Da definire',
+        r.frequenza || '—',
+        r.ore_aggiornamento ? `${r.ore_aggiornamento}h` : '—',
+        'Registro presenza + attestato',
+      ])
+    : [
+        ['Responsabile / Addetto (corso base)', '4h', "All'assunzione", '—', 'Registro + attestato'],
+        ['Aggiornamento HACCP', '4h', 'Triennale', '4h', 'Registro + attestato'],
+      ];
+
+  const righeFisse = [
+    ['Gestione ospiti celiaci e allergeni', '2h', 'Biennale', '—', 'Scheda formazione individuale'],
+    ['Uso termometro e registrazioni', '1h', 'Triennale', '—', 'Verifica pratica'],
+  ];
+
   return new Table({
     width: { size: CONTENT_W, type: WidthType.DXA },
     columnWidths: [c0, c1, c2, c3, c4],
     rows: [
-      new TableRow({ tableHeader: true, children: [hCell('Corso / Argomento',c0), hCell('Freq.',c1), hCell('Durata',c2), hCell('Destinatari',c3), hCell('Documentazione',c4)] }),
-      ...[
-        ['HACCP base — igiene e sicurezza alimentare', 'All\'assunzione', '4h', 'Tutto il personale che manipola alimenti', 'Registro presenza + test valutazione + attestato'],
-        ['Aggiornamento HACCP', 'Triennale', '4h', 'Tutto il personale che manipola alimenti', 'Registro presenza + firma + attestato'],
-        ['Gestione ospiti celiaci e allergeni', 'Biennale', '2h', 'ASA/OSS distribuzione', 'Scheda formazione individuale'],
-        ['Uso corretto termometro e registrazioni (incluso in formazione base)', 'Triennale', '1h', 'Tutto il personale che manipola alimenti', 'Verifica pratica'],
-        ['Corso R-HACCP', 'Alla nomina', '8h', 'R-HACCP', 'Registro + Attestato'],
-        ['Corso R-HACCP aggiornamento', 'Triennale', '4h', 'R-HACCP', 'Registro + Attestato'],
-      ].map(r => new TableRow({ children: r.map((v, i) => cell(v, [c0,c1,c2,c3,c4][i])) })),
+      new TableRow({ tableHeader: true, children: [
+        hCell('Corso / Ruolo', c0),
+        hCell('Ore base', c1),
+        hCell('Frequenza', c2),
+        hCell('Ore aggiorn.', c3),
+        hCell('Documentazione', c4),
+      ]}),
+      ...[...righeRegionali, ...righeFisse].map(r =>
+        new TableRow({ children: r.map((v, i) => cell(v, [c0,c1,c2,c3,c4][i])) })
+      ),
     ],
   });
 }
@@ -1075,6 +1093,8 @@ export async function generaManualeHaccp(params) {
     sezioniManuale             = null,
     // Normativa regionale dal DB (array di { riferimento, oggetto, prescrizione, note })
     normativaRegionale         = null,
+    // Formazione regionale dal DB (array di ruoli con ore/frequenza)
+    formazioneRegionale        = null,
     // Configurazione cucina interna
     cucina                     = {},
   } = params;
@@ -1406,7 +1426,7 @@ export async function generaManualeHaccp(params) {
         txt('**CCP Abbattimento:** raffreddamento da >65°C a <10°C in ≤90 min (Modulo 3C). **CCP Rigenerazione:** T° al cuore ≥75°C verificato con sonda. Azione correttiva: smaltimento se tempi o temperature non rispettati.'),
       ] : []),
     ] : modello === 'appalto_fresco_caldo' ? [
-      txt('**CCP1 — Ricevimento pasti caldi:** verifica temperatura ≥65°C al ricevimento (2 punti di misurazione). Azione correttiva: rifiuto e restituzione al fornitore con compilazione Modulo CCP1.'),
+      txt('**CCP1 — Cottura in loco (fornitore ' + fornitoreNome + '):** il personale del fornitore esegue la cottura nella cucina interna della struttura. Il CCP è la verifica della temperatura al cuore ≥75°C prima della distribuzione. Azione correttiva: prolungamento cottura; se non raggiungibile → smaltimento e segnalazione R-HACCP al responsabile di struttura.'),
     ] : [
       txt('**CCP1 — Ricevimento pasti:** verifica temperatura bimodale — caldo ≥65°C / freddo ≤4°C al ricevimento (2 punti di misurazione). Azione correttiva: rifiuto e restituzione al fornitore con compilazione Modulo CCP1.'),
       ...(opCenaAbbattuta ? [
@@ -1708,10 +1728,7 @@ export async function generaManualeHaccp(params) {
     h1('11. PIANO DI FORMAZIONE DEL PERSONALE'),
     txt('La formazione continua del personale ASA/OSS è requisito fondamentale del sistema HACCP. Il R-HACCP pianifica e documenta tutte le attività formative secondo il seguente schema:'),
     ...spacer(1),
-    // TODO SPRINT FUTURO: frequenze e durate formazione variano per regione.
-    // Integrare haccp_normative_regionali con categoria 'formazione' e
-    // aggiornare la tabella dinamicamente per regione struttura.
-    tabellaFormazione(),
+    tabellaFormazioneDinamica(formazioneRegionale),
     ...spacer(1),
     txt('La documentazione di ogni corso (registro presenze, attestati, test di valutazione) è archiviata nel fascicolo formazione individuale conservato presso il R-HACCP. L\'idoneità sanitaria del personale a contatto con alimenti è verificata annualmente secondo D.Lgs 81/2008.'),
     new Paragraph({ children: [new PageBreak()] }),

@@ -51,6 +51,7 @@ export default function MasterDashboard() {
   const [haccpFilter,        setHaccpFilter]        = useState(null);
   const [selectedFacility,   setSelectedFacility]   = useState(null);
   const [pendingCount,       setPendingCount]       = useState(0);
+  const [pendingIds,         setPendingIds]         = useState(new Set());
 
   // Apri automaticamente il fascicolo se arriva da ?facility=ID
   useEffect(() => {
@@ -65,9 +66,12 @@ export default function MasterDashboard() {
     if (profile?.role !== 'superadmin') return;
     supabase
       .from('haccp_manuali')
-      .select('facility_id', { count: 'exact', head: true })
+      .select('struttura_id')
       .eq('richiesta_pending', true)
-      .then(({ count }) => setPendingCount(count ?? 0));
+      .then(({ data }) => {
+        setPendingCount(data?.length ?? 0);
+        setPendingIds(new Set(data?.map(r => r.struttura_id) ?? []));
+      });
   }, [profile?.role]);
 
   const allIds = useMemo(
@@ -416,6 +420,7 @@ export default function MasterDashboard() {
                     key={f.id}
                     f={f}
                     udos={data.udos}
+                    pending={pendingIds.has(f.id)}
                     onClick={() => setSelectedFacility(f)}
                   />
                 ))}
@@ -479,7 +484,7 @@ function GroupSemafori({ facilities }) {
 }
 
 // ── HaccpCard ─────────────────────────────────────────────────
-function HaccpCard({ f, udos, onClick }) {
+function HaccpCard({ f, udos, onClick, pending }) {
   const udoName  = udos?.find(u => u.id === f.udo_id)?.name || f.udo_name || '';
   const udoColor = f.udo_color || '#6366f1';
 
@@ -504,6 +509,12 @@ function HaccpCard({ f, udos, onClick }) {
       {/* Striscia colore UDO */}
       <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl"
            style={{ background: udoColor }} />
+
+      {pending && (
+        <span className="absolute top-2 right-2 bg-amber-400 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+          Richiesta
+        </span>
+      )}
 
       {/* UDO + semaforo dot */}
       <div className="flex items-center justify-between mt-1">

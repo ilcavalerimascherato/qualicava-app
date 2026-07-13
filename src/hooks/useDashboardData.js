@@ -10,7 +10,6 @@ export const queryKeys = {
   udos:              ()          => ['udos'],
   companies:         ()          => ['companies'],
   facilities:        ()          => ['facilities'],
-  questionnaires:    (year)      => ['questionnaires', year],
   surveys:           (year)      => ['surveys', year],
   kpiRecords:        (year)      => ['kpiRecords', year],
 };
@@ -29,14 +28,6 @@ const fetchers = {
   },
   facilities: async () => {
     const { data, error } = await supabase.from('facilities').select('*').order('name');
-    if (error) throw error;
-    return data;
-  },
-  questionnaires: async (year) => {
-    const { data, error } = await supabase
-      .from('questionnaires')
-      .select('*')
-      .like('calendar_id', `${year}-%`);
     if (error) throw error;
     return data;
   },
@@ -78,12 +69,6 @@ export function useDashboardData(year) {
     staleTime: 2 * 60 * 1000,
   });
 
-  const questionnairesQuery = useQuery({
-    queryKey: queryKeys.questionnaires(year),
-    queryFn: () => fetchers.questionnaires(year),
-    staleTime: 60 * 1000,
-  });
-
   const surveysQuery = useQuery({
     queryKey: queryKeys.surveys(year),
     queryFn: () => fetchers.surveys(year),
@@ -99,13 +84,13 @@ export function useDashboardData(year) {
   // Loading globale: true solo al primo caricamento (non ai refetch silenziosi)
   const isLoading = [
     udosQuery, companiesQuery, facilitiesQuery,
-    questionnairesQuery, surveysQuery, kpiQuery
+    surveysQuery, kpiQuery
   ].some(q => q.isLoading);
 
   // Errore globale: raccoglie tutti gli errori in un array
   const errors = [
     udosQuery, companiesQuery, facilitiesQuery,
-    questionnairesQuery, surveysQuery, kpiQuery
+    surveysQuery, kpiQuery
   ].filter(q => q.error).map(q => q.error.message);
 
   return {
@@ -115,7 +100,6 @@ export function useDashboardData(year) {
       udos:            udosQuery.data         || [],
       companies:       companiesQuery.data    || [],
       facilities:      facilitiesQuery.data   || [],
-      questionnaires:  questionnairesQuery.data || [],
       surveys:         surveysQuery.data      || [],
       kpiRecords:      kpiQuery.data          || [],
     },
@@ -134,7 +118,6 @@ export function useInvalidate() {
     // Invalida tutto (solo per operazioni che impattano dati multipli)
     all:              ()     => queryClient.invalidateQueries(),
     surveys:          (year) => queryClient.invalidateQueries({ queryKey: queryKeys.surveys(year) }),
-    questionnaires:   (year) => queryClient.invalidateQueries({ queryKey: queryKeys.questionnaires(year) }),
     udos:             ()     => queryClient.invalidateQueries({ queryKey: queryKeys.udos() }),
   };
 }

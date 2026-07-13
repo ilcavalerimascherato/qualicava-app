@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Trash2, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Save, Trash2, Loader2 } from 'lucide-react';
 import { supabase }         from '../supabaseClient';
 import { REGIONI_ITALIANE } from '../config/constants';
 
@@ -43,12 +43,10 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
   const [loadingFacility, setLoadingFacility] = useState(false);
   const [saving, setSaving]       = useState(false);
   const [errors, setErrors]       = useState({});
-  const [directorStatus, setDirectorStatus] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setErrors({});
-    setDirectorStatus(null);
     if (facility?.id) {
       setLoadingFacility(true);
       supabase.from('facilities').select('*').eq('id', facility.id).single()
@@ -82,57 +80,6 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
     return e;
   };
 
-  const provisionDirector = async (facilityId) => {
-    const email = form.email_direzione.trim();
-    const name  = form.direttore.trim();
-    if (!email) return;
-
-    setDirectorStatus('creating');
-    try {
-      const { data: existing } = await supabase
-        .from('user_profiles')
-        .select('id, role')
-        .eq('email', email.toLowerCase())
-        .maybeSingle();
-
-      if (existing) {
-        const { data: hasAccess } = await supabase
-          .from('user_facility_access')
-          .select('id')
-          .eq('user_id', existing.id)
-          .eq('facility_id', facilityId)
-          .maybeSingle();
-
-        if (!hasAccess) {
-          await supabase
-            .from('user_facility_access')
-            .insert({ user_id: existing.id, facility_id: facilityId });
-        }
-        setDirectorStatus('exists');
-        return;
-      }
-
-      try {
-        const { data: fnData, error: fnError } = await supabase.functions.invoke('invite-user', {
-          body: {
-            email,
-            fullName:    name || email,
-            role:        'director',
-            companyId:   form.company_id ? parseInt(form.company_id, 10) : null,
-            facilityIds: [facilityId],
-          },
-        });
-        if (fnError || fnData?.error) throw new Error(fnError?.message || fnData?.error);
-        setDirectorStatus('created');
-      } catch {
-        setDirectorStatus('sql_fallback');
-      }
-    } catch (err) {
-      console.error('[FacilityModal] provisionDirector error:', err);
-      setDirectorStatus('error');
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     const errs = validate();
@@ -156,11 +103,7 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
         referent:                  form.referente.trim()      || null,
         email_qualita:             form.email_qualita.trim()  || null,
       };
-      const savedFacility = await onSave(payload);
-      const facilityId = savedFacility?.id ?? facility?.id;
-      if (facilityId) {
-        await provisionDirector(facilityId);
-      }
+      await onSave(payload);
     } catch (err) {
       setErrors({ _global: `Errore di salvataggio: ${err.message}` });
     } finally {
@@ -254,7 +197,6 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
               <div className="space-y-3">
                 <h3 className="text-xs font-black text-emerald-600 uppercase tracking-widest border-b border-emerald-200 pb-2 flex items-center gap-2">
                   <span>Direttore responsabile</span>
-                  <span className="text-[10px] font-medium text-slate-400 normal-case tracking-normal">— l'account verrà creato automaticamente al salvataggio</span>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                   <div>
@@ -272,31 +214,6 @@ export default function FacilityModal({ isOpen, onClose, udos, facility, onSave,
               </div>
 
             </div>
-
-            {/* Banner stato provisioning direttore */}
-            {directorStatus && (
-              <div className={`mx-6 mb-2 px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-3 ${
-                directorStatus === 'creating'      ? 'bg-indigo-50 border border-indigo-200 text-indigo-700' :
-                directorStatus === 'created'       ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' :
-                directorStatus === 'exists'        ? 'bg-sky-50 border border-sky-200 text-sky-700' :
-                directorStatus === 'sql_fallback'  ? 'bg-amber-50 border border-amber-200 text-amber-700' :
-                                                     'bg-red-50 border border-red-200 text-red-700'
-              }`}>
-                {directorStatus === 'creating'     && <><Loader2 size={16} className="animate-spin shrink-0" /> Creazione account direttore in corso...</>}
-                {directorStatus === 'created'      && <><CheckCircle2 size={16} className="shrink-0" /> Account direttore creato. Email di benvenuto inviata a {form.email_direzione}.</>}
-                {directorStatus === 'exists'       && <><CheckCircle2 size={16} className="shrink-0" /> Direttore già registrato — accesso alla struttura aggiunto.</>}
-                {directorStatus === 'sql_fallback' && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertCircle size={16} className="shrink-0" />
-                      <span className="font-bold">Edge Function non disponibile.</span>
-                    </div>
-                    <p className="text-xs">Crea manualmente l'utente da Supabase Dashboard → Authentication → Users, poi assegna ruolo "director" in user_profiles e aggiungi facility_id {facility?.id ?? '(ID struttura)'} in user_facility_access.</p>
-                  </div>
-                )}
-                {directorStatus === 'error' && <><AlertCircle size={16} className="shrink-0" /> Struttura salvata, ma creazione account direttore fallita. Riprova dal pannello Utenti.</>}
-              </div>
-            )}
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">

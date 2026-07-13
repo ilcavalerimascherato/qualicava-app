@@ -12,7 +12,7 @@
  */
 import React, { useMemo, useState, useEffect } from 'react';
 import {
-  X, UploadCloud, BrainCircuit, BarChart3, Target, Users,
+  X, BrainCircuit, BarChart3, Target, Users,
   Layers, Activity, FileDown, Percent, Edit3, Bed, AlertTriangle
 } from 'lucide-react';
 import {
@@ -102,7 +102,7 @@ function getStaffCount(kpiRecords, facilityId, calendarId) {
 
 export default function AnalyticsModal({
   isOpen, onClose, facility, type, surveys, facilities = [],
-  onOpenImport, onUpdateSuccess, kpiRecords = [],
+  onUpdateSuccess, kpiRecords = [],
 }) {
   const [showUdoCompare, setShowUdoCompare] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -419,11 +419,6 @@ export default function AnalyticsModal({
               <Layers size={16} /> Benchmark UDO
             </button>
           )}
-          <div className="w-px h-6 bg-white/10 mx-2" />
-          <button onClick={onOpenImport}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition-colors border border-white/5">
-            <UploadCloud size={16} /> Nuovi Dati
-          </button>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full"><X size={24} /></button>
         </div>
       </div>

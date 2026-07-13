@@ -12,7 +12,7 @@ import { useModals }                                         from './contexts/Mo
 import { useDashboardData, useInvalidate }                   from './hooks/useDashboardData';
 import { useHaccpSemafori }                                  from './hooks/useHaccpData';
 import { useBadgeCounts }                                    from './hooks/useBadgeCounts';
-import { facilityService, questionnaireService } from './services/supabaseService';
+import { facilityService } from './services/supabaseService';
 import { enrichFacilitiesData, calculateDashboardStats }     from './utils/statusCalculator';
 import { calcFacilityRiskScore }                             from './utils/riskScoreEngine';
 
@@ -22,8 +22,6 @@ import FacilityCard       from './components/FacilityCard';
 import CompaniesView     from './components/CompaniesView';
 import GlobalReportModal  from './components/GlobalReportModal';
 import FacilityModal      from './components/FacilityModal';
-import QuestionnaireModal from './components/QuestionnaireModal';
-import DataImportModal    from './components/DataImportModal';
 import AnalyticsModal     from './components/AnalyticsModal';
 import KpiManagerModal    from './components/KpiManagerModal';
 import KpiDashboardModal  from './components/KpiDashboardModal';
@@ -167,24 +165,9 @@ export default function App() {
     }
   };
 
-  const handleQuestionnaireSave = async (p) => {
-    try {
-      await questionnaireService.upsert(p);
-      close('questionnaire');
-      await invalidate.questionnaires(year);
-      toast.success('Questionario salvato');
-    } catch (err) {
-      toast.error(`Errore DB: ${err.message}`);
-    }
-  };
-
   const handleDataClick = (facility, type) => {
-    const hasData = data.surveys.some(s =>
-      s.type === type &&
-      (s.facility_id === facility.id || (!s.facility_id && s.company_id === facility.company_id))
-    );
     setDataTarget({ facility, type });
-    open(hasData ? 'analytics' : 'dataImport');
+    open('analytics');
   };
 
   const handleNavigate = (page) => {
@@ -573,14 +556,6 @@ export default function App() {
         onSave={handleFacilitySave}
         onDelete={handleFacilityDelete}
       />
-      <QuestionnaireModal
-        isOpen={modals.questionnaire}
-        onClose={() => close('questionnaire')}
-        info={selectedFacility}
-        year={year}
-        questionnaires={data.questionnaires}
-        onSave={handleQuestionnaireSave}
-      />
       {selectedFacility && (
         <KpiManagerModal
           key={`kpi-${selectedFacility.id}`}
@@ -592,27 +567,16 @@ export default function App() {
         />
       )}
       {dataTarget && (
-        <>
-          <DataImportModal
-            isOpen={modals.dataImport}
-            onClose={() => close('dataImport')}
-            facility={dataTarget.facility}
-            type={dataTarget.type}
-            year={year}
-            onUploadSuccess={() => invalidate.surveys(year)}
-          />
-          <AnalyticsModal
-            isOpen={modals.analytics}
-            onClose={() => close('analytics')}
-            facility={dataTarget.facility}
-            type={dataTarget.type}
-            surveys={data.surveys}
-            facilities={data.facilities}
-            udos={data.udos}
-            onOpenImport={() => { close('analytics'); open('dataImport'); }}
-            onUpdateSuccess={() => invalidate.surveys(year)}
-          />
-        </>
+        <AnalyticsModal
+          isOpen={modals.analytics}
+          onClose={() => close('analytics')}
+          facility={dataTarget.facility}
+          type={dataTarget.type}
+          surveys={data.surveys}
+          facilities={data.facilities}
+          udos={data.udos}
+          onUpdateSuccess={() => invalidate.surveys(year)}
+        />
       )}
       <KpiChartsModal
         isOpen={modals.kpiCharts}
