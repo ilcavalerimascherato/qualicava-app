@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
-import { Building2, Users, Mail, Bell, PenLine, Briefcase } from 'lucide-react';
+import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2 } from 'lucide-react';
 import { useAuth }                               from '../contexts/AuthContext';
 import { useDashboardData, useInvalidate }       from '../hooks/useDashboardData';
 import { useBadgeCounts }                        from '../hooks/useBadgeCounts';
@@ -11,6 +11,7 @@ import AppHeader             from '../components/AppHeader';
 import UdoManagerModal       from '../components/UdoManagerModal';
 import QualityDashboardModal from '../components/QualityDashboardModal';
 import DocFirmeModal         from '../components/DocFirmeModal';
+import CampagneSurveyModal   from '../components/CampagneSurveyModal';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -185,6 +186,22 @@ export default function ImpostazioniPage() {
             />
           </div>
         </section>
+
+        {/* Survey */}
+        {isAdmin && (
+          <section className="mt-6">
+            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">Survey</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              <SettingsCard
+                icon={<BarChart2 size={14} />}
+                iconBg="#EEF2FF" iconColor="#4F46E5"
+                title="Campagne Survey"
+                subtitle="Crea e gestisci campagne di rilevazione per semestre"
+                onClick={() => setActiveModal('campagne')}
+              />
+            </div>
+          </section>
+        )}
       </main>
 
       {/* ── Modals — invariati ── */}
@@ -207,6 +224,9 @@ export default function ImpostazioniPage() {
       />
       {activeModal === 'firme' && (
         <DocFirmeModal onClose={closeModal} />
+      )}
+      {activeModal === 'campagne' && (
+        <CampagneSurveyModal isOpen onClose={closeModal} />
       )}
     </div>
   );

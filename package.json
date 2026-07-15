@@ -7,6 +7,7 @@
     "@supabase/supabase-js": "^2.39.0",
     "@tanstack/react-query": "^5.0.0",
     "@xmldom/xmldom": "^0.9.10",
+    "chart.js": "^4.5.1",
     "docx": "^9.6.1",
     "docxtemplater": "^3.68.5",
     "framer-motion": "^11.0.0",

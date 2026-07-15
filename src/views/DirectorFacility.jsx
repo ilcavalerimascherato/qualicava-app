@@ -18,7 +18,7 @@ import {
   PawPrint, LogOut, ArrowLeft, Activity, BarChart3, Database,
   ChefHat, FileText,
   AlertTriangle, TrendingUp,
-  Plus, Loader2,
+  Plus, Loader2, BarChart2,
 } from 'lucide-react';
 
 import { useQueryClient }                    from '@tanstack/react-query';
@@ -48,6 +48,7 @@ import DocMyDocumentiView   from './DocMyDocumentiView';
 import { useCdgData }        from '../hooks/useCdgData';
 import SurveysTab            from '../components/SurveysTab';
 import OverviewTab           from '../components/OverviewTab';
+import AnalisiCampagnaPanel  from '../components/AnalisiCampagnaPanel';
 
 // Mappa tab → conteggio badge e colore
 function getTabBadge(tabId, fBadge) {
@@ -72,6 +73,7 @@ const TABS = [
   { id: 'kpi',              label: 'KPI Mensili',    Icon: BarChart3     },
   { id: 'surveys',          label: 'Survey',         Icon: Database      },
   { id: 'analysis',         label: 'Analisi Survey', Icon: BarChart3     },
+  { id: 'analisi_campagne', label: 'Analisi campagne', Icon: BarChart2   },
   { id: 'non_conformities', label: 'Non Conformità', Icon: AlertTriangle },
   { id: 'benchmark',        label: 'Benchmark',      Icon: TrendingUp    },
   { id: 'haccp',            label: 'Documenti',      Icon: ChefHat       },
@@ -330,6 +332,9 @@ export default function DirectorFacility() {
         )}
         {activeTab === 'analysis' && (
           <SurveyAnalysisTab facility={facility} surveys={facilitySurveys} />
+        )}
+        {activeTab === 'analisi_campagne' && (
+          <AnalisiCampagnaPanel facility={facility} />
         )}
         {activeTab === 'non_conformities' && (
           <NonConformitiesTab
