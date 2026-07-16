@@ -2,3 +2,9 @@ node_modules
 build
 .env
 package-lock.json
+.claude
+.cursorrules
+screenshot_header.png
+screenshot_login.png
+screenshot_report_page.png
+screenshot_toolbar.png
