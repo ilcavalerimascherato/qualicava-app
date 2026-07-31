@@ -16,7 +16,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceArea
 } from 'recharts';
-import { KPI_RULES, isNumericSettore } from '../config/kpiRules';
+import { KPI_RULES, isNumericSettore, getKpiLabel } from '../config/kpiRules';
 import { computeKpiValue } from '../utils/kpiFormulaEngine';
 import { getTimeHorizon }  from '../utils/kpiTimeHorizon';
 
@@ -173,7 +173,7 @@ export default function KpiLaserModal({ isOpen, onClose, onBack = null, faciliti
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Seleziona KPI</label>
               <select value={selectedKpiTarget} onChange={e => setSelectedKpiTarget(e.target.value)}
                 className="bg-white border border-slate-300 rounded-lg px-4 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500 cursor-pointer shadow-sm">
-                {KPI_RULES.map((r, i) => <option key={i} value={r.kpi_target}>[{r.settore}] {r.kpi_target}</option>)}
+                {KPI_RULES.map((r, i) => <option key={i} value={r.kpi_target}>[{r.settore}] {getKpiLabel(r)}</option>)}
               </select>
             </div>
 

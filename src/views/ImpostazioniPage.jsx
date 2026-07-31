@@ -2,16 +2,18 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
-import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2 } from 'lucide-react';
+import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2, Copy } from 'lucide-react';
 import { useAuth }                               from '../contexts/AuthContext';
 import { useDashboardData, useInvalidate }       from '../hooks/useDashboardData';
 import { useBadgeCounts }                        from '../hooks/useBadgeCounts';
+import { useDuplicatiCount }                     from '../hooks/useDuplicatiCount';
 import { udoService }                            from '../services/supabaseService';
-import AppHeader             from '../components/AppHeader';
-import UdoManagerModal       from '../components/UdoManagerModal';
-import QualityDashboardModal from '../components/QualityDashboardModal';
-import DocFirmeModal         from '../components/DocFirmeModal';
-import CampagneSurveyModal   from '../components/CampagneSurveyModal';
+import AppHeader              from '../components/AppHeader';
+import UdoManagerModal        from '../components/UdoManagerModal';
+import QualityDashboardModal  from '../components/QualityDashboardModal';
+import DocFirmeModal          from '../components/DocFirmeModal';
+import CampagneSurveyModal    from '../components/CampagneSurveyModal';
+import VerificaDuplicatiModal from '../components/VerificaDuplicatiModal';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -57,6 +59,7 @@ export default function ImpostazioniPage() {
     [data.facilities],
   );
   const { totals: badgeTotals } = useBadgeCounts(allIds, year, isAdmin);
+  const { count: duplicatiCount } = useDuplicatiCount();
 
   const headerFacilities = useMemo(
     () => (data.facilities ?? []).map(f => ({ ...f, riskLevel: 'unknown' })),
@@ -199,6 +202,14 @@ export default function ImpostazioniPage() {
                 subtitle="Crea e gestisci campagne di rilevazione per semestre"
                 onClick={() => setActiveModal('campagne')}
               />
+              <SettingsCard
+                icon={<Copy size={14} />}
+                iconBg="#FFFBEB" iconColor="#D97706"
+                title="Verifica duplicati"
+                subtitle="Rivedi le risposte survey sospettate di duplicazione"
+                badge={duplicatiCount > 0 ? String(duplicatiCount) : undefined}
+                onClick={() => setActiveModal('duplicati')}
+              />
             </div>
           </section>
         )}
@@ -227,6 +238,9 @@ export default function ImpostazioniPage() {
       )}
       {activeModal === 'campagne' && (
         <CampagneSurveyModal isOpen onClose={closeModal} />
+      )}
+      {activeModal === 'duplicati' && (
+        <VerificaDuplicatiModal isOpen onClose={closeModal} facilities={data.facilities} />
       )}
     </div>
   );

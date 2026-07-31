@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, ChevronLeft, LayoutGrid, Filter, PieChart as PieIcon, BarChart2 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
-import { KPI_RULES, KPI_SECTORS, isNumericSettore } from '../config/kpiRules';
+import { KPI_RULES, KPI_SECTORS, isNumericSettore, getKpiByTarget, getKpiLabel } from '../config/kpiRules';
 import { computeKpiValue } from '../utils/kpiFormulaEngine';
 import { MONTHS } from '../config/constants';
 
@@ -257,6 +257,7 @@ export default function KpiChartsModal({ isOpen, onClose, onBack = null, facilit
                         <Bar
                           key={key}
                           dataKey={key}
+                          name={getKpiLabel(getKpiByTarget(key)) || key}
                           fill={PALETTE[index % PALETTE.length]}
                           radius={[4, 4, 0, 0]}
                           maxBarSize={60}

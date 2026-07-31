@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { X, ChevronLeft, AlertTriangle, BarChart2, BrainCircuit, Copy, Check, Download } from 'lucide-react';
 import { kpiAnalisiComparativa as aiPresets } from '../config/aiPrompts';
-import { KPI_RULES } from '../config/kpiRules';
+import { KPI_RULES, getKpiLabel } from '../config/kpiRules';
 import { evaluateKpiFormula } from '../utils/kpiFormulaEngine';
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ function exportPivotCsv(pivotRows, facilityName, year) {
   const csv = [
     headers.join(','),
     ...pivotRows.map(row => [
-      `"${String(row.rule.kpi_target).replace(/"/g, '""')}"`,
+      `"${String(getKpiLabel(row.rule)).replace(/"/g, '""')}"`,
       row.rule.settore,
       ...row.months.map(m => m.displayValue),
       row.avgDisplay,
@@ -501,10 +501,10 @@ export default function KpiAnalisiComparativa({ isOpen, onClose, onBack, facilit
                           className="py-1.5 px-3 font-medium text-slate-700 border-r border-slate-200 bg-white"
                           style={{ width: 200, minWidth: 200, maxWidth: 200, position: 'sticky', left: 0, zIndex: 5 }}
                         >
-                          <span className="block truncate text-xs" title={row.rule.kpi_target}>
-                            {row.rule.kpi_target.length > 36
-                              ? row.rule.kpi_target.slice(0, 36) + '…'
-                              : row.rule.kpi_target}
+                          <span className="block truncate text-xs" title={getKpiLabel(row.rule)}>
+                            {getKpiLabel(row.rule).length > 36
+                              ? getKpiLabel(row.rule).slice(0, 36) + '…'
+                              : getKpiLabel(row.rule)}
                           </span>
                         </td>
                         {row.months.map((m, mi) => {

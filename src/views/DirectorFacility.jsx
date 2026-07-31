@@ -38,7 +38,7 @@ import {
   ResponsiveContainer, ReferenceLine, LineChart, Line,
   Legend, Cell, PieChart, Pie
 } from 'recharts';
-import { KPI_RULES, isNumericSettore } from '../config/kpiRules';
+import { KPI_RULES, isNumericSettore, getKpiLabel } from '../config/kpiRules';
 import { computeKpiValue }  from '../utils/kpiFormulaEngine';
 import { getTimeHorizon }   from '../utils/kpiTimeHorizon';
 import KpiManagerModal      from '../components/KpiManagerModal';
@@ -634,7 +634,7 @@ function KpiCard({ rule, data, isPerc }) {
     <div className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm transition-shadow">
       <div className="flex justify-between items-start mb-3">
         <h4 className="text-xs font-black text-slate-700 uppercase leading-tight pr-2 line-clamp-2">
-          {rule.kpi_target}
+          {getKpiLabel(rule)}
         </h4>
         {lastVal && (
           <span className="text-lg font-black shrink-0" style={{ color: lastColor }}>

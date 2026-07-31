@@ -374,6 +374,18 @@ function BarreMinMax({ avgScores, minScores, maxScores, udoAvgScores }) {
   );
 }
 
+// Righe marcate come duplicato-da-eliminare vanno escluse dai "Commenti liberi":
+// le query sotto interrogano le tabelle raw direttamente (non v_survey_data_normalized/
+// v_survey_campagne) quindi il filtro va applicato qui a mano.
+async function fetchEliminatiSet(tabelle) {
+  const { data } = await supabase
+    .from('survey_duplicati')
+    .select('tabella_origine, riga_id')
+    .eq('stato', 'eliminato')
+    .in('tabella_origine', tabelle);
+  return new Set((data ?? []).map(d => `${d.tabella_origine}:${d.riga_id}`));
+}
+
 export default function AnalisiCampagnaPanel({ facility }) {
   const { data: campagne = [], isLoading } = useSurveyCampagne(facility?.id, facility?.company_id);
   const [selectedId, setSelectedId] = useState(null);
@@ -422,33 +434,40 @@ export default function AnalisiCampagnaPanel({ facility }) {
       if (!nomi.length) { setCommenti([]); return; }
 
       if (selected.survey_type === 'operator') {
-        const { data } = await supabase
-          .from('survey_personale')
-          .select('formazione_12mesi, note, struttura')
-          .in('struttura', nomi)
-          .gte('created_at', selected.data_inizio)
-          .lte('created_at', selected.data_fine + 'T23:59:59');
-        setCommenti((data ?? []).filter(r => r.formazione_12mesi?.trim() || r.note?.trim()));
+        const [{ data }, eliminati] = await Promise.all([
+          supabase
+            .from('survey_personale')
+            .select('id, formazione_12mesi, note, struttura')
+            .in('struttura', nomi)
+            .gte('created_at', selected.data_inizio)
+            .lte('created_at', selected.data_fine + 'T23:59:59'),
+          fetchEliminatiSet(['survey_personale']),
+        ]);
+        setCommenti((data ?? [])
+          .filter(r => !eliminati.has(`survey_personale:${r.id}`))
+          .filter(r => r.formazione_12mesi?.trim() || r.note?.trim()));
       } else {
         // Client — aggrega da tutte le tabelle raw
-        const [rsa, sl, psi] = await Promise.all([
-          supabase.from('survey_rsa').select('note, struttura')
+        const tabelle = ['survey_rsa', 'survey_seniorliving', 'survey_centri_psichiatria'];
+        const [rsa, sl, psi, eliminati] = await Promise.all([
+          supabase.from('survey_rsa').select('id, note, struttura')
             .in('struttura', nomi)
             .gte('created_at', selected.data_inizio)
             .lte('created_at', selected.data_fine + 'T23:59:59'),
-          supabase.from('survey_seniorliving').select('"Note", struttura')
+          supabase.from('survey_seniorliving').select('id, "Note", struttura')
             .in('struttura', nomi)
             .gte('created_at', selected.data_inizio)
             .lte('created_at', selected.data_fine + 'T23:59:59'),
-          supabase.from('survey_centri_psichiatria').select('note, struttura')
+          supabase.from('survey_centri_psichiatria').select('id, note, struttura')
             .in('struttura', nomi)
             .gte('created_at', selected.data_inizio)
             .lte('created_at', selected.data_fine + 'T23:59:59'),
+          fetchEliminatiSet(tabelle),
         ]);
         const tutti = [
-          ...(rsa.data ?? []).map(r => ({ note: r.note, struttura: r.struttura })),
-          ...(sl.data ?? []).map(r => ({ note: r.Note, struttura: r.struttura })),
-          ...(psi.data ?? []).map(r => ({ note: r.note, struttura: r.struttura })),
+          ...(rsa.data ?? []).filter(r => !eliminati.has(`survey_rsa:${r.id}`)).map(r => ({ note: r.note, struttura: r.struttura })),
+          ...(sl.data ?? []).filter(r => !eliminati.has(`survey_seniorliving:${r.id}`)).map(r => ({ note: r.Note, struttura: r.struttura })),
+          ...(psi.data ?? []).filter(r => !eliminati.has(`survey_centri_psichiatria:${r.id}`)).map(r => ({ note: r.note, struttura: r.struttura })),
         ].filter(r => r.note?.trim());
         setCommenti(tutti);
       }
@@ -535,32 +554,39 @@ Rispondi in italiano, tono professionale.`;
 
       if (nomi.length) {
         if (selected.survey_type === 'operator') {
-          const { data } = await supabase
-            .from('survey_personale')
-            .select('formazione_12mesi, note, struttura')
-            .in('struttura', nomi)
-            .gte('created_at', selected.data_inizio)
-            .lte('created_at', selected.data_fine + 'T23:59:59');
-          commentiDoc = (data ?? []).filter(r => r.formazione_12mesi?.trim() || r.note?.trim());
+          const [{ data }, eliminati] = await Promise.all([
+            supabase
+              .from('survey_personale')
+              .select('id, formazione_12mesi, note, struttura')
+              .in('struttura', nomi)
+              .gte('created_at', selected.data_inizio)
+              .lte('created_at', selected.data_fine + 'T23:59:59'),
+            fetchEliminatiSet(['survey_personale']),
+          ]);
+          commentiDoc = (data ?? [])
+            .filter(r => !eliminati.has(`survey_personale:${r.id}`))
+            .filter(r => r.formazione_12mesi?.trim() || r.note?.trim());
         } else {
-          const [rsa, sl, psi] = await Promise.all([
-            supabase.from('survey_rsa').select('note, struttura')
+          const tabelle = ['survey_rsa', 'survey_seniorliving', 'survey_centri_psichiatria'];
+          const [rsa, sl, psi, eliminati] = await Promise.all([
+            supabase.from('survey_rsa').select('id, note, struttura')
               .in('struttura', nomi)
               .gte('created_at', selected.data_inizio)
               .lte('created_at', selected.data_fine + 'T23:59:59'),
-            supabase.from('survey_seniorliving').select('"Note", struttura')
+            supabase.from('survey_seniorliving').select('id, "Note", struttura')
               .in('struttura', nomi)
               .gte('created_at', selected.data_inizio)
               .lte('created_at', selected.data_fine + 'T23:59:59'),
-            supabase.from('survey_centri_psichiatria').select('note, struttura')
+            supabase.from('survey_centri_psichiatria').select('id, note, struttura')
               .in('struttura', nomi)
               .gte('created_at', selected.data_inizio)
               .lte('created_at', selected.data_fine + 'T23:59:59'),
+            fetchEliminatiSet(tabelle),
           ]);
           commentiDoc = [
-            ...(rsa.data ?? []).map(r => ({ note: r.note, struttura: r.struttura })),
-            ...(sl.data ?? []).map(r => ({ note: r.Note, struttura: r.struttura })),
-            ...(psi.data ?? []).map(r => ({ note: r.note, struttura: r.struttura })),
+            ...(rsa.data ?? []).filter(r => !eliminati.has(`survey_rsa:${r.id}`)).map(r => ({ note: r.note, struttura: r.struttura })),
+            ...(sl.data ?? []).filter(r => !eliminati.has(`survey_seniorliving:${r.id}`)).map(r => ({ note: r.Note, struttura: r.struttura })),
+            ...(psi.data ?? []).filter(r => !eliminati.has(`survey_centri_psichiatria:${r.id}`)).map(r => ({ note: r.note, struttura: r.struttura })),
           ].filter(r => r.note?.trim());
         }
       }

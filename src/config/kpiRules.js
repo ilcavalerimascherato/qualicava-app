@@ -67,7 +67,7 @@ export const KPI_RULES = [
   { indicatore: 'numero segnalazioni per reclami chiuse nel mese', settore: SETTORI.ISPEZIONI, calcolo: '[NUMERO SEGNALAZIONI PER RECLAMI CHIUSE NEL MESE]', kpi_target: 'Reclami Chiusi', target_verde: 1, target_rosso: 0.9, direzione: 'MAX' },
   { indicatore: 'Numero totale dipendenti soggetti a formazione sicurezza', settore: SETTORI.NUMERI, calcolo: '[NUMERO TOTALE DIPENDENTI SOGGETTI A FORMAZIONE SICUREZZA]', kpi_target: 'Lavoratori', target_verde: null, target_rosso: null, direzione: null },
   { indicatore: 'Numero dipendenti con formazione sicurezza valida', settore: SETTORI.COMPLIANCE, calcolo: '[NUMERO DIPENDENTI CON FORMAZIONE SICUREZZA VALIDA] / [NUMERO TOTALE DIPENDENTI SOGGETTI A FORMAZIONE SICUREZZA]', kpi_target: 'Form. Sicurezza', target_verde: 0.95, target_rosso: 0.9, direzione: 'MAX' },
-  { indicatore: 'Numero totale dipendenti soggetti a formazione HACCP', settore: SETTORI.NUMERI, calcolo: '[NUMERO TOTALE DIPENDENTI SOGGETTI A FORMAZIONE HACCP]', kpi_target: 'Addetti Cucina', target_verde: null, target_rosso: null, direzione: null },
+  { indicatore: 'Numero totale dipendenti soggetti a formazione HACCP', settore: SETTORI.NUMERI, calcolo: '[NUMERO TOTALE DIPENDENTI SOGGETTI A FORMAZIONE HACCP]', kpi_target: 'Addetti Cucina', display_label: 'Addetti HACCP', target_verde: null, target_rosso: null, direzione: null },
   { indicatore: 'Numero dipendenti con formazione HACCP valida', settore: SETTORI.COMPLIANCE, calcolo: '[NUMERO DIPENDENTI CON FORMAZIONE HACCP VALIDA] / [NUMERO TOTALE DIPENDENTI SOGGETTI A FORMAZIONE HACCP]', kpi_target: 'Form. HACCP', target_verde: 0.95, target_rosso: 0.9, direzione: 'MAX' },
   { indicatore: 'numero incident reporting interni e near miss', settore: SETTORI.NUMERI, calcolo: '[NUMERO INCIDENT REPORTING INTERNI E NEAR MISS]', kpi_target: 'IR e Near Miss', target_verde: 0.01, target_rosso: 0.1, direzione: 'MIN' },
   { indicatore: 'numero audit interni ricevuti (giornate) da Sede', settore: SETTORI.ISPEZIONI, calcolo: '[NUMERO AUDIT INTERNI RICEVUTI (GIORNATE) DA SEDE]', kpi_target: 'Audit Interni', target_verde: null, target_rosso: null, direzione: null },
@@ -93,6 +93,13 @@ export const getKpisBySettore = (settore) => KPI_RULES_BY_SETTORE[settore] ?? []
 
 /** Cerca una regola per kpi_target */
 export const getKpiByTarget = (target) => KPI_BY_TARGET.get(target) ?? null;
+
+/**
+ * Etichetta da mostrare in UI per una regola KPI.
+ * Usa `display_label` se presente (override testuale senza toccare `kpi_target`,
+ * che resta l'identificatore usato per matching/lookup/dataKey), altrimenti `kpi_target`.
+ */
+export const getKpiLabel = (rule) => rule?.display_label || rule?.kpi_target || '';
 
 /**
  * Calcola lo stato semaforo di un KPI dato il suo valore.

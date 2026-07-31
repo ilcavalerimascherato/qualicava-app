@@ -14,7 +14,7 @@ import {
   Layers, Building2, BarChart2, Calendar, TrendingUp
 } from 'lucide-react';
 import { buildPromptGlobaleBoard, buildPromptKpiMensile, buildPromptKpiPeriodo } from '../config/aiPrompts';
-import { KPI_RULES, getKpiStatus }  from '../config/kpiRules';
+import { KPI_RULES, getKpiStatus, getKpiLabel }  from '../config/kpiRules';
 import { evaluateKpiFormula }       from '../utils/kpiFormulaEngine';
 import { MONTHS }                   from '../config/constants';
 import { exportPDF }                from '../utils/pdfExport';
@@ -416,7 +416,7 @@ export default function GlobalReportModal({
               {kpiMode === 'month'
                 ? kpiAggregated.map((r, i) => (
                     <tr key={i} style={{ borderBottom:'1px solid #f1f5f9' }}>
-                      <td style={{ padding:'5px 8px', color:'#334155', fontWeight:'600' }}>{r.rule.kpi_target}</td>
+                      <td style={{ padding:'5px 8px', color:'#334155', fontWeight:'600' }}>{getKpiLabel(r.rule)}</td>
                       <td style={{ textAlign:'center', padding:'5px 8px', fontWeight:'900', color: TRAFFIC_COLOR[r.aggStatus] }}>{r.avg ?? '—'}{r.entries[0]?.unit || ''}</td>
                       <td style={{ textAlign:'center', padding:'5px 8px' }}>
                         <span style={{ backgroundColor: TRAFFIC_COLOR[r.aggStatus] + '22', color: TRAFFIC_COLOR[r.aggStatus], padding:'2px 8px', borderRadius:'4px', fontWeight:'900', fontSize:'9px' }}>{STATUS_LABEL[r.aggStatus]}</span>
@@ -426,7 +426,7 @@ export default function GlobalReportModal({
                   ))
                 : kpiAggregated.map((r, i) => (
                     <tr key={i} style={{ borderBottom:'1px solid #f1f5f9' }}>
-                      <td style={{ padding:'5px 8px', color:'#334155', fontWeight:'600' }}>{r.rule.kpi_target}</td>
+                      <td style={{ padding:'5px 8px', color:'#334155', fontWeight:'600' }}>{getKpiLabel(r.rule)}</td>
                       <td style={{ padding:'5px 8px', color:'#64748b', fontSize:'9px' }}>{r.trend.map(t => `${t.label}:${t.avg}`).join(' · ')}</td>
                       <td style={{ textAlign:'center', padding:'5px 8px', fontWeight:'900', color: r.delta >= 0 ? '#22c55e' : '#ef4444' }}>
                         {r.delta >= 0 ? '+' : ''}{r.delta?.toFixed(1)}
@@ -699,7 +699,7 @@ export default function GlobalReportModal({
                           const hasData = r.entries.length > 0;
                           return (
                           <tr key={i} className={`transition-colors ${hasData ? 'hover:bg-slate-50' : 'opacity-40'}`}>
-                            <td className="px-4 py-2 font-bold text-slate-800 text-xs">{r.rule.kpi_target}</td>
+                            <td className="px-4 py-2 font-bold text-slate-800 text-xs">{getKpiLabel(r.rule)}</td>
                             <td className="px-4 py-2 text-xs text-slate-400 font-bold uppercase">{r.rule.settore}</td>
                             <td className="px-4 py-2 text-center font-black text-sm" style={{ color: hasData ? TRAFFIC_COLOR[r.aggStatus] : '#94a3b8' }}>
                               {hasData && r.avg !== null ? `${r.avg}${r.entries[0]?.unit || ''}` : '—'}
@@ -742,7 +742,7 @@ export default function GlobalReportModal({
                       <tbody className="divide-y divide-slate-50">
                         {kpiAggregated.map((r, i) => (
                           <tr key={i} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-4 py-2.5 font-bold text-slate-800 text-xs sticky left-0 bg-white">{r.rule.kpi_target}</td>
+                            <td className="px-4 py-2.5 font-bold text-slate-800 text-xs sticky left-0 bg-white">{getKpiLabel(r.rule)}</td>
                             {periodMonths.map(({ year, month }) => {
                               const t = r.trend.find(tr => tr.label === `${MONTHS.find(m => m.id === month)?.short}/${String(year).slice(2)}`);
                               return (

@@ -3,6 +3,7 @@
 // Props: { facility, surveys, year, fBadge, cdgRecords, kpiRecords, onTabChange }
 
 import { useState, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Save, Loader2 } from 'lucide-react';
 import { supabase }         from '../supabaseClient';
 import { calcFacilityRiskScore, RISK_BADGE } from '../utils/riskScoreEngine';
@@ -279,11 +280,8 @@ function SurveyNcCard({ facility, surveys, fBadge, onTabChange }) {
   );
 }
 
-// ── Contatti card (con editing inline) ───────────────────────
-function ContattiCard({ facility: f }) {
-  const [editing, setEditing] = useState(false);
-  const [saving,  setSaving]  = useState(false);
-  const [form,    setForm]    = useState({
+function buildContattiForm(f) {
+  return {
     director:                  f.director                      || '',
     email_direzione:           f.email_direzione               || '',
     director_sanitario:        f.director_sanitario            || '',
@@ -292,7 +290,25 @@ function ContattiCard({ facility: f }) {
     email_referente_struttura: f.email_referente_struttura     || '',
     referent:                  f.referent                      || '',
     email_qualita:             f.email_qualita                 || '',
-  });
+  };
+}
+
+// ── Contatti card (con editing inline) ───────────────────────
+function ContattiCard({ facility: f }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [form,    setForm]    = useState(() => buildContattiForm(f));
+
+  // Riallinea il form quando i dati della struttura vengono rifetchati
+  // (dopo un salvataggio o un aggiornamento esterno), ma non mentre l'utente sta editando.
+  useEffect(() => {
+    if (!editing) setForm(buildContattiForm(f));
+  }, [
+    editing,
+    f.id, f.director, f.email_direzione, f.director_sanitario, f.email_sanitario,
+    f.referente_struttura, f.email_referente_struttura, f.referent, f.email_qualita,
+  ]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -308,6 +324,10 @@ function ContattiCard({ facility: f }) {
         email_qualita:             form.email_qualita             || null,
       }).eq('id', f.id);
       if (error) throw error;
+      // Aggiornamento ottimistico: il form (già coi valori salvati) resta la fonte
+      // di display finché il refetch qui sotto non porta dati freschi dal server.
+      queryClient.invalidateQueries({ queryKey: ['facilities'] });
+      queryClient.invalidateQueries({ queryKey: ['director', 'facilities'] });
       setEditing(false);
     } catch (err) {
       alert('Errore salvataggio: ' + err.message);
@@ -321,7 +341,10 @@ function ContattiCard({ facility: f }) {
       <div className="flex items-center justify-between px-4 pt-4 pb-3">
         <p className="text-[12px] font-medium text-gray-400 uppercase tracking-wider">Riferimenti struttura</p>
         <button
-          onClick={() => setEditing(e => !e)}
+          onClick={() => {
+            if (editing) setForm(buildContattiForm(f)); // annulla: scarta le modifiche non salvate
+            setEditing(e => !e);
+          }}
           className={`text-base font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors ${
             editing ? 'bg-slate-200 text-slate-600' : 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100'
           }`}
@@ -332,8 +355,8 @@ function ContattiCard({ facility: f }) {
 
       <div className="divide-y divide-slate-50">
         {ORG_CONFIG.map(({ key, emailKey, label, icon }) => {
-          const nome  = f[key];
-          const email = f[emailKey];
+          const nome  = form[key];
+          const email = form[emailKey];
 
           return (
             <div key={key} className="px-4 py-3">

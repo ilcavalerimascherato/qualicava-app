@@ -14,6 +14,7 @@ export default function CampagneSurveyModal({ isOpen, onClose }) {
   const [loading, setLoading]     = useState(true);
   const [showForm, setShowForm]   = useState(false);
   const [saving, setSaving]       = useState(false);
+  const [unresolvedCampagne, setUnresolvedCampagne] = useState(new Set());
   const [form, setForm] = useState({
     nome: '', survey_type: 'client',
     data_inizio: '', data_fine: '', note: ''
@@ -25,6 +26,14 @@ export default function CampagneSurveyModal({ isOpen, onClose }) {
       .select('*')
       .order('data_inizio', { ascending: false })
       .then(({ data }) => { setCampagne(data ?? []); setLoading(false); });
+
+    // Gruppi di duplicati ancora da verificare — bloccano la chiusura campagna
+    supabase.from('survey_duplicati')
+      .select('campagna_id')
+      .eq('stato', 'da_verificare')
+      .then(({ data }) => {
+        setUnresolvedCampagne(new Set((data ?? []).map(r => r.campagna_id)));
+      });
   }, [isOpen]);
 
   const handleSave = async () => {
@@ -156,12 +165,21 @@ export default function CampagneSurveyModal({ isOpen, onClose }) {
                     </div>
                     <div className="flex gap-1 shrink-0">
                       {c.stato === 'aperta' && (
-                        <button
-                          onClick={() => handleStato(c.id, 'chiusa')}
-                          className="flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-                        >
-                          <Lock size={10} /> Chiudi
-                        </button>
+                        unresolvedCampagne.has(c.id) ? (
+                          <span
+                            title="Esistono gruppi di duplicati da verificare per questa campagna"
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-lg border border-amber-200 text-amber-600 bg-amber-50 cursor-not-allowed"
+                          >
+                            Duplicati da verificare
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleStato(c.id, 'chiusa')}
+                            className="flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                          >
+                            <Lock size={10} /> Chiudi
+                          </button>
+                        )
                       )}
                       {c.stato === 'chiusa' && (
                         <button

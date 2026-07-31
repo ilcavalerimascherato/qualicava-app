@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { X, ChevronLeft, ActivitySquare } from 'lucide-react';
 import { LineChart, Line, YAxis, ResponsiveContainer, Tooltip, ReferenceArea } from 'recharts';
-import { KPI_RULES, isNumericSettore } from '../config/kpiRules';
+import { KPI_RULES, isNumericSettore, getKpiLabel } from '../config/kpiRules';
 import { computeKpiValue } from '../utils/kpiFormulaEngine';
 import { getTimeHorizon } from '../utils/kpiTimeHorizon';
 
@@ -54,7 +54,7 @@ export default function KpiXrayModal({ isOpen, onClose, onBack = null, facilitie
       return (
         <div key={rule.kpi_target} className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col h-32 opacity-60">
           <div className="flex justify-between items-start mb-2">
-            <h4 className="text-[11px] font-black text-slate-700 uppercase leading-tight line-clamp-2">{rule.kpi_target}</h4>
+            <h4 className="text-[11px] font-black text-slate-700 uppercase leading-tight line-clamp-2">{getKpiLabel(rule)}</h4>
             <span className="text-[8px] font-black px-2 py-0.5 bg-slate-200 text-slate-500 rounded uppercase tracking-widest">{rule.settore}</span>
           </div>
           <div className="flex-1 flex items-center justify-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nessun Dato</div>
@@ -69,7 +69,7 @@ export default function KpiXrayModal({ isOpen, onClose, onBack = null, facilitie
     return (
       <div key={rule.kpi_target} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col h-32 shadow-sm hover:shadow-md transition-shadow relative group">
         <div className="flex justify-between items-start mb-2 z-10">
-          <h4 className="text-[11px] font-black text-slate-800 uppercase leading-tight line-clamp-2 pr-2" title={rule.indicatore}>{rule.kpi_target}</h4>
+          <h4 className="text-[11px] font-black text-slate-800 uppercase leading-tight line-clamp-2 pr-2" title={rule.indicatore}>{getKpiLabel(rule)}</h4>
           <span className="text-[8px] font-black px-2 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded uppercase tracking-widest shrink-0">{rule.settore}</span>
         </div>
 
