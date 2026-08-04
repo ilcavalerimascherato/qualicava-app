@@ -302,8 +302,12 @@ function ContattiCard({ facility: f }) {
 
   // Riallinea il form quando i dati della struttura vengono rifetchati
   // (dopo un salvataggio o un aggiornamento esterno), ma non mentre l'utente sta editando.
+  // Deps elencano deliberatamente i singoli campi (non f) per non
+  // ri-eseguire l'effetto quando f cambia identità ma questi campi
+  // restano invariati.
   useEffect(() => {
     if (!editing) setForm(buildContattiForm(f));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     editing,
     f.id, f.director, f.email_direzione, f.director_sanitario, f.email_sanitario,
