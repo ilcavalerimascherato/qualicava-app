@@ -1,14 +1,16 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Users, Briefcase, Building2 } from 'lucide-react';
+// src/components/SurveyPersonalizzato.jsx
+// Contenuto della modalità periodo "Personalizzato" della pagina Survey unificata:
+// selettore anno/mese su v_survey_data_normalized, barre (senza confronto UDO,
+// che ha senso solo sui dati di campagna) + distribuzione risposte per domanda,
+// pulsanti Report Direzione / Restituzione (senza Genera Word, che è specifico
+// della modalità campagna).
+import { useState, useMemo, useEffect } from 'react';
+import { BarreMinMax } from './AnalisiCampagnaPanel';
+import DistribuzioneRisposte from './DistribuzioneRisposte';
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
   'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
-];
-
-const TYPES_CFG = [
-  { type: 'client',   label: 'Clienti / Ospiti',  desc: 'Questionari di gradimento',    icon: Users     },
-  { type: 'operator', label: 'Staff / Operatori',  desc: 'Questionari di clima interno', icon: Briefcase },
 ];
 
 function StatusBadge({ status }) {
@@ -59,32 +61,55 @@ function shiftMonthBack(year, month) {
     : { year, month: String(m - 1).padStart(2, '0') };
 }
 
-export default function SurveysTab({ facility, surveys, onDataClick, onRestituzioneClick }) {
-  const [activeType,    setActiveType]    = useState('client');
+// Aggrega client-side avg/min/max per domanda dal responses_json del periodo
+// selezionato — v_survey_data_normalized non pre-aggrega come v_survey_campagne,
+// quindi qui rifacciamo in JS quello che per le campagne fa già facility_scores
+// lato SQL. Nessuna nuova query: stesso responses_json già caricato.
+function buildScores(responsesJson) {
+  if (!Array.isArray(responsesJson) || responsesJson.length === 0) return null;
+
+  const acc = {};
+  responsesJson.forEach(r => {
+    if (!r || typeof r !== 'object') return;
+    Object.entries(r).forEach(([k, v]) => {
+      if (typeof v !== 'number') return;
+      (acc[k] ??= []).push(v);
+    });
+  });
+
+  if (Object.keys(acc).length === 0) return null;
+
+  const avgScores = {}, minScores = {}, maxScores = {};
+  Object.entries(acc).forEach(([k, vals]) => {
+    avgScores[k] = Math.round(vals.reduce((s, v) => s + v, 0) / vals.length);
+    minScores[k] = Math.min(...vals);
+    maxScores[k] = Math.max(...vals);
+  });
+  return { avgScores, minScores, maxScores };
+}
+
+export default function SurveyPersonalizzato({ facility, surveys, surveyType, onDataClick, onRestituzioneClick }) {
   const [selectedYear,  setSelectedYear]  = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
 
-  // Surveys for the active type, sorted descending
   const typeSurveys = useMemo(
     () => surveys
-      .filter(s => s.type === activeType)
+      .filter(s => s.type === surveyType)
       .sort((a, b) => b.calendar_id.localeCompare(a.calendar_id)),
-    [surveys, activeType]
+    [surveys, surveyType]
   );
 
-  // Available years derived from data
   const years = useMemo(() => {
     const set = new Set(typeSurveys.map(s => s.calendar_id.slice(0, 4)));
     return [...set].sort((a, b) => b.localeCompare(a));
   }, [typeSurveys]);
 
-  // Reset selection when type changes
   useEffect(() => {
     setSelectedYear(years[0] ?? '');
     setSelectedMonth('');
-  }, [activeType]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surveyType]);
 
-  // Available months for the selected year
   const months = useMemo(() => {
     if (!selectedYear) return [];
     const set = new Set(
@@ -95,7 +120,6 @@ export default function SurveysTab({ facility, surveys, onDataClick, onRestituzi
     return [...set].sort((a, b) => b.localeCompare(a));
   }, [typeSurveys, selectedYear]);
 
-  // Survey matching the current selection
   const selectedSurvey = useMemo(() => {
     if (!selectedYear) return typeSurveys[0] ?? null;
     if (selectedMonth) return typeSurveys.find(s => s.calendar_id === `${selectedYear}-${selectedMonth}`) ?? null;
@@ -108,12 +132,9 @@ export default function SurveysTab({ facility, surveys, onDataClick, onRestituzi
     : 'empty';
 
   const summaryStats  = selectedSurvey?.summary_stats ?? {};
-  const isCompanyWide = summaryStats.is_company_wide ?? false;
-  const nomeSurvey    = summaryStats.nome_survey ?? '';
   const periodCount   = summaryStats.total_responses ?? 0;
   const historicCount = typeSurveys.length;
 
-  // Previous month stats (only when a specific month is selected)
   const prevPeriod = useMemo(() => {
     if (!selectedYear || !selectedMonth) return null;
     const { year: py, month: pm } = shiftMonthBack(selectedYear, selectedMonth);
@@ -128,59 +149,20 @@ export default function SurveysTab({ facility, surveys, onDataClick, onRestituzi
     ? periodCount - prevPeriod.count
     : null;
 
-  const handleClick = () => {
-    onDataClick(activeType, {
-      year:  selectedYear  || undefined,
-      month: selectedMonth || undefined,
-    });
-  };
+  const scores = useMemo(() => buildScores(selectedSurvey?.responses_json), [selectedSurvey]);
 
-  const handleRestituzioneClick = () => {
-    onRestituzioneClick?.(activeType, {
-      year:  selectedYear  || undefined,
-      month: selectedMonth || undefined,
-    });
-  };
+  const periodo = { year: selectedYear || undefined, month: selectedMonth || undefined };
+  const handleDataClick         = () => onDataClick?.(surveyType, periodo);
+  const handleRestituzioneClick = () => onRestituzioneClick?.(surveyType, periodo);
 
   return (
     <div className="space-y-6">
-      <h2 className="font-black text-slate-800 text-lg">Gestione Survey</h2>
-
-      {/* Type switcher */}
-      <div className="flex gap-2 flex-wrap">
-        {TYPES_CFG.map(({ type, label, icon: Icon }) => (
-          <button
-            key={type}
-            onClick={() => setActiveType(type)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
-              activeType === type
-                ? 'bg-indigo-600 text-white shadow'
-                : 'bg-white border border-slate-200 text-slate-600 hover:border-indigo-300'
-            }`}
-          >
-            <Icon size={14} />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Company-wide banner */}
-      {isCompanyWide && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-center gap-3">
-          <Building2 size={16} className="text-indigo-600 shrink-0" />
-          <p className="text-sm font-semibold text-indigo-700">
-            Dati societari – survey aggregata a livello di gruppo
-            {nomeSurvey ? ` · ${nomeSurvey}` : ''}
-          </p>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
 
-        {/* Main card */}
+        {/* Card principale */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6">
 
-          {/* Period selectors */}
+          {/* Selettori periodo */}
           <div className="flex flex-wrap gap-4 mb-6">
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Anno</label>
@@ -209,12 +191,11 @@ export default function SurveysTab({ facility, surveys, onDataClick, onRestituzi
             </div>
           </div>
 
-          {/* Status + CTA */}
           {typeSurveys.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-slate-400 font-medium mb-4">Nessuna survey disponibile</p>
               <button
-                onClick={handleClick}
+                onClick={handleDataClick}
                 className="bg-indigo-600 text-white font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-indigo-700 transition-colors"
               >
                 Carica dati →
@@ -225,14 +206,14 @@ export default function SurveysTab({ facility, surveys, onDataClick, onRestituzi
               <div className="flex items-start justify-between mb-5">
                 <div>
                   <p className="text-xs text-slate-400 font-medium mb-0.5">Ultima elaborazione</p>
-                  <p className="font-black text-slate-800 text-lg">{latest.calendar_id}</p>
-                  {nomeSurvey && <p className="text-xs text-slate-500 mt-0.5">{nomeSurvey}</p>}
+                  <p className="font-black text-slate-800 text-lg">{formatCalendar(latest.calendar_id)}</p>
+                  {summaryStats.nome_survey && <p className="text-xs text-slate-500 mt-0.5">{summaryStats.nome_survey}</p>}
                 </div>
                 <StatusBadge status={status} />
               </div>
               {status === 'empty' ? (
                 <button
-                  onClick={handleClick}
+                  onClick={handleDataClick}
                   className="w-full bg-indigo-600 text-white font-bold text-sm py-3 rounded-xl hover:bg-indigo-700 transition-colors"
                 >
                   Carica dati →
@@ -240,7 +221,7 @@ export default function SurveysTab({ facility, surveys, onDataClick, onRestituzi
               ) : (
                 <div className="flex gap-2">
                   <button
-                    onClick={handleClick}
+                    onClick={handleDataClick}
                     className="flex-1 text-sm font-bold py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                   >
                     📊 Report Direzione
@@ -257,7 +238,7 @@ export default function SurveysTab({ facility, surveys, onDataClick, onRestituzi
           )}
         </div>
 
-        {/* Sidebar stats */}
+        {/* Sidebar statistiche */}
         <div className="flex flex-col gap-3">
           <StatCard
             label="Totale storico"
@@ -288,6 +269,17 @@ export default function SurveysTab({ facility, surveys, onDataClick, onRestituzi
           )}
         </div>
       </div>
+
+      {scores && (
+        <>
+          <BarreMinMax
+            avgScores={scores.avgScores}
+            minScores={scores.minScores}
+            maxScores={scores.maxScores}
+          />
+          <DistribuzioneRisposte responsesJson={selectedSurvey?.responses_json} />
+        </>
+      )}
     </div>
   );
 }

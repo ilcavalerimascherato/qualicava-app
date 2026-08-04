@@ -9,6 +9,9 @@ import {
   DoughnutController, ArcElement,
   Tooltip as ChartTooltip, Legend as ChartLegend,
 } from 'chart.js';
+import { LABEL_MAP } from '../config/surveyLabels';
+import { semaforoColor } from '../utils/surveyColors';
+import DistribuzioneRisposte from './DistribuzioneRisposte';
 
 Chart.register(
   RadarController, RadialLinearScale, PointElement, LineElement, Filler,
@@ -16,45 +19,6 @@ Chart.register(
   DoughnutController, ArcElement,
   ChartTooltip, ChartLegend,
 );
-
-// Label leggibili per ogni chiave normalizzata
-const LABEL_MAP = {
-  soddisfazione_generale:    'Soddisfazione generale',
-  nps_consiglio:             'Propensione raccomandazione',
-  info_ingresso:             'Accoglienza ingresso',
-  info_prenotazione:         'Informazioni prenotazione',
-  voto_assistenza:           'Personale assistenza',
-  rispetto_dignita:          'Riservatezza e dignità',
-  assistenza_medica:         'Assistenza medica',
-  assistenza_notturna:       'Assistenza infermieristica',
-  soddisfazione_pulizia:     'Igiene e pulizia',
-  voto_animazione:           'Attività ricreative',
-  soddisfazione_servizi:     'Servizi offerti',
-  fisioterapia:              'Fisioterapia',
-  voto_alloggio:             'Comfort alloggio',
-  voto_ristorazione_qualita: 'Qualità ristorazione',
-  soddisfazione_tempo:       'Tempo dedicato',
-  voto_pulizie:              'Personale pulizie',
-  voto_bagno:                'Bagno',
-  voto_spazio_esterno:       'Spazio esterno',
-  info_cura:                 'Informazioni cura',
-  ascolto:                   'Modo in cui viene ascoltato',
-  contatto_struttura:        'Facilità contatto',
-  relazione_equipe:          'Relazione con equipe',
-  cura_bisogni:              'Bisogni presi in considerazione',
-  appagamento_vita:          'Appagamento vita quotidiana',
-  coinvolgimento_cure:       'Coinvolgimento nelle cure',
-  assistenza_diurna:         'Assistenza diurna',
-  // operator
-  sicurezza_ambiente:        'Ambiente di lavoro',
-  riconoscimento:            'Riconoscimento lavoro',
-  supporto_leadership:       'Supporto responsabile',
-  etica_assistenza:          'Etica e rispetto ospiti',
-  chiarezza_ruolo:           'Chiarezza ruolo',
-  qualita_tecnica:           'Qualità cure erogate',
-  reputazione_lavoro:        'Consiglieresti come posto di lavoro',
-  reputazione_servizio:      'Consiglieresti per assistenza',
-};
 
 // Categorie per il radar
 const CATEGORIE_CLIENT = {
@@ -71,13 +35,6 @@ const CATEGORIE_OPERATOR = {
   organizzazione: ['chiarezza_ruolo', 'qualita_tecnica', 'etica_assistenza'],
   reputazione:  ['reputazione_lavoro', 'reputazione_servizio', 'soddisfazione_generale'],
 };
-
-function semaforoColor(val) {
-  if (val >= 80) return '#0ca30c';
-  if (val >= 75) return '#2a78d6';
-  if (val >= 70) return '#eda100';
-  return '#e34948';
-}
 
 // Genera radar come immagine per il documento Word
 async function generaRadarBase64(avgScores, udoAvgScores, surveyType) {
@@ -290,7 +247,7 @@ function RadarCategorie({ avgScores, udoAvgScores, surveyType }) {
   );
 }
 
-function BarreMinMax({ avgScores, minScores, maxScores, udoAvgScores }) {
+export function BarreMinMax({ avgScores, minScores, maxScores, udoAvgScores }) {
   if (!avgScores) return null;
   const entries = Object.entries(avgScores)
     .filter(([k]) => k !== 'nps_consiglio')
@@ -386,10 +343,9 @@ async function fetchEliminatiSet(tabelle) {
   return new Set((data ?? []).map(d => `${d.tabella_origine}:${d.riga_id}`));
 }
 
-export default function AnalisiCampagnaPanel({ facility }) {
+export default function AnalisiCampagnaPanel({ facility, surveyType, surveys = [], onDataClick, onRestituzioneClick }) {
   const { data: campagne = [], isLoading } = useSurveyCampagne(facility?.id, facility?.company_id);
   const [selectedId, setSelectedId] = useState(null);
-  const [surveyType, setSurveyType] = useState('client');
 
   const campagneFiltrate = useMemo(
     () => campagne.filter(c => c.survey_type === surveyType),
@@ -406,6 +362,25 @@ export default function AnalisiCampagnaPanel({ facility }) {
     const vals = Object.values(selected.avg_scores).filter(v => v != null);
     return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
   }, [selected]);
+
+  // Periodo da passare a Report Direzione/Restituzione (che lavorano su anno+mese,
+  // non su un range campagna): l'ultimo calendar_id con dati reali dentro il
+  // range della campagna. Se non c'è nessun mese con dati processati nel range
+  // (campagna appena chiusa, dati non ancora elaborati), fallback difensivo sul
+  // mese di chiusura campagna — non deve mai passare undefined ai modal.
+  const restituzionePeriod = useMemo(() => {
+    if (!selected) return {};
+    const inRange = surveys
+      .filter(s => s.type === selected.survey_type)
+      .filter(s =>
+        s.calendar_id >= selected.data_inizio.slice(0, 7) &&
+        s.calendar_id <= selected.data_fine.slice(0, 7)
+      )
+      .sort((a, b) => b.calendar_id.localeCompare(a.calendar_id));
+
+    const [year, month] = (inRange[0]?.calendar_id ?? selected.data_fine.slice(0, 7)).split('-');
+    return { year, month };
+  }, [selected, surveys]);
 
   const [commenti, setCommenti]   = useState(null);
   const [suntoCommenti, setSuntoCommenti] = useState('');
@@ -644,19 +619,6 @@ Rispondi in italiano, tono professionale.`;
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex gap-2">
-          {['client', 'operator'].map(t => (
-            <button key={t} onClick={() => setSurveyType(t)}
-              className={`text-xs font-bold px-4 py-2 rounded-xl transition-all ${
-                surveyType === t
-                  ? 'bg-indigo-600 text-white shadow'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:border-indigo-300'
-              }`}>
-              {t === 'client' ? '👥 Clienti / Ospiti' : '💼 Staff / Operatori'}
-            </button>
-          ))}
-        </div>
-
         <select
           value={selected?.campagna_id ?? ''}
           onChange={e => setSelectedId(e.target.value)}
@@ -670,13 +632,27 @@ Rispondi in italiano, tono professionale.`;
         </select>
 
         {selected && (
-          <button
-            onClick={generaDocumenti}
-            disabled={docGenerating}
-            className="flex items-center gap-2 text-xs font-bold bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-          >
-            {docGenerating ? 'Generazione...' : '📄 Genera documenti Word'}
-          </button>
+          <>
+            <button
+              onClick={() => onDataClick?.(selected.survey_type, restituzionePeriod)}
+              className="flex items-center gap-2 text-xs font-bold bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors"
+            >
+              📊 Report Direzione
+            </button>
+            <button
+              onClick={() => onRestituzioneClick?.(selected.survey_type, restituzionePeriod)}
+              className="flex items-center gap-2 text-xs font-bold bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl hover:border-gray-400 transition-colors"
+            >
+              👥 Restituzione
+            </button>
+            <button
+              onClick={generaDocumenti}
+              disabled={docGenerating}
+              className="flex items-center gap-2 text-xs font-bold bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              {docGenerating ? 'Generazione...' : '📄 Genera documenti Word'}
+            </button>
+          </>
         )}
 
         {selected && (
@@ -710,6 +686,8 @@ Rispondi in italiano, tono professionale.`;
             maxScores={selected.max_scores}
             udoAvgScores={selected.udo_avg_scores}
           />
+
+          <DistribuzioneRisposte responsesJson={selected.responses_json} excludeKeys={['nps_consiglio']} />
 
           {showCommenti && (
             <div className="bg-white rounded-2xl border border-slate-200 p-5">

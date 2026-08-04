@@ -3,8 +3,8 @@
 -- presenti nelle 5 tabelle raw ha rilevato che diverse colonne di survey_seniorliving
 -- usano diciture diverse da quelle attese, causando NULL silenziosi (fino al 90% delle
 -- righe su soddisfazione_pulizia, 100% su informazioni_prenotazione/informazioni_ingresso).
--- Le altre 4 tabelle raw (survey_rsa, survey_centri_disabilita, survey_centri_psichiatria,
--- survey_personale) sono state verificate e NON necessitano modifiche.
+-- Le altre 3 tabelle raw (survey_rsa, survey_personale) sono state verificate e NON
+-- necessitano modifiche.
 --
 -- Valori confermati (nessuna altra domanda necessaria):
 --  - soddisfazione_complessiva:            + Insufficiente=25, Scarso=0
@@ -20,11 +20,25 @@
 --  - consiglio_struttura (nps_consiglio):  scala ricostruita a 6 livelli
 --                                           Certamente=100, Si/Sì=80, Gliene parlo=60,
 --                                           Forse=40, Probabilmente no=20, No=0
+--
+-- survey_centri_psichiatria: le 13 domande a scelta testuale usano nel form l'etichetta
+-- "Sufficiente" e non "Abbastanza soddisfatto" come previsto dal CASE originale, causando
+-- NULL silenziosi tra l'8% e il 20% delle risposte su ciascuna domanda (342 risposte perse
+-- in totale nel campione verificato). Aggiunto WHEN 'Sufficiente' THEN 60 accanto a
+-- WHEN 'Abbastanza soddisfatto' THEN 60 in tutti e 13 i rami, in entrambe le viste
+-- (mantenuto anche il ramo 'Abbastanza soddisfatto' nel caso comparisse in futuro).
+--
+-- survey_centri_disabilita: rimossa la chiave voto_assistenza (fonte: risposte_cura_assistenza).
+-- Verificato su tutte le righe non-NULL della colonna (21/21): sono tutte testo libero
+-- (motivazioni a supporto di un'altra domanda), zero valori numerici validi. La domanda
+-- non è mai stata raccolta come voto in questa tabella, quindi la chiave va tolta invece
+-- di continuare a produrre un NULL costante.
 
 CREATE OR REPLACE VIEW v_survey_data_normalized AS
 WITH sl_righe AS (
   SELECT
     sfm.facility_id,
+    sl.id AS riga_id,
     sl.struttura AS nome_survey_originale,
     to_char(sl.created_at, 'YYYY-MM') AS calendar_id,
     EXTRACT(year FROM sl.created_at)::integer AS year,
@@ -178,6 +192,7 @@ WITH sl_righe AS (
 rsa_righe AS (
   SELECT
     sfm.facility_id,
+    r_1.id AS riga_id,
     r_1.struttura AS nome_survey_originale,
     to_char(r_1.created_at, 'YYYY-MM') AS calendar_id,
     EXTRACT(year FROM r_1.created_at)::integer AS year,
@@ -213,6 +228,7 @@ rsa_righe AS (
 dis_righe AS (
   SELECT
     sfm.facility_id,
+    d.id AS riga_id,
     d.struttura AS nome_survey_originale,
     to_char(d.created_at, 'YYYY-MM') AS calendar_id,
     EXTRACT(year FROM d.created_at)::integer AS year,
@@ -222,7 +238,6 @@ dis_righe AS (
       'ascolto', CASE WHEN d.soddisfazione_ascolto IS NOT NULL THEN (d.soddisfazione_ascolto * 10::numeric)::integer ELSE NULL::integer END,
       'contatto_struttura', CASE WHEN d.contatto_struttura IS NOT NULL THEN (d.contatto_struttura * 10::numeric)::integer ELSE NULL::integer END,
       'relazione_equipe', CASE WHEN d.equipe_sanitaria IS NOT NULL THEN (d.equipe_sanitaria * 10::numeric)::integer ELSE NULL::integer END,
-      'voto_assistenza', CASE WHEN d.risposte_cura_assistenza::text ~ '^[0-9]+(\.[0-9]+)?$' THEN (d.risposte_cura_assistenza::numeric * 10::numeric)::integer ELSE NULL::integer END,
       'voto_alloggio', CASE WHEN d.locali IS NOT NULL THEN (d.locali * 10::numeric)::integer ELSE NULL::integer END,
       'soddisfazione_pulizia', CASE WHEN d.pulizia_manutenzione IS NOT NULL THEN (d.pulizia_manutenzione * 10::numeric)::integer ELSE NULL::integer END,
       'voto_animazione', CASE WHEN d.attivita_proposte IS NOT NULL THEN (d.attivita_proposte * 10::numeric)::integer ELSE NULL::integer END,
@@ -245,23 +260,24 @@ dis_righe AS (
 psi_righe AS (
   SELECT
     sfm.facility_id,
+    p.id AS riga_id,
     p.struttura AS nome_survey_originale,
     to_char(p.created_at, 'YYYY-MM') AS calendar_id,
     EXTRACT(year FROM p.created_at)::integer AS year,
     jsonb_strip_nulls(jsonb_build_object(
-      'soddisfazione_generale', CASE p.servizi WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'info_ingresso', CASE p.soddisfazione_accoglienza WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'appagamento_vita', CASE p.appagamento_vita_quotidiana WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'info_cura', CASE p.spiegazioni_stato_salute WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'assistenza_diurna', CASE p.assistenza_diurna WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'assistenza_notturna', CASE p.assistenza_notturna WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'rispetto_dignita', CASE p.dignita_intimita WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'coinvolgimento_cure', CASE p.decisioni_salute WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'voto_animazione', CASE p.attivita_proposte WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'voto_alloggio', CASE p.comfort_abitazione WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'voto_spazio_esterno', CASE p.ambienti WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'soddisfazione_pulizia', CASE p.pulizia WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'voto_ristorazione_qualita', CASE p.servizio_ristorazione WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END
+      'soddisfazione_generale', CASE p.servizi WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'info_ingresso', CASE p.soddisfazione_accoglienza WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'appagamento_vita', CASE p.appagamento_vita_quotidiana WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'info_cura', CASE p.spiegazioni_stato_salute WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'assistenza_diurna', CASE p.assistenza_diurna WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'assistenza_notturna', CASE p.assistenza_notturna WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'rispetto_dignita', CASE p.dignita_intimita WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'coinvolgimento_cure', CASE p.decisioni_salute WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'voto_animazione', CASE p.attivita_proposte WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'voto_alloggio', CASE p.comfort_abitazione WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'voto_spazio_esterno', CASE p.ambienti WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'soddisfazione_pulizia', CASE p.pulizia WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'voto_ristorazione_qualita', CASE p.servizio_ristorazione WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END
     )) AS riga_json,
     p.created_at,
     'survey_centri_psichiatria' AS source_table,
@@ -279,6 +295,7 @@ psi_righe AS (
 per_righe AS (
   SELECT
     sfm.facility_id,
+    pp.id AS riga_id,
     pp.struttura AS nome_survey_originale,
     to_char(pp.created_at, 'YYYY-MM') AS calendar_id,
     EXTRACT(year FROM pp.created_at)::integer AS year,
@@ -315,18 +332,18 @@ per_righe AS (
     )
 ),
 tutte AS (
-  SELECT facility_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM sl_righe
+  SELECT facility_id, riga_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM sl_righe
   UNION ALL
-  SELECT facility_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM rsa_righe
+  SELECT facility_id, riga_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM rsa_righe
   UNION ALL
-  SELECT facility_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM dis_righe
+  SELECT facility_id, riga_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM dis_righe
   UNION ALL
-  SELECT facility_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM psi_righe
+  SELECT facility_id, riga_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM psi_righe
   UNION ALL
-  SELECT facility_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM per_righe
+  SELECT facility_id, riga_id, nome_survey_originale, calendar_id, year, riga_json, created_at, source_table, survey_type FROM per_righe
 ),
 conteggi_reali AS (
-  SELECT nome_survey_originale, calendar_id, source_table, count(*) AS risposte_reali
+  SELECT nome_survey_originale, calendar_id, source_table, count(DISTINCT riga_id) AS risposte_reali
   FROM tutte
   GROUP BY nome_survey_originale, calendar_id, source_table
 ),
@@ -565,7 +582,6 @@ WITH raw_righe AS (
       'voto_animazione', CASE WHEN d.attivita_proposte IS NOT NULL THEN (d.attivita_proposte * 10::numeric)::integer ELSE NULL::integer END,
       'voto_alloggio', CASE WHEN d.locali IS NOT NULL THEN (d.locali * 10::numeric)::integer ELSE NULL::integer END,
       'soddisfazione_pulizia', CASE WHEN d.pulizia_manutenzione IS NOT NULL THEN (d.pulizia_manutenzione * 10::numeric)::integer ELSE NULL::integer END,
-      'voto_assistenza', CASE WHEN d.risposte_cura_assistenza::text ~ '^[0-9]+(\.[0-9]+)?$' THEN (d.risposte_cura_assistenza::numeric * 10::numeric)::integer ELSE NULL::integer END,
       'info_cura', CASE WHEN d.progetto_cura IS NOT NULL THEN (d.progetto_cura * 10::numeric)::integer ELSE NULL::integer END,
       'ascolto', CASE WHEN d.soddisfazione_ascolto IS NOT NULL THEN (d.soddisfazione_ascolto * 10::numeric)::integer ELSE NULL::integer END,
       'contatto_struttura', CASE WHEN d.contatto_struttura IS NOT NULL THEN (d.contatto_struttura * 10::numeric)::integer ELSE NULL::integer END,
@@ -585,19 +601,19 @@ WITH raw_righe AS (
     p.created_at,
     'client'::text AS survey_type,
     jsonb_strip_nulls(jsonb_build_object(
-      'soddisfazione_generale', CASE p.servizi WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'info_ingresso', CASE p.soddisfazione_accoglienza WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'voto_animazione', CASE p.attivita_proposte WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'voto_alloggio', CASE p.comfort_abitazione WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'soddisfazione_pulizia', CASE p.pulizia WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'voto_ristorazione_qualita', CASE p.servizio_ristorazione WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'assistenza_diurna', CASE p.assistenza_diurna WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'assistenza_notturna', CASE p.assistenza_notturna WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'rispetto_dignita', CASE p.dignita_intimita WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'coinvolgimento_cure', CASE p.decisioni_salute WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'appagamento_vita', CASE p.appagamento_vita_quotidiana WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'info_cura', CASE p.spiegazioni_stato_salute WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
-      'voto_spazio_esterno', CASE p.ambienti WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END
+      'soddisfazione_generale', CASE p.servizi WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'info_ingresso', CASE p.soddisfazione_accoglienza WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'voto_animazione', CASE p.attivita_proposte WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'voto_alloggio', CASE p.comfort_abitazione WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'soddisfazione_pulizia', CASE p.pulizia WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'voto_ristorazione_qualita', CASE p.servizio_ristorazione WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'assistenza_diurna', CASE p.assistenza_diurna WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'assistenza_notturna', CASE p.assistenza_notturna WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'rispetto_dignita', CASE p.dignita_intimita WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'coinvolgimento_cure', CASE p.decisioni_salute WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'appagamento_vita', CASE p.appagamento_vita_quotidiana WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'info_cura', CASE p.spiegazioni_stato_salute WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END,
+      'voto_spazio_esterno', CASE p.ambienti WHEN 'Molto soddisfatto' THEN 100 WHEN 'Soddisfatto' THEN 80 WHEN 'Abbastanza soddisfatto' THEN 60 WHEN 'Sufficiente' THEN 60 WHEN 'Poco soddisfatto' THEN 40 WHEN 'Insoddisfatto' THEN 20 ELSE NULL END
     )) AS riga_json
   FROM survey_centri_psichiatria p
   WHERE NOT EXISTS (

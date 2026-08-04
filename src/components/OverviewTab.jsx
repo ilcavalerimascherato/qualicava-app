@@ -232,7 +232,7 @@ function SurveyNcCard({ facility, surveys, fBadge, onTabChange }) {
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={surveyVariant(clientSurvey)}>{surveyLabel(clientSurvey)}</Badge>
-            <button onClick={() => onTabChange?.('analysis')} className="text-[12px] text-indigo-600">→</button>
+            <button onClick={() => onTabChange?.('survey')} className="text-[12px] text-indigo-600">→</button>
           </div>
         </div>
         <div className="flex items-center justify-between py-1.5">
