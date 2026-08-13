@@ -10,6 +10,7 @@ import { useDuplicatiCount }                     from '../hooks/useDuplicatiCoun
 import { udoService }                            from '../services/supabaseService';
 import AppHeader              from '../components/AppHeader';
 import UdoManagerModal        from '../components/UdoManagerModal';
+import SocietaModal           from '../components/SocietaModal';
 import UtentiRuoliModal       from '../components/UtentiRuoliModal';
 import SollecitiModal         from '../components/SollecitiModal';
 import MailingListModal       from '../components/MailingListModal';
@@ -140,11 +141,10 @@ export default function ImpostazioniPage() {
             />
             <SettingsCard
               icon={<Briefcase size={14} />}
-              iconBg="#EFF6FF" iconColor="#94A3B8"
+              iconBg="#EEF2FF" iconColor="#4F46E5"
               title="Società"
               subtitle="Gestione società e gruppi"
-              badge="Prossimamente"
-              disabled
+              onClick={() => setActiveModal('societa')}
             />
             <SettingsCard
               icon={<Users size={14} />}
@@ -231,6 +231,10 @@ export default function ImpostazioniPage() {
         udos={data.udos}
         onSave={handleUdoSave}
         onDelete={handleUdoDelete}
+      />
+      <SocietaModal
+        isOpen={activeModal === 'societa'}
+        onClose={closeModal}
       />
       <UtentiRuoliModal
         isOpen={activeModal === 'utenti'}

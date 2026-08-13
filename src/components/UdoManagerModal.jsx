@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2, Save, Edit2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import CompanyConfigTab from './CompanyConfigTab';
 
 export default function UdoManagerModal({ isOpen, onClose, udos, onSave, onDelete }) {
-  const [tab,       setTab]       = useState('udo');
   const [editingId, setEditingId] = useState(null);
   const [editData,  setEditData]  = useState({ name: '', color: '#4f46e5' });
   const [newName,   setNewName]   = useState('');
@@ -20,26 +18,9 @@ export default function UdoManagerModal({ isOpen, onClose, udos, onSave, onDelet
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden text-slate-900 flex flex-col"
         style={{ maxHeight: '85vh' }}
       >
-        {/* Header con tab */}
+        {/* Header */}
         <div className="px-6 py-4 border-b flex justify-between items-center bg-slate-50 shrink-0">
-          <div className="flex items-center gap-1">
-            {[
-              { key: 'udo',     label: 'UDO'     },
-              { key: 'societa', label: 'SOCIETÀ'  },
-            ].map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-colors ${
-                  tab === key
-                    ? 'bg-indigo-600 text-white shadow'
-                    : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <p className="px-4 py-2 text-xs font-black uppercase tracking-widest text-indigo-600">UDO</p>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X size={24} />
           </button>
@@ -47,77 +28,67 @@ export default function UdoManagerModal({ isOpen, onClose, udos, onSave, onDelet
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
-
-          {tab === 'udo' && (
-            <div className="p-6 space-y-6 overflow-y-auto h-full">
-              {/* Form Nuovo */}
-              <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
-                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Aggiungi Categoria</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text" value={newName}
-                    onChange={e => setNewName(e.target.value)}
-                    placeholder="Esempio: RSA"
-                    className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <input
-                    type="color" value={newColor}
-                    onChange={e => setNewColor(e.target.value)}
-                    className="w-10 h-10 border rounded-lg cursor-pointer p-1 bg-white"
-                  />
-                  <button
-                    onClick={() => { if (newName) { onSave({ name: newName, color: newColor }); setNewName(''); } }}
-                    className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 shadow-md"
-                  >
-                    <Plus size={20} />
-                  </button>
-                </div>
+          <div className="p-6 space-y-6 overflow-y-auto h-full">
+            {/* Form Nuovo */}
+            <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
+              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Aggiungi Categoria</p>
+              <div className="flex gap-2">
+                <input
+                  type="text" value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  placeholder="Esempio: RSA"
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <input
+                  type="color" value={newColor}
+                  onChange={e => setNewColor(e.target.value)}
+                  className="w-10 h-10 border rounded-lg cursor-pointer p-1 bg-white"
+                />
+                <button
+                  onClick={() => { if (newName) { onSave({ name: newName, color: newColor }); setNewName(''); } }}
+                  className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 shadow-md"
+                >
+                  <Plus size={20} />
+                </button>
               </div>
+            </div>
 
-              {/* Lista e Modifica */}
-              <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Categorie Esistenti</p>
-                {udos.map(u => (
-                  <div key={u.id} className="flex items-center justify-between p-3 border rounded-xl bg-white hover:border-indigo-200 transition-colors">
-                    {editingId === u.id ? (
-                      <div className="flex gap-2 w-full">
-                        <input
-                          type="text" value={editData.name}
-                          onChange={e => setEditData({ ...editData, name: e.target.value })}
-                          className="flex-1 border rounded px-2 py-1 text-sm outline-none"
-                        />
-                        <input
-                          type="color" value={editData.color}
-                          onChange={e => setEditData({ ...editData, color: e.target.value })}
-                          className="w-8 h-8 border rounded cursor-pointer"
-                        />
-                        <button onClick={() => { onSave({ id: u.id, ...editData }); setEditingId(null); }} className="text-emerald-500 p-1"><Save size={18} /></button>
-                        <button onClick={() => setEditingId(null)} className="text-slate-400 p-1"><X size={18} /></button>
+            {/* Lista e Modifica */}
+            <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Categorie Esistenti</p>
+              {udos.map(u => (
+                <div key={u.id} className="flex items-center justify-between p-3 border rounded-xl bg-white hover:border-indigo-200 transition-colors">
+                  {editingId === u.id ? (
+                    <div className="flex gap-2 w-full">
+                      <input
+                        type="text" value={editData.name}
+                        onChange={e => setEditData({ ...editData, name: e.target.value })}
+                        className="flex-1 border rounded px-2 py-1 text-sm outline-none"
+                      />
+                      <input
+                        type="color" value={editData.color}
+                        onChange={e => setEditData({ ...editData, color: e.target.value })}
+                        className="w-8 h-8 border rounded cursor-pointer"
+                      />
+                      <button onClick={() => { onSave({ id: u.id, ...editData }); setEditingId(null); }} className="text-emerald-500 p-1"><Save size={18} /></button>
+                      <button onClick={() => setEditingId(null)} className="text-slate-400 p-1"><X size={18} /></button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 rounded-full shadow-inner border border-black/10" style={{ backgroundColor: u.color }} />
+                        <span className="text-sm font-bold text-slate-700">{u.name}</span>
                       </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-3">
-                          <div className="w-4 h-4 rounded-full shadow-inner border border-black/10" style={{ backgroundColor: u.color }} />
-                          <span className="text-sm font-bold text-slate-700">{u.name}</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => { setEditingId(u.id); setEditData({ name: u.name, color: u.color }); }} className="text-slate-300 hover:text-indigo-500 transition-colors"><Edit2 size={16} /></button>
-                          <button onClick={() => onDelete(u.id)} className="text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => { setEditingId(u.id); setEditData({ name: u.name, color: u.color }); }} className="text-slate-300 hover:text-indigo-500 transition-colors"><Edit2 size={16} /></button>
+                        <button onClick={() => onDelete(u.id)} className="text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
             </div>
-          )}
-
-          {tab === 'societa' && (
-            <div className="h-full overflow-y-auto">
-              <CompanyConfigTab />
-            </div>
-          )}
-
+          </div>
         </div>
       </motion.div>
     </div>
