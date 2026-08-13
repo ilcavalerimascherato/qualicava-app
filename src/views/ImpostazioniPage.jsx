@@ -10,7 +10,9 @@ import { useDuplicatiCount }                     from '../hooks/useDuplicatiCoun
 import { udoService }                            from '../services/supabaseService';
 import AppHeader              from '../components/AppHeader';
 import UdoManagerModal        from '../components/UdoManagerModal';
-import QualityDashboardModal  from '../components/QualityDashboardModal';
+import UtentiRuoliModal       from '../components/UtentiRuoliModal';
+import SollecitiModal         from '../components/SollecitiModal';
+import MailingListModal       from '../components/MailingListModal';
 import DocFirmeModal          from '../components/DocFirmeModal';
 import CampagneSurveyModal    from '../components/CampagneSurveyModal';
 import VerificaDuplicatiModal from '../components/VerificaDuplicatiModal';
@@ -72,7 +74,7 @@ export default function ImpostazioniPage() {
       saturazione: '/occupazione',
       haccp:       '/master',
       documenti:   '/documenti',
-      nc:          '/admin',
+      nc:          '/non-conformita',
       report:      '/report',
     };
     navigate(routes[page] ?? '/admin');
@@ -149,7 +151,7 @@ export default function ImpostazioniPage() {
               iconBg="#F5F3FF" iconColor="#7C3AED"
               title="Utenti e ruoli"
               subtitle="Accessi e permessi applicazione"
-              onClick={() => setActiveModal('quality')}
+              onClick={() => setActiveModal('utenti')}
             />
           </div>
         </section>
@@ -163,7 +165,14 @@ export default function ImpostazioniPage() {
               iconBg="#FFFBEB" iconColor="#D97706"
               title="Mailing list"
               subtitle="Destinatari per invii di gruppo"
-              onClick={() => setActiveModal('quality')}
+              onClick={() => setActiveModal('mailing')}
+            />
+            <SettingsCard
+              icon={<Bell size={14} />}
+              iconBg="#FFF1F2" iconColor="#E11D48"
+              title="Solleciti"
+              subtitle="Verifica inadempienze KPI e questionari"
+              onClick={() => setActiveModal('solleciti')}
             />
             <SettingsCard
               icon={<Bell size={14} />}
@@ -223,15 +232,27 @@ export default function ImpostazioniPage() {
         onSave={handleUdoSave}
         onDelete={handleUdoDelete}
       />
-      <QualityDashboardModal
-        isOpen={activeModal === 'quality'}
+      <UtentiRuoliModal
+        isOpen={activeModal === 'utenti'}
+        onClose={closeModal}
+        facilities={data.facilities}
+        isSuperAdmin={profile?.role === 'superadmin'}
+      />
+      <SollecitiModal
+        isOpen={activeModal === 'solleciti'}
         onClose={closeModal}
         facilities={data.facilities}
         udos={data.udos}
         kpiRecords={data.kpiRecords}
         surveys={data.surveys}
         year={year}
-        isSuperAdmin={profile?.role === 'superadmin'}
+      />
+      <MailingListModal
+        isOpen={activeModal === 'mailing'}
+        onClose={closeModal}
+        facilities={data.facilities}
+        udos={data.udos}
+        year={year}
       />
       {activeModal === 'firme' && (
         <DocFirmeModal onClose={closeModal} />

@@ -89,7 +89,7 @@ export default function ReportPage() {
       saturazione:  '/occupazione',
       haccp:        '/master',
       documenti:    '/documenti',
-      nc:           '/admin',
+      nc:           '/non-conformita',
       impostazioni: '/impostazioni',
     };
     navigate(routes[page] ?? '/admin');

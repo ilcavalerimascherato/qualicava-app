@@ -92,7 +92,7 @@ export default function MasterDashboard() {
       saturazione:  '/occupazione',
       haccp:        '/master',
       documenti:    '/documenti',
-      nc:           '/admin',
+      nc:           '/non-conformita',
       report:       '/report',
       impostazioni: '/impostazioni',
     };

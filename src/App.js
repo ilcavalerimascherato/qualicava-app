@@ -29,7 +29,6 @@ import KpiChartsModal     from './components/KpiChartsModal';
 import KpiHubModal        from './components/KpiHubModal';
 import KpiLaserModal      from './components/KpiLaserModal';
 import KpiXrayModal           from './components/KpiXrayModal';
-import QualityDashboardModal  from './components/QualityDashboardModal';
 import RankingModal           from './components/RankingModal';
 
 export default function App() {
@@ -175,7 +174,7 @@ export default function App() {
       saturazione:  () => navigate('/occupazione'),
       haccp:        () => navigate('/master'),
       documenti:    () => navigate('/documenti'),
-      nc:           () => open('qualityDashboard'),
+      nc:           () => navigate('/non-conformita'),
       report:       () => navigate('/report'),
       impostazioni: () => navigate('/impostazioni'),
     };
@@ -621,16 +620,6 @@ export default function App() {
         facilities={data.facilities}
         kpiRecords={data.kpiRecords}
         year={Number(year)}
-      />
-      <QualityDashboardModal
-        isOpen={modals.qualityDashboard}
-        onClose={() => close('qualityDashboard')}
-        facilities={data.facilities}
-        udos={data.udos}
-        kpiRecords={data.kpiRecords}
-        surveys={data.surveys}
-        year={Number(year)}
-        isSuperAdmin={profile?.role === 'superadmin'}
       />
       <RankingModal
         isOpen={modals.ranking}

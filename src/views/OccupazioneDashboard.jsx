@@ -87,7 +87,7 @@ export default function OccupazioneDashboard() {
       saturazione:  '/occupazione',
       haccp:        '/master',
       documenti:    '/documenti',
-      nc:           '/admin',
+      nc:           '/non-conformita',
       report:       '/report',
       impostazioni: '/impostazioni',
     };

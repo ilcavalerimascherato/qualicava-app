@@ -20,6 +20,7 @@ const MasterDashboard       = lazy(() => import('../views/MasterDashboard'));
 const OccupazioneDashboard  = lazy(() => import('../views/OccupazioneDashboard'));
 const DocumentiPage         = lazy(() => import('../views/DocumentiPage'));
 const ReportPage            = lazy(() => import('../views/ReportPage'));
+const NonConformitaPage     = lazy(() => import('../views/NonConformitaPage'));
 const ImpostazioniPage      = lazy(() => import('../views/ImpostazioniPage'));
 const Login                 = lazy(() => import('../Login'));
 
@@ -123,6 +124,7 @@ export default function AppRouter() {
               <Route path="/master"         element={<MasterDashboard />} />
               <Route path="/occupazione"    element={<OccupazioneDashboard />} />
               <Route path="/report"         element={<ReportPage />} />
+              <Route path="/non-conformita" element={<NonConformitaPage />} />
               <Route path="/impostazioni"   element={<ImpostazioniPage />} />
             </Route>
 
