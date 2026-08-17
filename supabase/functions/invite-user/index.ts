@@ -1,9 +1,10 @@
 /**
- * supabase/functions/invite-user/index.ts  —  v2
+ * supabase/functions/invite-user/index.ts  —  v3
  *
- * Versione semplificata: rimosso il controllo del ruolo lato Edge Function
- * che causava errori 401. La sicurezza è garantita lato UI (solo gli admin
- * vedono il pulsante) e da Supabase RLS sul database.
+ * Usa la service role key e quindi bypassa le RLS: la sicurezza NON è
+ * garantita da RLS né dal fatto che l'UI nasconda il pulsante di invito
+ * (non lo era nemmeno in precedenza). Il controllo dei permessi va fatto
+ * esplicitamente qui, verificando token e rango del chiamante.
  *
  * FLUSSO:
  *  1. Riceve email, fullName, role, companyId, facilityIds
@@ -43,6 +44,64 @@ serve(async (req) => {
     }
 
     const emailNorm = email.trim().toLowerCase();
+
+    // ── 0. Autenticazione e autorizzazione del chiamante ───────
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: 'Non autenticato' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: callerData, error: callerAuthError } = await supabaseAdmin.auth.getUser(token);
+    if (callerAuthError || !callerData?.user) {
+      return new Response(
+        JSON.stringify({ error: 'Sessione non valida' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const callerId = callerData.user.id;
+
+    const { data: callerProfile, error: callerProfileError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('role')
+      .eq('id', callerId)
+      .single();
+
+    if (callerProfileError || !callerProfile?.role) {
+      return new Response(
+        JSON.stringify({ error: 'Profilo non trovato' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Rango dei ruoli, fail-safe a 0 per ruoli sconosciuti/non mappati.
+    const ROLE_RANK: Record<string, number> = { director: 0, sede: 1, admin: 2, superadmin: 3 };
+    const callerRank = ROLE_RANK[callerProfile.role] ?? 0;
+    const targetRank = ROLE_RANK[role] ?? 0;
+
+    if (callerRank < 1) {
+      return new Response(
+        JSON.stringify({ error: 'Permessi insufficienti per invitare utenti' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (targetRank > callerRank) {
+      return new Response(
+        JSON.stringify({ error: 'Non puoi assegnare un ruolo superiore al tuo' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Nessun controllo company/facility aggiuntivo necessario: sede/admin/
+    // superadmin non hanno un company_id proprio (vedono tutte le strutture
+    // per design) e i director sono già esclusi dal controllo sul rango
+    // minimo (callerRank < 1) sopra.
 
     // ── 1. Crea utente o recupera esistente ───────────────────
     let userId: string;
