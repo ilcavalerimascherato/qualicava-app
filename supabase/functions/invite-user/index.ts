@@ -134,28 +134,21 @@ serve(async (req) => {
       userId = newUser.user.id;
     }
 
-    // ── 2. Aggiorna profilo ───────────────────────────────────
-    await supabaseAdmin.from('user_profiles').upsert({
-      id:         userId,
-      email:      emailNorm,
-      full_name:  fullName || emailNorm,
-      role:       role,
-      company_id: companyId ? Number(companyId) : null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
+    // ── 2. Aggiorna profilo e strutture ───────────────────────
+    const { error: writeError } = await supabaseAdmin.rpc('admin_write_user_profile', {
+      p_actor_id:     callerId,
+      p_user_id:      userId,
+      p_email:        emailNorm,
+      p_full_name:    fullName || emailNorm,
+      p_role:         role,
+      p_company_id:   companyId ? Number(companyId) : null,
+      p_facility_ids: facilityIds,
+    });
 
-    // ── 3. Assegna strutture ──────────────────────────────────
-    if (facilityIds.length > 0) {
-      // Rimuovi accessi precedenti per questa struttura specifica
-      // (non tutti gli accessi, il direttore potrebbe gestire altre strutture)
-      await supabaseAdmin
-        .from('user_facility_access')
-        .delete()
-        .eq('user_id', userId)
-        .in('facility_id', facilityIds);
-
-      await supabaseAdmin.from('user_facility_access').insert(
-        facilityIds.map((fid: number) => ({ user_id: userId, facility_id: fid }))
+    if (writeError) {
+      return new Response(
+        JSON.stringify({ error: 'Errore scrittura profilo: ' + writeError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
