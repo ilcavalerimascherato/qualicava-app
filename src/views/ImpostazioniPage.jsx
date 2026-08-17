@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
-import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2, Copy } from 'lucide-react';
+import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2, Copy, FileClock } from 'lucide-react';
 import { useAuth }                               from '../contexts/AuthContext';
 import { useDashboardData, useInvalidate }       from '../hooks/useDashboardData';
 import { useBadgeCounts }                        from '../hooks/useBadgeCounts';
@@ -17,6 +17,7 @@ import MailingListModal       from '../components/MailingListModal';
 import DocFirmeModal          from '../components/DocFirmeModal';
 import CampagneSurveyModal    from '../components/CampagneSurveyModal';
 import VerificaDuplicatiModal from '../components/VerificaDuplicatiModal';
+import RegistroAttivitaModal  from '../components/RegistroAttivitaModal';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -222,6 +223,22 @@ export default function ImpostazioniPage() {
             </div>
           </section>
         )}
+
+        {/* Sistema */}
+        {isAdmin && (
+          <section className="mt-6">
+            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">Sistema</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              <SettingsCard
+                icon={<FileClock size={14} />}
+                iconBg="#F8FAFC" iconColor="#475569"
+                title="Registro attività"
+                subtitle="Audit log — chi ha fatto cosa e quando"
+                onClick={() => setActiveModal('audit')}
+              />
+            </div>
+          </section>
+        )}
       </main>
 
       {/* ── Modals — invariati ── */}
@@ -266,6 +283,9 @@ export default function ImpostazioniPage() {
       )}
       {activeModal === 'duplicati' && (
         <VerificaDuplicatiModal isOpen onClose={closeModal} facilities={data.facilities} />
+      )}
+      {activeModal === 'audit' && (
+        <RegistroAttivitaModal onClose={closeModal} />
       )}
     </div>
   );

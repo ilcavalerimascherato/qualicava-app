@@ -2,6 +2,7 @@
 import { supabase }         from '../supabaseClient';
 import PizZip               from 'pizzip';
 import { createNotifica }   from './notificheService';
+import { computeDiff }      from './auditLogService';
 
 // ─── doc_master ───────────────────────────────────────────────
 
@@ -26,16 +27,10 @@ export async function createDocMaster(docData) {
     .select()
     .single();
   if (error) throw error;
-  await logAzione(data.id, 'creazione', {
-    titolo:    data.titolo,
-    codice:    data.codice_documento,
-    categoria: data.categoria,
-    revisione: data.revisione_corrente,
-  }, docData.creato_da ?? null);
   return data;
 }
 
-export async function updateDocMaster(id, datiNuovi, userId, vecchiDati) {
+export async function updateDocMaster(id, datiNuovi, userId) {
   const { data, error } = await supabase
     .from('doc_master')
     .update({
@@ -47,21 +42,6 @@ export async function updateDocMaster(id, datiNuovi, userId, vecchiDati) {
     .select()
     .single();
   if (error) throw error;
-
-  const fileChanged = vecchiDati &&
-    datiNuovi.file_url_master !== undefined &&
-    datiNuovi.file_url_master !== vecchiDati.file_url_master;
-  const azione = fileChanged ? 'modifica_file' : 'modifica_metadati';
-
-  const modifiche = [];
-  if (vecchiDati) {
-    for (const campo of Object.keys(datiNuovi)) {
-      if (datiNuovi[campo] !== vecchiDati[campo]) {
-        modifiche.push({ campo, da: vecchiDati[campo], a: datiNuovi[campo] });
-      }
-    }
-  }
-  await logAzione(id, azione, { modifiche }, userId ?? null);
   return data;
 }
 
@@ -116,11 +96,6 @@ export async function generateIstanza(masterId, facilityId, userId) {
     .select()
     .single();
   if (error) throw error;
-  const master = await getDocMasterById(masterId).catch(() => null);
-  await logAzione(masterId, 'distribuzione', {
-    facility_id: facilityId,
-    revisione:   master?.revisione_corrente ?? null,
-  }, userId);
   return data;
 }
 
@@ -149,13 +124,6 @@ export async function logAccesso(istanzaId) {
     .select()
     .single();
   if (error) throw error;
-
-  await logAzione(
-    existing?.master_id ?? null,
-    'accesso_download',
-    { facility_id: existing?.facility_id ?? null, istanza_id: istanzaId },
-    null, // user_id non disponibile da facilities
-  );
   return data;
 }
 
@@ -440,12 +408,6 @@ export async function creaNuovaRevisione(masterId, datiNuovi, noteRevisione, use
       .eq('id', masterId);
     if (masterError) throw masterError;
 
-    await logAzione(masterId, 'nuova_revisione', {
-      da:   masterCorrente.revisione_corrente,
-      a:    datiNuovi.revisione_corrente,
-      note: noteRevisione,
-    }, userId);
-
     const { error: istanzeError } = await supabase
       .from('doc_istanze')
       .update({ stato: 'aggiornare' })
@@ -479,66 +441,63 @@ export async function getDocumentiInScadenza(giorniSoglia = 90) {
 
 // ─── audit log ───────────────────────────────────────────────
 
-export async function logAzione(masterId, azione, dettaglio, userId) {
-  const { error } = await supabase
-    .from('doc_audit_log')
-    .insert([{
-      master_id:   masterId,
-      azione,
-      dettaglio,
-      eseguito_da: userId ?? null,
-      eseguito_il: new Date().toISOString(),
-    }]);
-  if (error) console.error('logAzione error:', error);
+function humanizeAzione(tableName, operation, oldData, newData) {
+  if (tableName === 'doc_master') {
+    if (operation === 'INSERT') return 'creazione';
+    if (operation === 'UPDATE') {
+      if (newData?.stato === 'obsoleto' && oldData?.stato !== 'obsoleto') return 'obsoleto';
+      if (newData?.revisione_corrente !== oldData?.revisione_corrente) return 'nuova_revisione';
+      return 'modifiche';
+    }
+  }
+  if (tableName === 'doc_istanze') {
+    return operation === 'INSERT' ? 'distribuzione' : 'accesso_download';
+  }
+  return operation?.toLowerCase() ?? 'evento';
 }
 
 export async function getAuditLog(masterId) {
-  const { data, error } = await supabase
-    .from('doc_audit_log')
-    .select(`
-      id, azione, dettaglio, eseguito_il,
-      user_profiles!eseguito_da(email)
-    `)
-    .eq('master_id', masterId)
-    .order('eseguito_il', { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map(r => ({
+  const [{ data: masterRows, error: e1 }, { data: istanzeRows, error: e2 }] = await Promise.all([
+    supabase.from('audit_log')
+      .select('id, operation, table_name, old_data, new_data, performed_by, performed_at')
+      .eq('table_name', 'doc_master')
+      .eq('record_id', String(masterId)),
+    supabase.from('audit_log')
+      .select('id, operation, table_name, old_data, new_data, performed_by, performed_at')
+      .eq('table_name', 'doc_istanze')
+      .or(`new_data->>master_id.eq.${masterId},old_data->>master_id.eq.${masterId}`),
+  ]);
+  if (e1) throw e1;
+  if (e2) throw e2;
+
+  const rows = [...(masterRows ?? []), ...(istanzeRows ?? [])]
+    .sort((a, b) => new Date(b.performed_at) - new Date(a.performed_at));
+
+  const userIds = [...new Set(rows.map(r => r.performed_by).filter(Boolean))];
+  let usersById = {};
+  if (userIds.length > 0) {
+    const { data: users } = await supabase.from('user_profiles').select('id, email').in('id', userIds);
+    usersById = Object.fromEntries((users ?? []).map(u => [u.id, u]));
+  }
+
+  return rows.map(r => ({
     id:           r.id,
-    azione:       r.azione,
-    dettaglio:    r.dettaglio,
-    eseguito_il:  r.eseguito_il,
-    utente_email: r.user_profiles?.email ?? '',
+    azione:       humanizeAzione(r.table_name, r.operation, r.old_data, r.new_data),
+    dettaglio:    computeDiff(r.old_data, r.new_data),
+    eseguito_il:  r.performed_at,
+    utente_email: usersById[r.performed_by]?.email ?? '',
   }));
 }
 
-export async function setObsoleto(masterId, userId) {
-  const master = await getDocMasterById(masterId);
+export async function setObsoleto(masterId) {
   const { error } = await supabase
     .from('doc_master')
     .update({ stato: 'obsoleto' })
     .eq('id', masterId);
   if (error) throw error;
-  await logAzione(masterId, 'obsoleto', {
-    titolo:    master.titolo,
-    revisione: master.revisione_corrente,
-  }, userId);
 }
 
 // ─── doc_struttura ────────────────────────────────────────────
-
-async function logAzioneStruttura(strutturaDocId, azione, dettaglio, userId) {
-  const { error } = await supabase
-    .from('doc_audit_log')
-    .insert([{
-      struttura_doc_id: strutturaDocId,
-      master_id:        null,
-      azione,
-      dettaglio,
-      eseguito_da:      userId ?? null,
-      eseguito_il:      new Date().toISOString(),
-    }]);
-  if (error) console.error('logAzioneStruttura error:', error);
-}
 
 export async function getDocStruttura(facilityId) {
   const { data, error } = await supabase
@@ -585,15 +544,10 @@ export async function createDocStruttura(docData, userId) {
     .select()
     .single();
   if (error) throw error;
-  await logAzioneStruttura(data.id, 'creazione', {
-    titolo:    data.titolo,
-    codice:    data.codice,
-    categoria: data.categoria,
-  }, userId);
   return data;
 }
 
-export async function updateDocStruttura(id, datiNuovi, userId, vecchiDati) {
+export async function updateDocStruttura(id, datiNuovi, userId) {
   const { data, error } = await supabase
     .from('doc_struttura')
     .update({ ...datiNuovi, updated_by: userId, updated_at: new Date().toISOString() })
@@ -601,25 +555,10 @@ export async function updateDocStruttura(id, datiNuovi, userId, vecchiDati) {
     .select()
     .single();
   if (error) throw error;
-
-  const fileChanged = vecchiDati &&
-    datiNuovi.file_url !== undefined &&
-    datiNuovi.file_url !== vecchiDati.file_url;
-  const azione = fileChanged ? 'modifica_file' : 'modifica_metadati';
-
-  const modifiche = [];
-  if (vecchiDati) {
-    for (const campo of Object.keys(datiNuovi)) {
-      if (datiNuovi[campo] !== vecchiDati[campo]) {
-        modifiche.push({ campo, da: vecchiDati[campo], a: datiNuovi[campo] });
-      }
-    }
-  }
-  await logAzioneStruttura(id, azione, { modifiche }, userId);
   return data;
 }
 
-export async function inviaAQualita(id, userId) {
+export async function inviaAQualita(id) {
   const { data: doc, error: fetchError } = await supabase
     .from('doc_struttura')
     .select('titolo')
@@ -632,8 +571,6 @@ export async function inviaAQualita(id, userId) {
     .update({ stato: 'inviato_qualita' })
     .eq('id', id);
   if (error) throw error;
-
-  await logAzioneStruttura(id, 'inviato_qualita', { id }, userId);
 
   const { data: admins } = await supabase
     .from('user_profiles')
@@ -651,7 +588,7 @@ export async function inviaAQualita(id, userId) {
   }
 }
 
-export async function verificaQualita(id, nomeVerificatore, userId) {
+export async function verificaQualita(id, nomeVerificatore) {
   const { data: doc, error: fetchError } = await supabase
     .from('doc_struttura')
     .select('titolo, facility_id')
@@ -670,8 +607,6 @@ export async function verificaQualita(id, nomeVerificatore, userId) {
     .eq('id', id);
   if (error) throw error;
 
-  await logAzioneStruttura(id, 'verifica_qualita', { verificato_da: nomeVerificatore }, userId);
-
   const { data: facilityUsers } = await supabase
     .from('user_facility_access')
     .select('user_id')
@@ -688,13 +623,12 @@ export async function verificaQualita(id, nomeVerificatore, userId) {
   }
 }
 
-export async function setDocStrutturaObsoleto(id, userId) {
+export async function setDocStrutturaObsoleto(id) {
   const { error } = await supabase
     .from('doc_struttura')
     .update({ stato: 'obsoleto' })
     .eq('id', id);
   if (error) throw error;
-  await logAzioneStruttura(id, 'obsoleto', {}, userId);
 }
 
 export async function uploadDocStruttura(file, facilityId, codice) {
