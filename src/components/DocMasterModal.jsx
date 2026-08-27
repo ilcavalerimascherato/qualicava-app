@@ -3,7 +3,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   X, FileText, Upload, Loader2, CheckCircle2,
   Tag, Calendar, Users, AlertTriangle, ChevronDown, ChevronUp,
-  RefreshCw, History, Pencil, Building2, BookOpen, PenLine,
+  RefreshCw, History, Pencil, Building2, BookOpen, PenLine, Sparkles,
 } from 'lucide-react';
 import { useAuth }            from '../contexts/AuthContext';
 import {
@@ -15,6 +15,7 @@ import {
   updateDocMaster,
   getAuditLog,
 } from '../services/documentiService';
+import { estraiMetadatiDocumento } from '../utils/documentoAiExtraction';
 import { TIPOLOGIA_OPTIONS }   from '../config/docTipologie';
 import DocCopertinaModal       from './DocCopertinaModal';
 
@@ -147,6 +148,17 @@ export default function DocMasterModal({
   const [fileError,    setFileError]   = useState('');
   const [isDragging,   setIsDragging]  = useState(false);
 
+  // Documento di contenuto (solo creation mode) — usato per estrazione AI
+  // metadati e poi passato a DocCopertinaModal per l'inserimento automatico
+  // della copertina come prima pagina.
+  const [contenutoFile,        setContenutoFile]        = useState(null);
+  const [contenutoFileError,   setContenutoFileError]   = useState('');
+  const [isDraggingContenuto,  setIsDraggingContenuto]  = useState(false);
+  const [aiExtracting,         setAiExtracting]         = useState(false);
+  const [aiError,              setAiError]              = useState('');
+  const [campiTrovatiAi,       setCampiTrovatiAi]       = useState(new Set());
+  const [aiTentata,            setAiTentata]            = useState(false);
+
   // Revisione
   const [noteRevisione, setNoteRevisione] = useState('');
   const [revisioni,     setRevisioni]     = useState([]);
@@ -259,6 +271,46 @@ export default function DocMasterModal({
     if (f) handleFileChange({ target: { files: [f] } });
   }, [handleFileChange]);
 
+  // ── documento di contenuto + estrazione AI (solo creation mode) ──────
+
+  const handleContenutoFile = useCallback(async (f) => {
+    if (!f) return;
+    if (!f.name.endsWith('.docx')) { setContenutoFileError('Solo file .docx supportati'); return; }
+    setContenutoFileError('');
+    setContenutoFile(f);
+    setAiError('');
+    setAiExtracting(true);
+    setAiTentata(true);
+    try {
+      const { ok, data, error } = await estraiMetadatiDocumento(f);
+      if (!ok) { setAiError(error || 'Estrazione AI non riuscita.'); return; }
+      const trovati = new Set();
+      setForm(prev => {
+        const next = { ...prev };
+        if (data.titolo && !prev.titolo)                             { next.titolo = data.titolo; trovati.add('titolo'); }
+        if (data.codice_documento && !prev.codice_documento)         { next.codice_documento = data.codice_documento.toUpperCase(); trovati.add('codice_documento'); }
+        if (data.tipologia_documento && TIPOLOGIA_OPTIONS.includes(data.tipologia_documento) && !prev.tipologia_documento) {
+          next.tipologia_documento = data.tipologia_documento; trovati.add('tipologia_documento');
+        }
+        if (data.elaborata_da && data.elaborata_da !== prev.elaborata_da) { next.elaborata_da = data.elaborata_da; trovati.add('elaborata_da'); }
+        if (data.verificata_da && !prev.verificata_da)                { next.verificata_da = data.verificata_da; trovati.add('verificata_da'); }
+        if (data.approvato_da && !prev.approvato_da)                  { next.approvato_da = data.approvato_da; trovati.add('approvato_da'); }
+        return next;
+      });
+      setCampiTrovatiAi(trovati);
+    } finally {
+      setAiExtracting(false);
+    }
+  }, []);
+
+  const handleDragOverContenuto  = useCallback((e) => { e.preventDefault(); setIsDraggingContenuto(true);  }, []);
+  const handleDragLeaveContenuto = useCallback((e) => { e.preventDefault(); setIsDraggingContenuto(false); }, []);
+  const handleDropContenuto      = useCallback((e) => {
+    e.preventDefault();
+    setIsDraggingContenuto(false);
+    handleContenutoFile(e.dataTransfer.files?.[0]);
+  }, [handleContenutoFile]);
+
   // ── salva + apri copertina (solo creation mode) ──────────────
 
   const handleSalvaEApriCopertina = useCallback(async () => {
@@ -285,7 +337,7 @@ export default function DocMasterModal({
       setSaving(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form]);
+  }, [form, contenutoFile]);
 
   // ── validate + save ───────────────────────────────────────────
 
@@ -294,6 +346,8 @@ export default function DocMasterModal({
     if (!form.titolo.trim())           errs.titolo           = 'Campo obbligatorio';
     if (!form.codice_documento.trim()) errs.codice_documento = 'Campo obbligatorio';
     if (!form.categoria)               errs.categoria        = 'Seleziona una categoria';
+    if (contenutoFile && !form.tipologia_documento)
+                                       errs.tipologia_documento = 'Non trovata nel documento — selezionala';
     if (isRevMode  && !file)            errs.file             = 'Carica un file .docx';
     if (isEditMode && sostituisciFile && !file)
                                        errs.file             = 'Seleziona un file .docx da sostituire';
@@ -454,10 +508,71 @@ export default function DocMasterModal({
               </div>
             )}
 
+            {/* Documento di contenuto — solo creazione: upload + estrazione AI metadati */}
+            {!isRevMode && !isEditMode && (
+              <div>
+                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <Sparkles size={12} /> Documento di contenuto (opzionale — precompila con AI)
+                </label>
+                <div
+                  onClick={e => e.currentTarget.querySelector('input[type="file"]')?.click()}
+                  onDragOver={handleDragOverContenuto}
+                  onDragLeave={handleDragLeaveContenuto}
+                  onDrop={handleDropContenuto}
+                  className={`border-2 border-dashed rounded-2xl px-6 py-6 text-center cursor-pointer transition-all
+                    ${contenutoFileError ? 'border-rose-300 bg-rose-50'
+                      : contenutoFile    ? 'border-emerald-300 bg-emerald-50'
+                      : isDraggingContenuto ? 'border-indigo-400 bg-indigo-50/60'
+                      : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40'}`}
+                >
+                  {aiExtracting ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 size={22} className="text-indigo-400 animate-spin" />
+                      <p className="text-sm font-bold text-slate-500">Lettura AI del documento…</p>
+                    </div>
+                  ) : contenutoFile ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <CheckCircle2 size={22} className="text-emerald-500" />
+                      <p className="text-sm font-bold text-emerald-700">{contenutoFile.name}</p>
+                      <p className="text-[10px] text-emerald-500">clicca o trascina per sostituire</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1">
+                      <Upload size={22} className="text-slate-300" />
+                      <p className="text-sm font-bold text-slate-400">
+                        Trascina qui il protocollo/procedura (senza copertina)
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        L'AI prova a leggere titolo/codice/tipologia; i campi non trovati andranno compilati a mano
+                      </p>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept=".docx"
+                    className="hidden"
+                    onChange={e => handleContenutoFile(e.target.files?.[0])}
+                  />
+                </div>
+                {contenutoFileError && <p className="text-xs text-rose-500 mt-1">{contenutoFileError}</p>}
+                {aiError && (
+                  <p className="text-xs text-amber-600 font-medium mt-1">
+                    {aiError} Compila i campi sotto a mano.
+                  </p>
+                )}
+                {aiTentata && !aiError && campiTrovatiAi.size > 0 && (
+                  <p className="text-xs text-indigo-600 font-medium mt-1">
+                    AI: trovati {campiTrovatiAi.size} campi (evidenziati sotto) — verifica e completa gli altri.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* RIGA 1 — Titolo */}
             <div>
-              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                 Titolo *
+                {campiTrovatiAi.has('titolo') && <Sparkles size={11} className="text-indigo-500" />}
               </label>
               <input
                 type="text"
@@ -485,16 +600,20 @@ export default function DocMasterModal({
                     ${errors.codice_documento ? 'border-rose-400 bg-rose-50' : 'border-slate-200 bg-slate-50'}`}
                 />
                 {errors.codice_documento && <p className="text-xs text-rose-500 mt-1">{errors.codice_documento}</p>}
+                {campiTrovatiAi.has('codice_documento') && !errors.codice_documento && (
+                  <p className="text-[11px] text-indigo-500 font-medium mt-1 flex items-center gap-1"><Sparkles size={10} /> trovato dall'AI</p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5">
-                  Tipologia
+                  Tipologia {contenutoFile && '*'}
                 </label>
                 <div className="relative">
                   <select
                     value={form.tipologia_documento}
                     onChange={e => setField('tipologia_documento', e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium appearance-none outline-none focus:ring-2 focus:ring-indigo-400 transition-all"
+                    className={`w-full rounded-xl border px-4 py-2.5 text-sm font-medium appearance-none outline-none focus:ring-2 focus:ring-indigo-400 transition-all
+                      ${errors.tipologia_documento ? 'border-rose-400 bg-rose-50' : 'border-slate-200 bg-slate-50'}`}
                   >
                     <option value="">— Seleziona tipologia —</option>
                     {TIPOLOGIA_OPTIONS.map(t => (
@@ -503,6 +622,10 @@ export default function DocMasterModal({
                   </select>
                   <ChevronDown size={14} className="absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
                 </div>
+                {errors.tipologia_documento && <p className="text-xs text-rose-500 mt-1">{errors.tipologia_documento}</p>}
+                {campiTrovatiAi.has('tipologia_documento') && !errors.tipologia_documento && (
+                  <p className="text-[11px] text-indigo-500 font-medium mt-1 flex items-center gap-1"><Sparkles size={10} /> trovato dall'AI</p>
+                )}
               </div>
             </div>
 
@@ -1092,6 +1215,7 @@ export default function DocMasterModal({
           }
           dataRevisione={form.dataRevisione}
           noteRevisione={form.noteRevisione}
+          contenutoFile={(!isRevMode && !isEditMode) ? contenutoFile : null}
           onClose={() => setCopertinaModal(false)}
           onSuccess={(!isRevMode && !isEditMode) ? () => { setCopertinaModal(false); onSuccess?.(); } : undefined}
         />

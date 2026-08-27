@@ -20,6 +20,8 @@
  * ─────────────────────────────────────────────────────────────
  */
 
+import { TIPOLOGIA_OPTIONS } from './docTipologie';
+
 // Tassonomia fissa dei temi per campagnaTemiCommenti — condivisa qui invece
 // che ripetuta nel prompt, così resta un'unica fonte di verità se cambia.
 const TEMI_COMMENTI_TASSONOMIA = [
@@ -584,6 +586,48 @@ REGOLE TASSATIVE PER L'ESTRAZIONE:
   parentesi quadre, es. "[elencare qui la documentazione allegata]".
 - Date sempre in formato ISO "YYYY-MM-DD". Se l'anno non è specificato ma
   desumibile dal contesto, deducilo; altrimenti null.
+- Non includere MAI commenti, spiegazioni o testo fuori dal JSON.
+`.trim(),
+  },
+
+  // ── 16. Estrazione metadati copertina da documento di contenuto → Documenti/Protocolli ──
+  // Legge il testo grezzo (senza copertina) di un protocollo/procedura caricato
+  // e propone i metadati per la copertina. Tutti i campi sono nullable: quello
+  // che l'AI non trova resta null e viene richiesto manualmente in UI (mai
+  // inventato). Output JSON, non mostrato direttamente all'utente — validato/
+  // parsato in src/utils/documentoAiExtraction.js.
+  estrazioneMetadatiDocumento: {
+    required: ['testo'],
+    build: ({ testo }) => `
+Sei un assistente per la gestione documentale di una RSA italiana. Ricevi il testo
+grezzo di un documento (protocollo, procedura, istruzione operativa) SENZA la
+copertina istituzionale. Il tuo compito è estrarre SOLO i metadati che trovi
+esplicitamente scritti nel testo, per pre-compilare la copertina.
+
+TESTO DEL DOCUMENTO (troncato se lungo):
+"""
+${testo}
+"""
+
+Rispondi ESCLUSIVAMENTE con un oggetto JSON valido, nessun testo prima o dopo,
+nessun blocco markdown, secondo questo schema:
+{
+  "titolo": string|null,              // titolo del documento, di solito nelle prime righe
+  "codice_documento": string|null,    // codice/sigla del documento, se presente (es. "PCA-012"), spesso in intestazione o piè di pagina
+  "tipologia_documento": string|null, // DEVE essere uno di questi valori esatti, o null se non deducibile: ${TIPOLOGIA_OPTIONS.map(t => `"${t}"`).join(', ')}
+  "elaborata_da": string|null,        // nome/ruolo di chi ha redatto il documento, SOLO se esplicitamente scritto nel testo
+  "verificata_da": string|null,       // nome/ruolo di chi ha verificato, SOLO se esplicitamente scritto nel testo
+  "approvato_da": string|null         // nome/ruolo di chi ha approvato, SOLO se esplicitamente scritto nel testo
+}
+
+REGOLE TASSATIVE:
+- NON INVENTARE MAI un valore. Se un campo non è chiaramente presente nel testo,
+  usa null — è preferibile null a un valore indovinato, perché l'utente dovrà
+  compilare a mano solo i campi che restano null.
+- "codice_documento" solo se è un vero codice/sigla identificativo (es. "PCA-012",
+  "PROC-045"), non un numero di pagina o una data.
+- "tipologia_documento" solo se puoi sceglierlo con ragionevole certezza tra i
+  valori elencati sopra guardando struttura/contenuto del testo; altrimenti null.
 - Non includere MAI commenti, spiegazioni o testo fuori dal JSON.
 `.trim(),
   },

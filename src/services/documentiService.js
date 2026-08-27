@@ -3,6 +3,7 @@ import { supabase }         from '../supabaseClient';
 import PizZip               from 'pizzip';
 import { createNotifica }   from './notificheService';
 import { computeDiff }      from './auditLogService';
+import { sostituisciPlaceholderConImmagine } from './docxPlaceholderImage';
 
 // ─── doc_master ───────────────────────────────────────────────
 
@@ -301,6 +302,26 @@ export async function compileDocumento(masterFileBuffer, facilityData, masterDat
 
   const zip = new PizZipLib(masterFileBuffer);
   fixSplitTags(zip);
+
+  // Logo società della struttura al posto del testo {{ragione_sociale}} in
+  // intestazione (dove presente come placeholder isolato) — best-effort: se il
+  // logo non è disponibile o la sostituzione non è applicabile, si procede con
+  // il comportamento esistente (ragione_sociale compilata come testo sotto).
+  try {
+    if (facilityData.company_id) {
+      const { data: company } = await supabase
+        .from('companies')
+        .select('logo_url')
+        .eq('id', facilityData.company_id)
+        .single();
+      if (company?.logo_url) {
+        await sostituisciPlaceholderConImmagine(zip, 'ragione_sociale', company.logo_url);
+      }
+    }
+  } catch {
+    // logo non inserito — ragione_sociale resterà come testo, comportamento invariato
+  }
+
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks:    true,

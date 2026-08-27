@@ -1,8 +1,9 @@
 // src/components/DocCopertinaModal.jsx
 import React, { useState, useCallback, useEffect } from 'react';
 import { X, FileText, Download, Loader2, Upload } from 'lucide-react';
-import { supabase }        from '../supabaseClient';
-import { generaCopertina } from '../services/copertinaService';
+import { supabase }           from '../supabaseClient';
+import { generaCopertina }    from '../services/copertinaService';
+import { inserisciCopertina } from '../services/docxCoverInjector';
 
 // ── helpers ───────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ export default function DocCopertinaModal({
   documento,
   dataRevisione = '',
   noteRevisione = '',
+  contenutoFile = null,
   onClose,
   onSuccess,
 }) {
@@ -42,6 +44,12 @@ export default function DocCopertinaModal({
   const [salvandoDoc,       setSalvandoDoc]       = useState(false);
   const [isDragging,        setIsDragging]        = useState(false);
   const [logoSocietaUrl,    setLogoSocietaUrl]    = useState(null);
+
+  // Inserimento automatico della copertina come prima pagina del documento
+  // di contenuto (solo se contenutoFile è stato caricato in DocMasterModal)
+  const [injecting,   setInjecting]   = useState(false);
+  const [injectError, setInjectError] = useState('');
+  const [injectedBlob, setInjectedBlob] = useState(null);
 
   // Fetch logo società collegata al documento
   useEffect(() => {
@@ -87,10 +95,12 @@ export default function DocCopertinaModal({
     storico: p.storico.map((row, idx) => idx === i ? { ...row, [k]: v } : row),
   })), []);
 
-  // Genera e scarica copertina
+  // Genera copertina e, se disponibile un documento di contenuto, la inserisce come prima pagina
   const handleGenera = async () => {
     setGenerating(true);
     setGenError('');
+    setInjectError('');
+    setInjectedBlob(null);
     try {
       const blob = await generaCopertina({
         codice:             documento?.codice_documento    || '',
@@ -114,10 +124,31 @@ export default function DocCopertinaModal({
         storico:            form.storico,
         logoSocietaUrl:     logoSocietaUrl,
       });
-      const url = URL.createObjectURL(blob);
+
+      let downloadBlob = blob;
+      let downloadSuffix = 'COPERTINA';
+
+      if (contenutoFile) {
+        setInjecting(true);
+        try {
+          const risultato = await inserisciCopertina(blob, contenutoFile);
+          setInjectedBlob(risultato);
+          downloadBlob = risultato;
+          downloadSuffix = 'CON_COPERTINA';
+        } catch (injErr) {
+          setInjectError(
+            'Inserimento automatico non riuscito (' + injErr.message + '). ' +
+            'Scarico solo la copertina: puoi fonderla manualmente in Word e caricare il risultato qui sotto.'
+          );
+        } finally {
+          setInjecting(false);
+        }
+      }
+
+      const url = URL.createObjectURL(downloadBlob);
       const a   = document.createElement('a');
       a.href     = url;
-      a.download = `${documento?.codice_documento || 'COPERTINA'}_COPERTINA.docx`;
+      a.download = `${documento?.codice_documento || 'DOC'}_${downloadSuffix}.docx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -170,6 +201,11 @@ export default function DocCopertinaModal({
     const f = e.dataTransfer.files?.[0];
     if (f) doUpload(f);
   }, [doUpload]);
+
+  // Salva direttamente il documento con la copertina inserita automaticamente
+  const handleSalvaInietato = useCallback(() => {
+    if (injectedBlob) doUpload(injectedBlob);
+  }, [injectedBlob, doUpload]);
 
   // ── render ────────────────────────────────────────────────────
 
@@ -271,11 +307,43 @@ export default function DocCopertinaModal({
               </div>
             </section>
 
-            {/* Drag-drop upload documento assemblato — visibile dopo generazione */}
+            {/* Inserimento automatico riuscito — conferma dopo verifica manuale del file scaricato */}
+            {injectedBlob && (
+              <section>
+                <p className="text-[11px] font-black text-emerald-700 uppercase tracking-widest mb-3 pb-1 border-b border-emerald-100">
+                  Copertina inserita automaticamente
+                </p>
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+                  <p className="text-sm font-bold text-emerald-800">
+                    Il documento con la copertina in prima pagina è stato scaricato (…_CON_COPERTINA.docx).
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-1">
+                    Aprilo in Word e verifica che non compaia il prompt di riparazione e che il contenuto originale sia intatto,
+                    prima di salvarlo come documento master. Se qualcosa non torna, fondi manualmente in Word e usa il riquadro sotto.
+                  </p>
+                  <button
+                    onClick={handleSalvaInietato}
+                    disabled={salvandoDoc}
+                    className="mt-3 flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black uppercase
+                      bg-emerald-600 text-white hover:bg-emerald-700 shadow transition-colors disabled:opacity-50"
+                  >
+                    {salvandoDoc
+                      ? <><Loader2 size={14} className="animate-spin" /> Salvataggio…</>
+                      : 'Verificato — salva come documento master'
+                    }
+                  </button>
+                </div>
+              </section>
+            )}
+            {injectError && (
+              <p className="text-xs text-amber-600 font-medium">{injectError}</p>
+            )}
+
+            {/* Drag-drop upload documento assemblato — visibile dopo generazione, fallback manuale */}
             {copertinaGenerata && (
               <section>
                 <p className="text-[11px] font-black text-emerald-700 uppercase tracking-widest mb-3 pb-1 border-b border-emerald-100">
-                  Salva documento assemblato
+                  {injectedBlob ? 'In alternativa: carica un documento fuso manualmente' : 'Salva documento assemblato'}
                 </p>
                 <div
                   onClick={e => e.currentTarget.querySelector('input[type="file"]')?.click()}
@@ -376,8 +444,10 @@ export default function DocCopertinaModal({
                 bg-emerald-600 text-white hover:bg-emerald-700 shadow transition-colors disabled:opacity-50"
             >
               {generating
-                ? <><Loader2 size={15} className="animate-spin" /> Generazione…</>
-                : <><Download size={15} /> Genera Copertina .docx</>
+                ? <><Loader2 size={15} className="animate-spin" /> {injecting ? 'Inserimento copertina…' : 'Generazione…'}</>
+                : contenutoFile
+                  ? <><Download size={15} /> Genera e inserisci copertina</>
+                  : <><Download size={15} /> Genera Copertina .docx</>
               }
             </button>
           </div>
