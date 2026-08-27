@@ -2,6 +2,7 @@
 // CRUD + upload Storage per il modulo Verbali Ispettivi. Nessuna logica AI
 // qui (vedi src/utils/verbaliAiExtraction.js) — solo persistenza.
 import { supabase } from '../supabaseClient';
+import { createNotifica } from './notificheService';
 
 const BUCKET = 'verbali-ispettivi';
 export const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20MB
@@ -344,4 +345,25 @@ export async function segnaRispostaInviata({ verbale, testoInviato, createdBy })
     testo: testoInviato || null,
     createdBy,
   });
+}
+
+// ── Notifica admin al caricamento ──────────────────────────────────
+// Stesso pattern di inviaAQualita() in documentiService.js: una riga
+// notifications per ogni admin/superadmin, best-effort (un fallimento
+// nell'invio della notifica non deve mai far fallire l'upload).
+export async function notificaVerbaleCaricato({ facilityName }) {
+  const { data: admins } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .in('role', ['admin', 'superadmin']);
+
+  for (const admin of admins ?? []) {
+    await createNotifica(
+      admin.id,
+      'verbale_ispettivo_caricato',
+      'Nuovo verbale ispettivo caricato',
+      `${facilityName} ha caricato un nuovo verbale ispettivo, in attesa di analisi AI.`,
+      '/verbali-ispettivi'
+    ).catch(() => {});
+  }
 }

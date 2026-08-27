@@ -1,0 +1,25 @@
+-- Security Advisor Supabase: "View public.haccp_scadenzario is defined
+-- with the SECURITY DEFINER property" — la vista esegue le query con i
+-- permessi/RLS di chi l'ha creata invece che di chi la interroga, quindi
+-- un Direttore potrebbe (a seconda della configurazione) vedere righe di
+-- strutture che la sua RLS su facilities/haccp_* non gli permetterebbe
+-- di vedere direttamente.
+--
+-- La vista (SELECT pg_get_viewdef('public.haccp_scadenzario', true)) è
+-- puro calcolo su facilities + haccp_profili/haccp_scia/haccp_manuali/
+-- haccp_analisi via JOIN/EXISTS — nessuna logica di ruolo propria: si
+-- affida interamente alla RLS delle tabelle sottostanti. Il fix corretto
+-- (Postgres 15+, supportato da Supabase) è passare a "security_invoker",
+-- che fa rivalutare le policy RLS con il ruolo di chi interroga la vista
+-- invece che con quello del proprietario — nessuna riscrittura della
+-- vista necessaria, cambia solo come si applicano i permessi.
+--
+-- Verifica DOPO l'esecuzione: aprire la dashboard come Direttore e
+-- controllare che il badge/tab HACCP mostri ancora i dati della propria
+-- struttura. Se risultasse vuoto, il problema sarebbe nella RLS di
+-- haccp_profili/haccp_scia/haccp_manuali/haccp_analisi (mancante o troppo
+-- restrittiva per il ruolo director) — da sistemare lì, non sulla vista.
+--
+-- Eseguire su Supabase SQL Editor.
+
+ALTER VIEW public.haccp_scadenzario SET (security_invoker = on);

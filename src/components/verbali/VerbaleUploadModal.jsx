@@ -9,7 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   uploadVerbalePdf, createVerbaleRecord, updateVerbaleHeader,
   saveExtractionSuccess, saveExtractionError, MAX_PDF_BYTES,
-  uploadAllegato, addAllegatoAcquisizione,
+  uploadAllegato, addAllegatoAcquisizione, notificaVerbaleCaricato,
 } from '../../services/verbaliIspettiviService';
 import { extractVerbaleFromPdf } from '../../utils/verbaliAiExtraction';
 
@@ -55,6 +55,7 @@ export default function VerbaleUploadModal({ facility, onClose, onExtracted }) {
       verbale = placeholder;
       const { path } = await uploadVerbalePdf(facility.id, file, verbale.id);
       await updateVerbaleHeader(verbale.id, { pdf_storage_path: path });
+      notificaVerbaleCaricato({ facilityName: facility.name }).catch(() => {});
 
       // Allegato opzionale ricevuto insieme al verbale — stessa pratica,
       // registrato come prima voce della corrispondenza (non analizzato

@@ -1,0 +1,21 @@
+-- Security Advisor Supabase: "View public.v_survey_data_normalized is
+-- defined with the SECURITY DEFINER property".
+--
+-- Come v_survey_duplicati_dettaglio: vista per-riga (una riga per
+-- risposta survey, con facility_id, calendar_id, punteggi normalizzati),
+-- nessuna aggregazione/anonimizzazione come v_benchmark_anonymous
+-- (lasciata invariata di proposito). In modalità SECURITY DEFINER
+-- chiunque possa interrogarla vede potenzialmente le risposte survey di
+-- QUALSIASI struttura/società, non solo le proprie.
+--
+-- Vista molto usata (useDashboardData.js, badge, OverviewTab, dashboard
+-- survey): verificare con attenzione dopo l'esecuzione, come Direttore,
+-- che il tab Survey mostri ancora i dati della propria struttura. Se
+-- risultasse vuoto, la RLS mancante/troppo restrittiva è su una delle
+-- tabelle sottostanti (survey_seniorliving, survey_rsa, e le altre
+-- tabelle survey_* unite nella vista, più survey_facility_mapping,
+-- survey_duplicati) — da sistemare lì, non sulla vista.
+--
+-- Eseguire su Supabase SQL Editor.
+
+ALTER VIEW public.v_survey_data_normalized SET (security_invoker = on);

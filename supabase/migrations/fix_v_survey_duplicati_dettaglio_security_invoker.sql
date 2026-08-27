@@ -1,0 +1,25 @@
+-- Security Advisor Supabase: "View public.v_survey_duplicati_dettaglio is
+-- defined with the SECURITY DEFINER property".
+--
+-- A differenza di v_benchmark_anonymous (lasciata invariata di proposito,
+-- vedi fix_haccp_scadenzario_security_invoker.sql per lo stesso pattern
+-- sulla vista HACCP), questa vista espone dati per-riga identificabili:
+-- nome_cognome del rispondente, commenti liberi, nome struttura,
+-- company_id, nome di chi ha risolto il duplicato — nessuna
+-- anonimizzazione/aggregazione. In modalità SECURITY DEFINER chiunque
+-- possa interrogarla vede potenzialmente questi dati per QUALSIASI
+-- struttura/società, non solo le proprie: qui il fix è necessario, non
+-- opzionale.
+--
+-- Verifica DOPO l'esecuzione: aprire "Analisi Survey → verifica duplicati"
+-- come Direttore e confermare che veda ancora i duplicati della propria
+-- struttura. Se il pannello risultasse vuoto, la RLS mancante/troppo
+-- restrittiva è su una delle tabelle sottostanti (survey_duplicati,
+-- survey_rsa/survey_seniorliving/survey_centri_psichiatria/
+-- survey_personale/survey_centri_disabilita, survey_campagne,
+-- survey_facility_mapping, facilities, user_profiles) — da sistemare lì,
+-- non sulla vista.
+--
+-- Eseguire su Supabase SQL Editor.
+
+ALTER VIEW public.v_survey_duplicati_dettaglio SET (security_invoker = on);
