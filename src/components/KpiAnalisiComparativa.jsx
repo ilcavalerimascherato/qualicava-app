@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { X, ChevronLeft, AlertTriangle, BarChart2, BrainCircuit, Copy, Check, Download } from 'lucide-react';
 import { kpiAnalisiComparativa as aiPresets } from '../config/aiPrompts';
+import { callClaude } from '../utils/aiClient';
 import { KPI_RULES, getKpiLabel } from '../config/kpiRules';
 import { evaluateKpiFormula } from '../utils/kpiFormulaEngine';
 // ── Helpers ───────────────────────────────────────────────────
@@ -272,23 +273,8 @@ export default function KpiAnalisiComparativa({ isOpen, onClose, onBack, facilit
     setAiResult('');
     try {
       const prompt = aiPresets[preset](aiData);
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY ?? '',
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 2048,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-      if (!res.ok) throw new Error(`Errore API: ${res.status}`);
-      const data = await res.json();
-      setAiResult(data.content[0].text);
+      const text = await callClaude(prompt, { maxTokens: 2048 });
+      setAiResult(text);
     } catch (err) {
       setAiResult(`Errore: ${err.message}`);
     } finally {

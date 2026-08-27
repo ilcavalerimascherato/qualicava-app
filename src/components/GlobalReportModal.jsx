@@ -14,6 +14,7 @@ import {
   Layers, Building2, BarChart2, Calendar, TrendingUp
 } from 'lucide-react';
 import { buildPromptGlobaleBoard, buildPromptKpiMensile, buildPromptKpiPeriodo } from '../config/aiPrompts';
+import { callClaude } from '../utils/aiClient';
 import { KPI_RULES, getKpiStatus, getKpiLabel }  from '../config/kpiRules';
 import { evaluateKpiFormula }       from '../utils/kpiFormulaEngine';
 import { MONTHS }                   from '../config/constants';
@@ -235,22 +236,7 @@ export default function GlobalReportModal({
     try {
       const dataPayload = aggregatedData.chartData.map(d => `${d.subject}: ${d.score}/100`).join('\n');
       const prompt = buildPromptGlobaleBoard({ scopeName, typeName, facilitiesIncluded: aggregatedData.facilitiesIncluded, totalResponses: aggregatedData.totalResponses, averageScore: aggregatedData.averageScore, dataPayload });
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-      const data = await response.json();
-      const text = data.content.map(b => b.type === 'text' ? b.text : '').join('');
+      const text = await callClaude(prompt, { maxTokens: 1000 });
       setAiReport(text);
     } catch (error) { alert('Errore generazione: ' + error.message); }
     finally { setIsGenerating(false); }
@@ -303,22 +289,7 @@ export default function GlobalReportModal({
         });
       }
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-      const data = await response.json();
-      const text = data.content.map(b => b.type === 'text' ? b.text : '').join('');
+      const text = await callClaude(prompt, { maxTokens: 1000 });
       setKpiAiReport(text);
     } catch (error) { alert('Errore generazione KPI: ' + error.message); }
     finally { setKpiGenerating(false); }

@@ -1,7 +1,7 @@
 // src/components/NcFormModal.jsx
 // Form completo Non Conformità con logica di validazione per stato.
 // Workflow: Aperto → Pending → Chiuso
-// Usato da: DirectorFacility, QualityDashboardModal
+// Usato da: DirectorFacility, NonConformitaPage
 import React, { useState, useEffect } from 'react';
 import { X, Save, Loader2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../supabaseClient';

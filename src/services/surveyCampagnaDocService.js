@@ -1,45 +1,11 @@
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, AlignmentType, ShadingType, PageBreak,
-  ImageRun, VerticalAlign
+  ImageRun, VerticalAlign, HeightRule
 } from 'docx';
-
-const LABEL_MAP = {
-  soddisfazione_generale: 'Soddisfazione generale',
-  nps_consiglio: 'Propensione raccomandazione',
-  info_ingresso: 'Accoglienza ingresso',
-  info_prenotazione: 'Informazioni prenotazione',
-  voto_assistenza: 'Personale assistenza',
-  rispetto_dignita: 'Riservatezza e dignità',
-  assistenza_medica: 'Assistenza medica',
-  assistenza_notturna: 'Assistenza infermieristica',
-  soddisfazione_pulizia: 'Igiene e pulizia',
-  voto_animazione: 'Attività ricreative',
-  soddisfazione_servizi: 'Servizi offerti',
-  fisioterapia: 'Fisioterapia',
-  voto_alloggio: 'Comfort alloggio',
-  voto_ristorazione_qualita: 'Qualità ristorazione',
-  soddisfazione_tempo: 'Tempo dedicato',
-  voto_pulizie: 'Personale pulizie',
-  voto_bagno: 'Bagno',
-  voto_spazio_esterno: 'Spazio esterno',
-  info_cura: 'Informazioni sul progetto di cura',
-  ascolto: 'Modo in cui viene ascoltato',
-  contatto_struttura: 'Facilità di contatto',
-  relazione_equipe: 'Relazione con equipe',
-  cura_bisogni: 'Bisogni presi in considerazione',
-  appagamento_vita: 'Appagamento vita quotidiana',
-  coinvolgimento_cure: 'Coinvolgimento nelle cure',
-  assistenza_diurna: 'Assistenza diurna',
-  sicurezza_ambiente: 'Ambiente di lavoro sicuro',
-  riconoscimento: 'Riconoscimento del lavoro',
-  supporto_leadership: 'Supporto dal responsabile',
-  etica_assistenza: 'Etica e rispetto degli ospiti',
-  chiarezza_ruolo: 'Chiarezza di ruolo',
-  qualita_tecnica: 'Qualità delle cure erogate',
-  reputazione_lavoro: 'Consiglieresti come posto di lavoro',
-  reputazione_servizio: 'Consiglieresti per assistenza',
-};
+import { LABEL_MAP } from '../config/surveyLabels';
+import { semaforoColor } from '../utils/surveyColors';
+import { ORDINE_FASCE } from '../utils/surveyDistribuzione';
 
 const CATEGORIE_CLIENT = {
   'Personale': ['voto_assistenza','rispetto_dignita','assistenza_medica','assistenza_notturna','soddisfazione_tempo'],
@@ -61,23 +27,15 @@ const GRAY = '64748B';
 const WHITE = 'FFFFFF';
 const GREEN = '166534';
 const RED = '991B1B';
-const AMBER = '92400E';
 
-function semaforo(val) {
-  if (val >= 80) return { symbol: '●', label: 'OTTIMO', color: '0CA30C' };
-  if (val >= 75) return { symbol: '◐', label: 'BUONO', color: '2a78d6' };
-  if (val >= 70) return { symbol: '○', label: 'ATTENZIONE', color: AMBER };
-  return { symbol: '▼', label: 'CRITICO', color: RED };
-}
-
-function starsText(val) {
-  const stars = Math.round((val / 100) * 5);
-  return '★'.repeat(stars) + '☆'.repeat(5 - stars);
-}
-
-function categoryAvg(keys, scores) {
-  const vals = keys.map(k => scores?.[k]).filter(v => v != null);
-  return vals.length ? Math.round(vals.reduce((a,b) => a+b,0)/vals.length) : null;
+// Colore derivato da semaforoColor() (src/utils/surveyColors.js), unica fonte di
+// verità per le soglie — evita che questa scala diverga da quella on-screen.
+export function semaforo(val) {
+  const color = semaforoColor(val).replace('#', '').toUpperCase();
+  if (val > 80) return { symbol: '●', label: 'OTTIMO', color };
+  if (val >= 75) return { symbol: '◐', label: 'BUONO', color };
+  if (val >= 70) return { symbol: '○', label: 'ATTENZIONE', color };
+  return { symbol: '▼', label: 'CRITICO', color };
 }
 
 // Converte una stringa base64 (senza prefisso data:) in Uint8Array,
@@ -88,6 +46,14 @@ function base64ToUint8Array(base64) {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+// ImageRun dimensionato mantenendo l'aspect ratio del canvas sorgente
+// (src/utils/campagnaCharts.js restituisce anche width/height in px), scalato
+// a una larghezza di stampa fissa invece di un'altezza indovinata a mano.
+function imageRunProporzionale(base64, srcWidth, srcHeight, targetWidth) {
+  const targetHeight = Math.round(targetWidth * (srcHeight / srcWidth));
+  return new ImageRun({ data: base64ToUint8Array(base64), type: 'png', transformation: { width: targetWidth, height: targetHeight } });
 }
 
 // Helper celle tabella
@@ -143,6 +109,67 @@ function editLine() {
   });
 }
 
+// Spezza una riga in TextRun alternando testo normale e **grassetto**,
+// così il markdown grezzo restituito dall'AI diventa formattazione docx reale.
+function parseInlineRuns(text, opts = {}) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g).filter(p => p !== '');
+  const runs = parts.map(part =>
+    part.startsWith('**') && part.endsWith('**')
+      ? new TextRun({ text: part.slice(2, -2), bold: true, ...opts })
+      : new TextRun({ text: part, ...opts })
+  );
+  return runs.length ? runs : [new TextRun({ text: '', ...opts })];
+}
+
+// Converte il markdown grezzo che l'AI a volte restituisce (#/##/### titoli,
+// **grassetto**, elenchi puntati "- ", separatori "---", riferimenti "[1][2]")
+// in Paragraph docx veri invece di stamparlo come testo letterale.
+function markdownToParagraphs(rawText, opts = { size: 20 }) {
+  const cleaned = (rawText ?? '').replace(/\[\d+\]/g, '').trim();
+  if (!cleaned) return [];
+
+  const paragraphs = [];
+  for (const rawLine of cleaned.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/^-{3,}\s*$/.test(line)) continue; // separatore "---": nessun elemento docx equivalente, si scarta
+
+    const heading = line.match(/^(#{1,3})\s+(.*)/);
+    if (heading) {
+      const level = heading[1].length;
+      paragraphs.push(new Paragraph({
+        children: [new TextRun({ text: heading[2].replace(/\*\*/g, ''), bold: true, size: level === 1 ? 24 : level === 2 ? 22 : 20, color: BLU })],
+        spacing: { before: 160, after: 100 },
+      }));
+      continue;
+    }
+
+    const bullet = line.match(/^[-*]\s+(.*)/);
+    if (bullet) {
+      paragraphs.push(new Paragraph({
+        children: [new TextRun({ text: '•  ', ...opts }), ...parseInlineRuns(bullet[1], opts)],
+        indent: { left: 240 },
+        spacing: { after: 80 },
+      }));
+      continue;
+    }
+
+    paragraphs.push(new Paragraph({ children: parseInlineRuns(line, opts), spacing: { after: 120 } }));
+  }
+  return paragraphs;
+}
+
+// Testo AI-approvato dal direttore se presente (convertito da markdown a
+// elementi docx), altrimenti righe vuote da riempire a mano — stesso
+// trattamento placeholder usato in tutto il resto del documento per i
+// contenuti non ancora generati/rivisti.
+function testoOPlaceholder(text, righeVuote = 3) {
+  if (text?.trim()) {
+    return markdownToParagraphs(text, { size: 20 });
+  }
+  return Array.from({ length: righeVuote }, () => editLine());
+}
+
 function kpiTable(items) {
   const W = 9360;
   const cw = Math.round(W / items.length);
@@ -165,6 +192,13 @@ function kpiTable(items) {
 
 function tabellaRisultati(avgScores, minScores, maxScores, udoAvgScores, surveyType) {
   const cats = surveyType === 'operator' ? CATEGORIE_OPERATOR : CATEGORIE_CLIENT;
+  // Domande presenti nei dati ma non mappate su nessuna delle aree standard
+  // (es. survey_centri_disabilita: Informazioni cura, Assistenza diurna...):
+  // vanno in un gruppo "Altro" a fine tabella invece di sparire silenziosamente,
+  // pur comparendo regolarmente come torta nel documento utenza.
+  const mappedKeys = new Set(Object.values(cats).flat());
+  const altroKeys = Object.keys(avgScores ?? {}).filter(k => avgScores[k] != null && !mappedKeys.has(k));
+  const catsConAltro = altroKeys.length ? { ...cats, 'Altro': altroKeys } : cats;
   const W = 9360;
   const cols = [Math.round(W*0.40), Math.round(W*0.11), Math.round(W*0.10), Math.round(W*0.10), Math.round(W*0.12), Math.round(W*0.17)];
   const rows = [];
@@ -179,7 +213,7 @@ function tabellaRisultati(avgScores, minScores, maxScores, udoAvgScores, surveyT
   ]}));
 
   let rowIdx = 0;
-  for (const [catLabel, keys] of Object.entries(cats)) {
+  for (const [catLabel, keys] of Object.entries(catsConAltro)) {
     rows.push(new TableRow({ children: [
       catCell(catLabel.toUpperCase(), cols[0]),
       catCell('', cols[1]), catCell('', cols[2]),
@@ -206,86 +240,99 @@ function tabellaRisultati(avgScores, minScores, maxScores, udoAvgScores, surveyT
   return new Table({ width: { size: W, type: WidthType.DXA }, columnWidths: cols, rows });
 }
 
-function tabellaCommentiSintesi(suntoCommenti, commenti, nRisposte) {
-  const n = commenti?.length ?? 0;
-  const perc = nRisposte > 0 ? Math.round(n / nRisposte * 100) : 0;
-  const children = [];
+// Widget NPS: numero grande + barra segmentata verde/arancio/rosso, primitive
+// docx native (no canvas) — stessi rapporti di NpsGauge in AnalisiCampagnaPanel.jsx
+// (verde=max(nps,5), arancio=max(100-nps-10,5), rosso=10 fisso).
+function npsWidget(nps) {
+  if (nps == null) return [];
+  const green = Math.max(nps, 5);
+  const amber = Math.max(100 - nps - 10, 5);
+  const red = 10;
+  const total = green + amber + red;
+  const W = 4500;
+  const cw = frac => Math.round(W * frac / total);
+  const barCell = (frac, color) => new TableCell({
+    width: { size: cw(frac), type: WidthType.DXA },
+    shading: { type: ShadingType.CLEAR, fill: color },
+    children: [new Paragraph({ text: '' })],
+  });
 
-  children.push(new Paragraph({
-    children: [new TextRun({ text: `${n} commenti su ${nRisposte} questionari (${perc}%). Ogni commento rappresenta un'opinione individuale.`, size: 18, italics: true, color: GRAY })],
-    spacing: { after: 160 },
-  }));
-
-  if (suntoCommenti) {
-    children.push(new Paragraph({
-      children: [new TextRun({ text: 'SINTESI TEMI', bold: true, size: 20, color: BLU })],
-      spacing: { before: 80, after: 80 },
-    }));
-    children.push(new Paragraph({
-      children: [new TextRun({ text: suntoCommenti, size: 18 })],
-      spacing: { after: 200 },
-    }));
-  }
-
-  if (commenti?.length) {
-    children.push(new Paragraph({
-      children: [new TextRun({ text: 'COMMENTI ORIGINALI', bold: true, size: 20, color: GRAY })],
-      spacing: { before: 80, after: 80 },
-    }));
-    commenti.forEach((c, i) => {
-      children.push(new Paragraph({
-        children: [new TextRun({ text: `[${i+1}] ${c.note?.trim() ?? ''}${c.formazione_12mesi?.trim() ? ` | Formazione: ${c.formazione_12mesi.trim()}` : ''}`, size: 18 })],
-        spacing: { after: 60 },
-      }));
-    });
-  }
-
-  return children;
+  return [
+    new Paragraph({ children: [new TextRun({ text: 'NPS — PROPENSIONE RACCOMANDAZIONE', bold: true, size: 20, color: GRAY })], spacing: { before: 80, after: 80 } }),
+    new Paragraph({
+      children: [
+        new TextRun({ text: String(nps), bold: true, size: 56, color: BLU }),
+        new TextRun({ text: '/100', size: 22, color: '94A3B8' }),
+      ],
+      spacing: { after: 100 },
+    }),
+    new Table({
+      width: { size: W, type: WidthType.DXA },
+      columnWidths: [cw(green), cw(amber), cw(red)],
+      rows: [new TableRow({
+        height: { value: 160, rule: HeightRule.EXACT },
+        children: [
+          barCell(green, '0CA30C'),
+          barCell(amber, 'EDA100'),
+          barCell(red, 'E34948'),
+        ],
+      })],
+    }),
+    spacer(220),
+  ];
 }
 
-function tabellaCategorieStar(avgScores, surveyType) {
-  const cats = surveyType === 'operator' ? CATEGORIE_OPERATOR : CATEGORIE_CLIENT;
-  const W = 9360;
-  const cols = [Math.round(W*0.35), Math.round(W*0.30), Math.round(W*0.20), Math.round(W*0.15)];
-  const rows = [];
+// Widget numero+stelle per le domande con Esito CRITICO — porting nativo
+// docx (nessun canvas) di StarsCard in RestituzioneModal.jsx: media pesata
+// posizionale sulle fasce (5 punti la migliore, 1 la peggiore, come in
+// StarsCard), 0-5 stelle con eventuale mezza stella.
+function stelleWidget(answers) {
+  const fasce = ORDINE_FASCE
+    .filter(label => (answers?.[label] ?? 0) > 0)
+    .map(label => ({ count: answers[label] }));
+  if (!fasce.length) return [];
 
-  rows.push(new TableRow({ tableHeader: true, children: [
-    hCell('Area', cols[0]),
-    hCell('Stelline', cols[1]),
-    hCell('Punteggio', cols[2]),
-    hCell('Giudizio', cols[3]),
-  ]}));
+  let sum = 0, count = 0;
+  fasce.forEach((f, i) => {
+    const peso = [5, 4, 3, 2, 1][i] ?? 1;
+    sum += f.count * peso;
+    count += f.count;
+  });
+  const stars = count > 0 ? sum / count : 0;
+  const fullStars = Math.floor(stars);
+  const halfStar = stars - fullStars >= 0.4;
+  const emptyStars = Math.max(0, 5 - fullStars - (halfStar ? 1 : 0));
+  const starText = '★'.repeat(fullStars) + (halfStar ? '½' : '') + '☆'.repeat(emptyStars);
 
-  let rowIdx = 0;
-  for (const [catLabel, keys] of Object.entries(cats)) {
-    const avg = categoryAvg(keys, avgScores);
-    if (avg == null) continue;
-    const shade = rowIdx % 2 === 0;
-    const sem = semaforo(avg);
-    const stars = starsText(avg);
-    rows.push(new TableRow({ children: [
-      dCell(catLabel, cols[0], { shade, bold: true }),
-      dCell(stars, cols[1], { shade, color: avg >= 70 ? 'FBBF24' : 'E34948' }),
-      dCell(`${avg}/100`, cols[2], { shade, bold: true, color: sem.color }),
-      dCell(sem.label, cols[3], { shade, color: sem.color }),
-    ]}));
-    rowIdx++;
-  }
-
-  return new Table({ width: { size: W, type: WidthType.DXA }, columnWidths: cols, rows });
+  return [
+    new Paragraph({
+      children: [
+        new TextRun({ text: stars.toFixed(1), bold: true, size: 40, color: BLU }),
+        new TextRun({ text: '/5', size: 20, color: '94A3B8' }),
+      ],
+      spacing: { after: 60 },
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: starText, size: 32, color: 'EF9F27' })],
+      spacing: { after: 60 },
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: `${stars.toFixed(1)}/5 · ${count} risposte`, size: 16, color: GRAY })],
+      spacing: { after: 200 },
+    }),
+  ];
 }
 
 // ── DOCUMENTO DIREZIONE ────────────────────────────────────────
-function buildDirezione({ facilityName, campagnaNome, dataInizio, dataFine, nRisposte, surveyType, avgScores, minScores, maxScores, udoAvgScores, commenti, suntoCommenti, radarBase64, logoImageData, logoType }) {
+function buildDirezione({ facilityName, campagnaNome, dataInizio, dataFine, nRisposte, surveyType, avgScores, minScores, maxScores, udoAvgScores, redemptionRate, radarBase64, puntiForza, puntiDebolezza, obiettiviDirezione, temiCommenti, nCommenti, logoImageData, logoType }) {
   const tipoLabel = surveyType === 'client' ? 'Clienti / Ospiti' : 'Staff / Operatori';
   const score = avgScores ? Math.round(Object.values(avgScores).filter(v=>v!=null).reduce((a,b)=>a+b,0)/Object.values(avgScores).filter(v=>v!=null).length) : null;
-  const nSottoSoglia = avgScores ? Object.values(avgScores).filter(v => v != null && v < 75).length : 0;
 
   return [
     // ── PAGINA 1: FRONTESPIZIO + VALUTAZIONE ──
     ...(logoImageData ? [new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new ImageRun({ data: logoImageData, type: logoType, transformation: { width: 160, height: 80 } })],
+      children: [new ImageRun({ data: logoImageData, type: logoType, transformation: { width: 200, height: 100 } })],
       spacing: { before: 200, after: 200 },
     })] : [spacer(400)]),
 
@@ -309,33 +356,25 @@ function buildDirezione({ facilityName, campagnaNome, dataInizio, dataFine, nRis
       { label: 'SCORE MEDIO', value: score ? `${score}/100` : '–', sub: 'Normalizzato' },
       { label: 'RISPOSTE', value: String(nRisposte), sub: 'Questionari' },
       { label: 'NPS', value: avgScores?.nps_consiglio ? `${avgScores.nps_consiglio}` : '–', sub: 'Propensione' },
-      { label: 'SOTTO SOGLIA', value: String(nSottoSoglia), sub: 'Domande <75' },
+      { label: 'REDEMPTION', value: redemptionRate != null ? `${redemptionRate}%` : 'N/D', sub: 'Risposte / target' },
     ]),
 
+    // Niente PageBreak forzato qui (round 6): radar+tabella risalgono
+    // naturalmente sotto la valutazione direzionale quando c'è spazio in
+    // pagina 1, invece di lasciarla quasi vuota con uno stacco di pagina fisso.
     spacer(280),
     sectionTitle('Valutazione direzionale'),
 
     new Paragraph({ children: [new TextRun({ text: 'PUNTI DI FORZA', bold: true, size: 22, color: GREEN })], spacing: { before: 160, after: 80 } }),
-    new Paragraph({ children: [new TextRun({ text: '1. ', size: 20 })], spacing: { after: 60 } }),
-    editLine(),
-    new Paragraph({ children: [new TextRun({ text: '2. ', size: 20 })], spacing: { after: 60 } }),
-    editLine(),
-    new Paragraph({ children: [new TextRun({ text: '3. ', size: 20 })], spacing: { after: 60 } }),
-    editLine(),
+    ...testoOPlaceholder(puntiForza),
 
     new Paragraph({ children: [new TextRun({ text: 'PUNTI DI DEBOLEZZA', bold: true, size: 22, color: RED })], spacing: { before: 200, after: 80 } }),
-    new Paragraph({ children: [new TextRun({ text: '1. ', size: 20 })], spacing: { after: 60 } }),
-    editLine(),
-    new Paragraph({ children: [new TextRun({ text: '2. ', size: 20 })], spacing: { after: 60 } }),
-    editLine(),
-    new Paragraph({ children: [new TextRun({ text: '3. ', size: 20 })], spacing: { after: 60 } }),
-    editLine(),
+    ...testoOPlaceholder(puntiDebolezza),
 
     new Paragraph({ children: [new TextRun({ text: 'OBIETTIVI E AZIONI PER IL PROSSIMO SEMESTRE', bold: true, size: 22, color: BLU })], spacing: { before: 200, after: 80 } }),
-    editLine(), editLine(), editLine(),
+    ...testoOPlaceholder(obiettiviDirezione),
 
-    // ── PAGINA 2: RADAR + TABELLA + COMMENTI ──
-    new Paragraph({ children: [new PageBreak()] }),
+    spacer(280),
     sectionTitle('Mappa dimensionale e risultati per area'),
 
     ...(radarBase64 ? [new Paragraph({
@@ -346,14 +385,18 @@ function buildDirezione({ facilityName, campagnaNome, dataInizio, dataFine, nRis
 
     tabellaRisultati(avgScores, minScores, maxScores, udoAvgScores, surveyType),
 
-    spacer(280),
-    sectionTitle('Commenti liberi'),
-    ...tabellaCommentiSintesi(suntoCommenti, commenti, nRisposte),
+    // Sezione omessa del tutto se non c'è nessun commento libero nel periodo
+    // (nCommenti === 0) — nessun testo vuoto/inventato da mostrare.
+    ...(nCommenti > 0 ? [
+      spacer(280),
+      sectionTitle('Temi emersi dai commenti'),
+      ...testoOPlaceholder(temiCommenti),
+    ] : []),
   ];
 }
 
 // ── DOCUMENTO UTENZA ───────────────────────────────────────────
-function buildUtenza({ facilityName, campagnaNome, dataInizio, dataFine, nRisposte, surveyType, avgScores, commenti, suntoCommenti, logoImageData, logoType, barreBase64, tortaNPSBase64 }) {
+function buildUtenza({ facilityName, campagnaNome, dataInizio, dataFine, nRisposte, surveyType, avgScores, logoImageData, logoType, perQuestionCharts, attivita, sintesiPeriodo, puntiForzaUtenza, doveMigliorareUtenza, azioniUtenza, impegnoUtenza }) {
   const tipoLabel = surveyType === 'client' ? 'Ospiti e Famiglie' : 'Personale e Operatori';
   const nps = avgScores?.nps_consiglio;
 
@@ -361,7 +404,7 @@ function buildUtenza({ facilityName, campagnaNome, dataInizio, dataFine, nRispos
     // ── PAGINA 1: FRONTESPIZIO + MESSAGGIO ──
     ...(logoImageData ? [new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new ImageRun({ data: logoImageData, type: logoType, transformation: { width: 160, height: 80 } })],
+      children: [new ImageRun({ data: logoImageData, type: logoType, transformation: { width: 200, height: 100 } })],
       spacing: { before: 200, after: 200 },
     })] : [spacer(400)]),
 
@@ -386,55 +429,80 @@ function buildUtenza({ facilityName, campagnaNome, dataInizio, dataFine, nRispos
       spacing: { after: 320 },
     }),
 
+    // Sintesi del periodo — in apertura del documento, seguita dai 4 campi di
+    // dettaglio (punti di forza/dove migliorare/azioni/impegno) prima dei
+    // grafici per domanda in pagina 2.
+    sectionTitle('Sintesi del periodo'),
+    ...testoOPlaceholder(sintesiPeriodo),
+
     sectionTitle('I nostri punti di forza'),
-    spacer(80),
-    new Paragraph({ children: [new TextRun({ text: '', size: 20 })], spacing: { after: 200 } }),
-    editLine(), editLine(),
+    ...testoOPlaceholder(puntiForzaUtenza),
 
     sectionTitle('Dove vogliamo migliorare'),
-    spacer(80),
-    new Paragraph({ children: [new TextRun({ text: '', size: 20 })], spacing: { after: 200 } }),
-    editLine(), editLine(),
+    ...testoOPlaceholder(doveMigliorareUtenza),
 
     sectionTitle('Le nostre azioni per il prossimo anno'),
-    spacer(80),
-    new Paragraph({ children: [new TextRun({ text: '', size: 20 })], spacing: { after: 200 } }),
-    editLine(), editLine(),
+    ...testoOPlaceholder(azioniUtenza),
 
     sectionTitle('Il nostro impegno'),
-    spacer(80),
-    new Paragraph({ children: [new TextRun({ text: '', size: 20 })], spacing: { after: 200 } }),
-    editLine(),
+    ...testoOPlaceholder(impegnoUtenza),
 
-    // ── PAGINA 2: GRAFICI + COMMENTI ──
+    // ── PAGINA 2: NPS + GRAFICI PER DOMANDA ──
     new Paragraph({ children: [new PageBreak()] }),
     sectionTitle('Come ci avete valutato'),
     spacer(120),
 
-    new Paragraph({ children: [new TextRun({ text: 'SODDISFAZIONE PER AREA', bold: true, size: 20, color: GRAY })], spacing: { before: 80, after: 80 } }),
-    ...(barreBase64 ? [new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [new ImageRun({ data: base64ToUint8Array(barreBase64), type: 'png', transformation: { width: 420, height: Math.max(200, Object.keys(surveyType === 'operator' ? CATEGORIE_OPERATOR : CATEGORIE_CLIENT).length * 42 + 60) } })],
-      spacing: { after: 200 },
-    })] : [tabellaCategorieStar(avgScores, surveyType)]),
+    ...npsWidget(nps),
 
-    ...(tortaNPSBase64 ? [
-      new Paragraph({ children: [new TextRun({ text: 'LA CONSIGLIERESTE?', bold: true, size: 20, color: GRAY })], spacing: { before: 80, after: 80 } }),
+    // Un grafico per ogni domanda della campagna, con il nome della domanda
+    // come intestazione: torta di norma, widget numero+stelle per le domande
+    // con Esito CRITICO (vedi generaDocumenti() in AnalisiCampagnaPanel.jsx).
+    // Titolo allineato a sinistra (il grafico sotto resta centrato), con
+    // keepNext così il titolo non resta mai orfano a fine pagina separato
+    // dal proprio grafico. Spaziatura e larghezza immagine ridotte per farne
+    // stare 3 per pagina invece di 2 (era 300px/spacing 160-80/160).
+    ...(perQuestionCharts ?? []).flatMap(c => [
+      new Paragraph({
+        keepNext: true,
+        children: [new TextRun({ text: (LABEL_MAP[c.key] ?? c.key).toUpperCase(), bold: true, size: 20, color: GRAY })],
+        spacing: { before: 120, after: 30 },
+      }),
+      ...(c.isCritico
+        ? stelleWidget(c.answers)
+        : [new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [imageRunProporzionale(c.base64, c.width, c.height, 225)],
+            spacing: { after: 100 },
+          })]),
+    ]),
+
+    // Attività — confronto partecipazione: solo se la struttura ha domande
+    // di questo tipo nel periodo (oggi solo survey_seniorliving), altrimenti
+    // sezione omessa del tutto.
+    ...(attivita ? [
+      spacer(120),
+      new Paragraph({
+        children: [new TextRun({ text: 'ATTIVITÀ — CONFRONTO PARTECIPAZIONE', bold: true, size: 20, color: GRAY })],
+        spacing: { before: 80, after: 80 },
+      }),
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        children: [new ImageRun({ data: base64ToUint8Array(tortaNPSBase64), type: 'png', transformation: { width: 260, height: 260 } })],
-        spacing: { after: 200 },
+        children: [imageRunProporzionale(attivita.base64, attivita.width, attivita.height, 380)],
+        spacing: { after: 160 },
       }),
-    ] : (nps != null ? [
-      new Paragraph({ children: [new TextRun({ text: 'LA CONSIGLIERESTE?', bold: true, size: 20, color: GRAY })], spacing: { before: 80, after: 80 } }),
-      new Paragraph({
-        children: [new TextRun({ text: `${starsText(nps)}  ${nps}/100`, size: 32, bold: true, color: nps >= 75 ? '0CA30C' : RED })],
-        spacing: { after: 200 },
-      }),
-    ] : [])),
+    ] : []),
 
-    sectionTitle('Cosa ci avete scritto'),
-    ...tabellaCommentiSintesi(suntoCommenti, commenti, nRisposte),
+    // Ringraziamento finale — testo statico fisso, nessuna generazione AI.
+    spacer(240),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: 'Grazie per aver dedicato tempo a raccontarci la vostra esperienza.', size: 22, italics: true, color: GRAY })],
+      spacing: { before: 120, after: 40 },
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: 'Il vostro contributo ci aiuta a migliorare ogni giorno.', size: 20, color: '94A3B8' })],
+    }),
   ];
 }
 
@@ -442,8 +510,10 @@ function buildUtenza({ facilityName, campagnaNome, dataInizio, dataFine, nRispos
 export async function generaReportSurveyCampagna({
   facility, supabase,
   facilityName, campagnaNome, dataInizio, dataFine, nRisposte,
-  surveyType, avgScores, minScores, maxScores, udoAvgScores,
-  commenti, suntoCommenti, radarBase64, barreBase64, tortaNPSBase64, target,
+  surveyType, avgScores, minScores, maxScores, udoAvgScores, redemptionRate,
+  radarBase64, perQuestionCharts, attivita,
+  sintesiPeriodo, puntiForza, puntiDebolezza, obiettiviDirezione, temiCommenti, nCommenti,
+  puntiForzaUtenza, doveMigliorareUtenza, azioniUtenza, impegnoUtenza, target,
 }) {
   let logoImageData = null;
   let logoType = 'png';
@@ -461,7 +531,13 @@ export async function generaReportSurveyCampagna({
     } catch (e) { console.warn('Logo non disponibile', e); }
   }
 
-  const params = { facilityName, campagnaNome, dataInizio, dataFine, nRisposte, surveyType, avgScores, minScores, maxScores, udoAvgScores, commenti, suntoCommenti, radarBase64, barreBase64, tortaNPSBase64, logoImageData, logoType };
+  const params = {
+    facilityName, campagnaNome, dataInizio, dataFine, nRisposte, surveyType,
+    avgScores, minScores, maxScores, udoAvgScores, redemptionRate,
+    radarBase64, perQuestionCharts, attivita, sintesiPeriodo, puntiForza, puntiDebolezza,
+    obiettiviDirezione, temiCommenti, nCommenti, puntiForzaUtenza, doveMigliorareUtenza,
+    azioniUtenza, impegnoUtenza, logoImageData, logoType,
+  };
 
   const children = target === 'direzione'
     ? buildDirezione(params)

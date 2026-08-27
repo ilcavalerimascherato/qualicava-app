@@ -18,8 +18,7 @@
  */
 import { KPI_RISK_MAP, YELLOW_MULTIPLIER, RISK_THRESHOLDS } from '../config/riskWeights';
 import { computeKpiValue }  from './kpiFormulaEngine';
-import { KPI_RULES }        from '../config/kpiRules';
-import { getKpiStatus }     from '../config/kpiRules';
+import { KPI_RULES, getKpiStatusFromComputedValue } from '../config/kpiRules';
 
 /** Punteggio massimo teorico (tutti i KPI in rosso) */
 const MAX_SCORE = Array.from(KPI_RISK_MAP.values()).reduce((s, r) => s + r.weight, 0);
@@ -41,7 +40,7 @@ function scoreRecord(record, facility) {
     const value = computeKpiValue(rule, record.metrics_json, facility);
     if (value === null) return;
 
-    const status = getKpiStatus(rule, value / 100); // getKpiStatus lavora su 0-1
+    const status = getKpiStatusFromComputedValue(rule, value);
     if (status === 'red')    score += riskCfg.weight;
     if (status === 'yellow') score += riskCfg.weight * YELLOW_MULTIPLIER;
   });
@@ -55,7 +54,7 @@ function scoreRecord(record, facility) {
  * @param {number} currentMonth  1-based
  * @returns {Array<{year, month}>}
  */
-function getLast3Months(currentYear, currentMonth) {
+export function getLast3Months(currentYear, currentMonth) {
   const months = [];
   let y = currentYear;
   let m = currentMonth - 1; // partiamo dal mese precedente (più recente consolidato)
@@ -126,7 +125,7 @@ export function calcFacilityRiskScore(facility, kpiRecords) {
       if (!riskCfg) return;
       const value  = computeKpiValue(rule, lastRec.metrics_json, facility);
       if (value === null) return;
-      const status = getKpiStatus(rule, value / 100);
+      const status = getKpiStatusFromComputedValue(rule, value);
       if (status === 'red' || status === 'yellow') {
         detail.push({ kpi: rule.kpi_target, status, category: riskCfg.category, weight: riskCfg.weight });
       }
@@ -135,6 +134,37 @@ export function calcFacilityRiskScore(facility, kpiRecords) {
   }
 
   return { score, level, months: monthScores.length, detail };
+}
+
+/**
+ * Aggrega il risk score delle strutture di una società (media dei punteggi
+ * delle strutture con dato disponibile). Usato dal Cruscotto per la vista
+ * di default per società.
+ *
+ * @param {number|string} companyId
+ * @param {Array}         facilities  - tutte le strutture (verranno filtrate per company_id)
+ * @param {Array}         kpiRecords  - tutti i record fact_kpi_monthly
+ * @returns {{ score: number|null, level: 'low'|'medium'|'high'|'unknown', facilityCount: number, scoredCount: number }}
+ */
+export function calcCompanyRiskScore(companyId, facilities, kpiRecords) {
+  const companyFacilities = facilities.filter(
+    f => String(f.company_id) === String(companyId) && !f.is_suspended
+  );
+
+  const scores = companyFacilities
+    .map(f => calcFacilityRiskScore(f, kpiRecords))
+    .filter(r => r.score !== null);
+
+  if (scores.length === 0) {
+    return { score: null, level: 'unknown', facilityCount: companyFacilities.length, scoredCount: 0 };
+  }
+
+  const score = Math.round(scores.reduce((s, r) => s + r.score, 0) / scores.length);
+  const level = score < RISK_THRESHOLDS.LOW    ? 'low'
+              : score < RISK_THRESHOLDS.MEDIUM ? 'medium'
+              : 'high';
+
+  return { score, level, facilityCount: companyFacilities.length, scoredCount: scores.length };
 }
 
 /** Config colori per il badge rischio */

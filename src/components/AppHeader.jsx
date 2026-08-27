@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard, BarChart2, ChefHat, FileText,
-  AlertTriangle, TrendingUp, Settings, ChevronDown, LogOut,
+  AlertTriangle, TrendingUp, Settings, ChevronDown, LogOut, ClipboardCheck,
+  FileWarning,
 } from 'lucide-react';
 import NotificheDropdown from './NotificheDropdown';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AppHeader({
   activePage,
@@ -13,6 +15,9 @@ export default function AppHeader({
   onNavigate,
 }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const { can } = useAuth();
+  // Ruolo 'board': solo consultazione del Cruscotto, nessun'altra voce HQ
+  const hasFullHqAccess = can('manageStructures');
 
   const initials = user?.full_name
     ? user.full_name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -38,13 +43,15 @@ export default function AppHeader({
         {/* CENTRO — tab navigazione */}
         <nav className="flex-1 flex items-stretch justify-center gap-0 h-full">
           {[
-            { id: 'dashboard',   label: 'Dashboard',   icon: LayoutDashboard, badge: null,                   badgeColor: null    },
-            { id: 'saturazione', label: 'Saturazione',  icon: BarChart2,       badge: null,                   badgeColor: null    },
-            { id: 'haccp',       label: 'HACCP',        icon: ChefHat,         badge: badgeCounts?.haccp,     badgeColor: 'red'   },
-            { id: 'documenti',   label: 'Documenti',    icon: FileText,        badge: badgeCounts?.documenti, badgeColor: 'amber' },
-            { id: 'nc',          label: 'NC',           icon: AlertTriangle,   badge: badgeCounts?.nc,        badgeColor: 'red'   },
-            { id: 'report',      label: 'Report',       icon: TrendingUp,      badge: null,                   badgeColor: null    },
-          ].map(({ id, label, icon: Icon, badge, badgeColor }) => (
+            { id: 'dashboard',   label: 'Dashboard',   icon: LayoutDashboard, badge: null,                   badgeColor: null,    hqOnly: true  },
+            { id: 'saturazione', label: 'Saturazione',  icon: BarChart2,       badge: null,                   badgeColor: null,    hqOnly: true  },
+            { id: 'haccp',       label: 'HACCP',        icon: ChefHat,         badge: badgeCounts?.haccp,     badgeColor: 'red',   hqOnly: true  },
+            { id: 'documenti',   label: 'Documenti',    icon: FileText,        badge: badgeCounts?.documenti, badgeColor: 'amber', hqOnly: true  },
+            { id: 'nc',          label: 'NC',           icon: AlertTriangle,   badge: badgeCounts?.nc,        badgeColor: 'red',   hqOnly: true  },
+            { id: 'verifiche',   label: 'Verifiche',    icon: ClipboardCheck,  badge: badgeCounts?.verifiche, badgeColor: 'red',   hqOnly: false },
+            { id: 'verbali',     label: 'Verbali Ispettivi', icon: FileWarning, badge: badgeCounts?.verbaliIspettivi, badgeColor: 'red', hqOnly: false },
+            { id: 'report',      label: 'Report',       icon: TrendingUp,      badge: null,                   badgeColor: null,    hqOnly: false },
+          ].filter(item => hasFullHqAccess || !item.hqOnly).map(({ id, label, icon: Icon, badge, badgeColor }) => (
             <button
               key={id}
               onClick={() => onNavigate(id)}
@@ -67,19 +74,23 @@ export default function AppHeader({
             </button>
           ))}
 
-          <div className="w-px bg-slate-200 my-2.5 mx-1 flex-shrink-0" />
+          {hasFullHqAccess && (
+            <>
+              <div className="w-px bg-slate-200 my-2.5 mx-1 flex-shrink-0" />
 
-          <button
-            onClick={() => onNavigate('impostazioni')}
-            className={`flex items-center gap-1.5 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
-              activePage === 'impostazioni'
-                ? 'text-emerald-600 border-emerald-600'
-                : 'text-slate-500 border-transparent hover:text-slate-700'
-            }`}
-          >
-            <Settings size={14} />
-            Impostazioni
-          </button>
+              <button
+                onClick={() => onNavigate('impostazioni')}
+                className={`flex items-center gap-1.5 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
+                  activePage === 'impostazioni'
+                    ? 'text-emerald-600 border-emerald-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <Settings size={14} />
+                Impostazioni
+              </button>
+            </>
+          )}
         </nav>
 
         {/* DESTRA — notifiche + utente */}

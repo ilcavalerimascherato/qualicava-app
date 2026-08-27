@@ -16,9 +16,23 @@
  *    esportate come thin wrapper per retrocompatibilità.
  *
  * TONO GENERALE: Professionale, accessibile, orientato all'azione.
- * MODELLO: gemini-2.5-flash
+ * MODELLO: Claude (Anthropic) — vedi src/utils/aiClient.js
  * ─────────────────────────────────────────────────────────────
  */
+
+// Tassonomia fissa dei temi per campagnaTemiCommenti — condivisa qui invece
+// che ripetuta nel prompt, così resta un'unica fonte di verità se cambia.
+const TEMI_COMMENTI_TASSONOMIA = [
+  'Ristorazione / cibo',
+  'Personale — organico e presenza',
+  'Personale — atteggiamento e relazione',
+  'Assistenza medica e infermieristica',
+  'Attività ricreative',
+  'Struttura, ambienti e manutenzione',
+  'Igiene e pulizia',
+  'Comunicazione con i familiari',
+  'Servizi ancillari (lavanderia, fisioterapia, ecc.)',
+];
 
 // ── VALIDAZIONE ───────────────────────────────────────────────
 function validateParams(requiredKeys, params, promptName) {
@@ -54,7 +68,7 @@ ${dataPayload}
 
 REGOLE TASSATIVE:
 - Apri con i saluti (es. "Gentili ospiti") e piccola frase di circostanza.
-- Lunghezza MASSIMA: 1 pagina A4. Sii cordiale e diretto.
+- Lunghezza MASSIMA: 1 pagina A4. Sii cordiale e chiaro.
 - Parla di miglioramenti in modo GENERICO. NON fare promesse puntuali o numeriche.
 - NON ripetere i numeri grezzi (score, posti letto, numero risposte).
 - Tono: umano, vicino alle persone, professionale ma accessibile.
@@ -284,7 +298,341 @@ REGOLE TASSATIVE:
 `.trim(),
   },
 
+  // ── 10. Sintesi del periodo → Ospiti (Documento Word Utenza) ──
+  campagnaSintesiPeriodo: {
+    required: ['facilityName', 'periodo', 'nRisposte', 'topAree', 'areeAttenzione'],
+    build: ({ facilityName, periodo, nRisposte, topAree, areeAttenzione, npsScore }) => `
+Sei il Direttore della struttura "${facilityName}".
+Scrivi una breve sintesi di come è andato il periodo, da inserire nel documento
+di restituzione risultati agli OSPITI E ALLE FAMIGLIE.
+
+PERIODO: ${periodo}
+QUESTIONARI RACCOLTI: ${nRisposte}
+NPS: ${npsScore !== null && npsScore !== undefined ? npsScore : 'non rilevato'}
+Aree andate meglio: ${topAree}
+Aree su cui ci concentriamo: ${areeAttenzione}
+
+REGOLE TASSATIVE:
+- Lunghezza: 3-5 frasi, non di più.
+- Tono: caldo, diretto, in prima persona (il Direttore che parla agli ospiti).
+- Cita le aree andate meglio e quelle di attenzione in modo GENERICO, mai con numeri grezzi.
+- NON ripetere il numero di questionari o l'NPS come cifra.
+- NON usare titoli o sezioni — testo continuo, nessun elenco puntato.
+`.trim(),
+  },
+
+  // ── 11. Punti di forza/debolezza → Direzione (Documento Word Direzione) ──
+  campagnaPuntiDirezionali: {
+    required: ['facilityName', 'campagnaNome', 'dataPayload'],
+    build: ({ facilityName, campagnaNome, dataPayload }) => `
+Sei un Auditor Analitico per la struttura "${facilityName}".
+Analizza i risultati della campagna "${campagnaNome}" e proponi una bozza di
+valutazione direzionale, da rivedere ed editare a cura del direttore prima
+della pubblicazione.
+
+DATI METRICHE (Domanda: Media/100):
+${dataPayload}
+
+REGOLE TASSATIVE:
+- NESSUN paragrafo introduttivo, nessun saluto, nessuna data.
+- Rispondi SOLO con le due sezioni richieste, nient'altro (niente "Obiettivi").
+- Ogni sezione: 3 bullet puntati con "- ", una frase ciascuno, basati sui dati forniti.
+- Tono: oggettivo, equilibrato, orientato all'azione.
+
+Rispondi ESATTAMENTE in questo formato (due sezioni, titoli in maiuscolo):
+PUNTI DI FORZA
+- ...
+- ...
+- ...
+PUNTI DI DEBOLEZZA
+- ...
+- ...
+- ...
+`.trim(),
+  },
+
+  // ── 11b. Punti di forza / aree di miglioramento → Utenza (Documento Word Utenza) ──
+  // Il documento Utenza serve sia il tema clienti (Ospiti e Famiglie) sia il
+  // tema operatori (Personale) — `audience` sceglie destinatario e tono senza
+  // duplicare il prompt in due entry quasi identiche.
+  campagnaPuntiUtenza: {
+    required: ['facilityName', 'campagnaNome', 'dataPayload'],
+    build: ({ facilityName, campagnaNome, dataPayload, audience = 'ospiti' }) => {
+      const isOperatori = audience === 'operatori';
+      const targetLabel = isOperatori ? 'PERSONALE E OPERATORI' : 'OSPITI E FAMIGLIE';
+      const tono = isOperatori
+        ? 'Tono: motivante, da squadra, rivolto al personale, mai burocratico.'
+        : 'Tono: caldo, diretto, rivolto a ospiti e famiglie, mai tecnico o clinico.';
+      return `
+Sei il Direttore della struttura "${facilityName}".
+Analizza i risultati della campagna "${campagnaNome}" e proponi una bozza dei
+punti di forza e delle aree di miglioramento da comunicare a ${targetLabel}
+nel documento di restituzione risultati, da rivedere ed editare a cura del
+direttore prima della pubblicazione.
+
+DATI METRICHE (Domanda: Media/100):
+${dataPayload}
+
+REGOLE TASSATIVE:
+- NESSUN paragrafo introduttivo, nessun saluto, nessuna data.
+- Rispondi SOLO con le due sezioni richieste, nient'altro.
+- Ogni sezione: 2-3 bullet puntati con "- ", frasi brevi.
+- NON usare numeri grezzi (score, percentuali, medie) — parla in termini qualitativi e generici.
+- ${tono}
+
+Rispondi ESATTAMENTE in questo formato (due sezioni, titoli in maiuscolo):
+I NOSTRI PUNTI DI FORZA
+- ...
+- ...
+DOVE VOGLIAMO MIGLIORARE
+- ...
+- ...
+`.trim();
+    },
+  },
+
+  // ── 11c. Azioni per il prossimo anno / Impegno → Utenza (Documento Word Utenza) ──
+  campagnaAzioniImpegnoUtenza: {
+    required: ['facilityName', 'campagnaNome', 'dataPayload'],
+    build: ({ facilityName, campagnaNome, dataPayload, audience = 'ospiti' }) => {
+      const isOperatori = audience === 'operatori';
+      const targetLabel = isOperatori ? 'PERSONALE E OPERATORI' : 'OSPITI E FAMIGLIE';
+      const tono = isOperatori
+        ? 'Tono valoriale, di squadra e riconoscenza verso il personale.'
+        : 'Tono valoriale e di vicinanza verso ospiti e famiglie.';
+      return `
+Sei il Direttore della struttura "${facilityName}".
+Analizza i risultati della campagna "${campagnaNome}" e proponi una bozza delle
+azioni per il prossimo anno e dell'impegno della struttura verso ${targetLabel},
+da inserire nel documento di restituzione risultati, da rivedere ed editare a
+cura del direttore prima della pubblicazione.
+
+DATI METRICHE (Domanda: Media/100):
+${dataPayload}
+
+REGOLE TASSATIVE:
+- NESSUN paragrafo introduttivo, nessun saluto, nessuna data.
+- Rispondi SOLO con le due sezioni richieste, nient'altro.
+- Tono PRUDENTE: esprimi intenzioni e valori generali, MAI promesse specifiche,
+  scadenze, cifre o impegni operativi concreti (assunzioni, budget, orari,
+  interventi puntuali) che la struttura potrebbe non riuscire a mantenere.
+- "LE NOSTRE AZIONI PER IL PROSSIMO ANNO": 2-3 bullet puntati con "- ", frasi
+  brevi orientate a direzioni di miglioramento generiche legate alle aree
+  emerse dai dati (non impegni puntuali).
+- "IL NOSTRO IMPEGNO": 2-3 frasi in un unico paragrafo continuo (NON puntato),
+  ${tono}
+
+Rispondi ESATTAMENTE in questo formato (due sezioni, titoli in maiuscolo):
+LE NOSTRE AZIONI PER IL PROSSIMO ANNO
+- ...
+- ...
+IL NOSTRO IMPEGNO
+...
+`.trim();
+    },
+  },
+
+  // ── 11d. Obiettivi e azioni per il prossimo semestre → Direzione (Documento Word Direzione) ──
+  campagnaObiettiviDirezione: {
+    required: ['facilityName', 'campagnaNome', 'dataPayload'],
+    build: ({ facilityName, campagnaNome, dataPayload }) => `
+Sei un Auditor Analitico per la struttura "${facilityName}".
+Analizza i risultati della campagna "${campagnaNome}" e proponi una bozza di
+obiettivi e azioni per il prossimo semestre, da rivedere ed editare a cura del
+direttore prima della pubblicazione.
+
+DATI METRICHE (Domanda: Media/100):
+${dataPayload}
+
+REGOLE TASSATIVE:
+- NESSUN paragrafo introduttivo, nessun saluto, nessuna data.
+- 3-4 bullet puntati con "- ", basati sulle aree più critiche emerse dai dati.
+- Tono PRUDENTE: obiettivi e direzioni di intervento realistiche, MAI impegni
+  operativi specifici che l'AI non può conoscere (assunzioni, budget, importi,
+  scadenze precise, nomi di persone o fornitori).
+- Tono: oggettivo, orientato all'azione ma prudente.
+- Rispondi SOLO con l'elenco puntato, nessun titolo (il titolo è già presente nel documento).
+`.trim(),
+  },
+
+  // ── 13. Briefing mattutino → Dashboard Master ──────────────
+  briefingMattutino: {
+    required: ['today', 'totalFacilities', 'activeCount', 'suspendedCount', 'okCount', 'attentionCount', 'criticalCount', 'topCriticalStr'],
+    build: ({ today, totalFacilities, activeCount, suspendedCount, okCount, attentionCount, criticalCount, totalOpenNc = 0, ncByRegionStr = '', topCriticalStr }) => `
+Sei l'assistente AI di QualiCAVA, sistema di gestione qualità per strutture sociosanitarie italiane.
+Genera un briefing mattutino conciso in italiano per il responsabile qualità di sede.
+
+Dati aggiornati al ${today}:
+- Strutture totali: ${totalFacilities} (${activeCount} attive, ${suspendedCount} sospese)
+- Stato strutture attive: ${okCount} in regola, ${attentionCount} in attenzione, ${criticalCount} critiche
+${totalOpenNc > 0 ? `- NC aperte totali: ${totalOpenNc}` : ''}
+${ncByRegionStr ? `- NC per regione: ${ncByRegionStr}` : ''}
+- Strutture più critiche: ${topCriticalStr}
+
+Genera un briefing con questa struttura ESATTA:
+1. Una frase di apertura contestuale alla situazione generale
+2. Massimo 2-3 punti di attenzione specifici con nome struttura e problema concreto
+3. Una frase conclusiva con il focus suggerito per la giornata
+
+Tono: diretto, professionale. Massimo 120 parole. Testo continuo in 2-3 paragrafi — niente elenchi.
+Usa il grassetto HTML <strong> solo per i nomi delle strutture critiche.
+`.trim(),
+  },
+
+  // ── 14. Sunto commenti liberi → Panel Analisi Campagna ─────
+  campagnaSuntoCommenti: {
+    required: ['nCommenti', 'totaleQuestionari', 'percRisposta', 'testiFormattati'],
+    build: ({ nCommenti, totaleQuestionari, percRisposta, testiFormattati }) => `
+Sei un esperto di qualità nel settore socio-sanitario italiano.
+Hai ricevuto ${nCommenti} commenti liberi su un totale di ${totaleQuestionari} questionari compilati (${percRisposta}% di risposta ai campi aperti).
+
+COMMENTI:
+${testiFormattati}
+
+Produci una sintesi strutturata così:
+1. PARTECIPAZIONE AI COMMENTI: una riga con il dato numerico (${nCommenti}/${totaleQuestionari}).
+2. TEMI EMERSI: elenca i temi principali con indicazione di quante persone li hanno citato (es. "Qualità del cibo — citato da 4 persone"). Raggruppa commenti simili. Non citare commenti singoli come se fossero opinioni diffuse.
+3. SEGNALI POSITIVI: max 3 punti con conteggio.
+4. AREE DI ATTENZIONE: max 3 punti con conteggio.
+
+Regola importante: se un tema è citato da 1 sola persona, indicalo esplicitamente come "segnalazione individuale". Non generalizzare mai.
+Rispondi in italiano, tono professionale.
+`.trim(),
+  },
+
+  // ── 12. Temi emersi dai commenti → Direzione (Documento Word Direzione) ──
+  campagnaTemiCommenti: {
+    required: ['facilityName', 'commentiFormattati', 'nCommenti', 'nQuestionari'],
+    build: ({ facilityName, commentiFormattati, nCommenti, nQuestionari }) => `
+Sei un esperto di qualità nel settore socio-sanitario italiano.
+Hai ricevuto ${nCommenti} commenti liberi su ${nQuestionari} questionari compilati
+dagli ospiti/famiglie della struttura "${facilityName}". Raggruppali per tema.
+
+COMMENTI:
+${commentiFormattati}
+
+TASSONOMIA FISSA DEI TEMI (usa SOLO questi, nell'ordine dato):
+${TEMI_COMMENTI_TASSONOMIA.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+REGOLE TASSATIVE:
+- Per ogni tema TOCCATO da almeno un commento nel periodo: scrivi il nome del
+  tema in maiuscolo seguito da "(N commenti)" con N = quanti commenti lo
+  toccano (un commento può toccare più temi), poi 2-3 note riassuntive dei
+  pareri diversi emersi, PARAFRASATE — mai copiare testualmente il commento originale.
+- Ometti COMPLETAMENTE i temi non toccati da nessun commento nel periodo: non scriverli.
+- Se un tema è toccato da 1 solo commento, indicalo come "segnalazione individuale".
+- NON inventare conteggi non derivabili dai commenti forniti.
+- NESSUN paragrafo introduttivo, nessun saluto. Inizia direttamente con il primo tema presente.
+- Tono: professionale, equilibrato, orientato all'azione.
+`.trim(),
+  },
+
+  // ── 15. Estrazione strutturata verbale ispettivo → Modulo Verbali Ispettivi ──
+  // Unico prompt per entrambi i tipi di verbale oggi noti (sopralluogo di
+  // vigilanza / controllo di appropriatezza): è l'AI stessa a classificare
+  // "tipo_ispezione" leggendo il documento, invece di due prompt da
+  // mantenere allineati. Output JSON (non narrativo) — validato/parsato in
+  // src/utils/verbaliAiExtraction.js, non mostrato direttamente all'utente.
+  estrazioneVerbaleIspettivo: {
+    required: [],
+    build: ({ oggi = new Date().toISOString().slice(0, 10) } = {}) => `
+Sei un esperto di compliance socio-sanitaria italiana (RSA). Ricevi in allegato un
+verbale di ispezione emesso da un ente di vigilanza (ATS, NAS o simile) su una
+struttura RSA. Oggi è il ${oggi}.
+
+Il verbale può essere di due tipi (riconoscibili dall'intestazione/classificazione
+protocollo, es. "Class. 2.07.05" per i sopralluoghi di vigilanza, "Class. 02.07.07"
+per i controlli di appropriatezza) o un tipo diverso non ancora catalogato: in quel
+caso usa "altro" e compila comunque tutti i campi comuni.
+
+ESTRAI dal documento i seguenti dati e rispondi ESCLUSIVAMENTE con un oggetto JSON
+valido, nessun testo prima o dopo, nessun blocco markdown \`\`\`, secondo questo schema:
+
+${VERBALE_EXTRACTION_SCHEMA_DESCRIPTION}
+
+REGOLE TASSATIVE PER L'ESTRAZIONE:
+- "rilievi": è la parte più importante. Estrai OGNI criticità, prescrizione,
+  esito negativo (NO/N.P. quando segnalato come problema), osservazione con
+  contenuto valutativo, o richiesta di documentazione specifica. RAGGRUPPA i
+  rilievi simili per area tematica o per fascicolo/FASAS citato invece di creare
+  una riga per ogni singolo indicatore non raggiunto: se più indicatori dello
+  stesso FASAS o della stessa area hanno una criticità collegata, uniscili in
+  UN SOLO rilievo con una descrizione che elenca i punti (es. "Fasas 2020003268:
+  la sospensione della contenzione notturna in alcune giornate non risulta
+  motivata nel diario"). Non generare un rilievo per ogni riga della checklist
+  quando l'esito è positivo/conforme (SI, raggiunto) — solo per le criticità.
+- Se il documento non contiene nessuna criticità esplicita (tutti gli indicatori
+  raggiunti, nessuna osservazione negativa), "rilievi" può essere un array vuoto:
+  non inventare problemi che non ci sono.
+- NON creare un rilievo che si limita a ripetere "valutazione_sintetica" o
+  l'esito generale della verifica (es. "l'esito è subordinato a ulteriori
+  valutazioni") — quello è già catturato nel campo dedicato. Un rilievo deve
+  sempre descrivere una criticità o richiesta specifica e concreta, non una
+  parafrasi dell'esito complessivo.
+- "descrizione" di ogni rilievo deve essere autosufficiente: chi la legge senza
+  aprire il PDF deve capire cosa è stato contestato e perché, parafrasando (non
+  necessariamente copiando testualmente) il testo del verbale.
+- "scadenza_risposta": cerca esplicitamente una data limite per l'invio di
+  documentazione o riscontro (es. "entro e non oltre il..."). Se il verbale
+  dichiara solo che "l'esito sarà comunicato con atto successivo" senza una
+  scadenza di invio documentazione a carico della struttura, lascia
+  scadenza_risposta a null (non è una scadenza di risposta della struttura).
+- "bozza_risposta_suggerita": solo se scadenza_risposta è valorizzata. Un testo
+  breve, professionale, in italiano, pronto per essere adattato dal Direttore —
+  NON firmarlo, NON inventare contenuti tecnici specifici che non conosci
+  (numeri, nomi, allegati concreti): lascia questi dettagli come placeholder tra
+  parentesi quadre, es. "[elencare qui la documentazione allegata]".
+- Date sempre in formato ISO "YYYY-MM-DD". Se l'anno non è specificato ma
+  desumibile dal contesto, deducilo; altrimenti null.
+- Non includere MAI commenti, spiegazioni o testo fuori dal JSON.
+`.trim(),
+  },
+
 };
+
+// Schema JSON atteso dal prompt "estrazioneVerbaleIspettivo" — esportato a
+// parte (non solo interpolato nel prompt) così src/utils/verbaliAiExtraction.js
+// può riferirlo per documentazione/validazione senza duplicarlo.
+export const VERBALE_EXTRACTION_SCHEMA_DESCRIPTION = `{
+  "tipo_ispezione": "sopralluogo_vigilanza" | "controllo_appropriatezza" | "altro",
+  "classificazione_originale": string|null,   // es. "2.07.05" o "02.07.07" letto dall'intestazione
+  "ente": string|null,                        // es. "ATS Città Metropolitana di Milano"
+  "numero_verbale": string|null,
+  "data_sopralluogo": "YYYY-MM-DD"|null,
+  "ora_sopralluogo": "HH:MM"|null,
+  "cudes": string|null,                       // codice Cudes della struttura, se presente
+  "struttura_nome_da_verbale": string|null,
+  "team_ispettivo": [{"nominativo": string, "qualifica": string, "struttura_appartenenza": string|null}],
+  "presenti_ente_gestore": [{"nominativo": string, "qualifica": string}],
+  "tipo_verifica": string|null,                // solo Tipo A: mantenimento requisiti / segnalazione / altro
+  "azioni_intraprese": [string]|null,          // solo Tipo B: elenco checkbox spuntate
+  "valutazione_sintetica": "in_possesso_requisiti" | "subordinato_valutazioni" | "non_in_possesso" | null,
+  "riepilogo_indicatori": {
+    "totale_fascicoli_esaminati": number|null,
+    "indicatori_raggiunti": number|null,
+    "indicatori_non_raggiunti": number|null,
+    "indicatori_non_pertinenti": number|null,
+    "percentuale": number|null
+  },
+  "osservazioni_raw": string,                  // testo narrativo "Osservazioni"/"Osservazioni sui Fascicoli", verbatim o quasi
+  "checklist_grezza": object,                  // libero: area/indicatore -> esito, solo per riferimento, NON deve duplicare i rilievi
+  "rilievi": [
+    {
+      "tipo": "prescrizione" | "osservazione" | "criticita_fasas" | "richiesta_documentazione",
+      "area_tematica": string,                 // es. "Contenzione fisica", "Requisiti organizzativi", "Lesioni da pressione"
+      "riferimento_fasas": string|null,
+      "riferimento_indicatore": string|null,
+      "descrizione": string,                   // parafrasato, chiaro, autosufficiente senza dover rileggere il PDF
+      "gravita_suggerita": "Bassa" | "Media" | "Alta" | null
+    }
+  ],
+  "documentazione_richiesta": string|null,
+  "scadenza_risposta": "YYYY-MM-DD"|null,
+  "indirizzo_invio_risposta": string|null,
+  "oggetto_pec_suggerito": string|null,
+  "responsabile_istruttoria": {"nome": string|null, "telefono": string|null, "email": string|null},
+  "bozza_risposta_suggerita": string|null      // solo se scadenza_risposta presente
+}`;
 
 // ── FACTORY UNIFICATA ─────────────────────────────────────────
 /**

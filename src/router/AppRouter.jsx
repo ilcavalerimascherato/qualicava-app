@@ -20,6 +20,9 @@ const MasterDashboard       = lazy(() => import('../views/MasterDashboard'));
 const OccupazioneDashboard  = lazy(() => import('../views/OccupazioneDashboard'));
 const DocumentiPage         = lazy(() => import('../views/DocumentiPage'));
 const ReportPage            = lazy(() => import('../views/ReportPage'));
+const VerifichePage         = lazy(() => import('../views/VerifichePage'));
+const VerbaliIspettiviPage  = lazy(() => import('../views/VerbaliIspettiviPage'));
+const NonConformitaPage     = lazy(() => import('../views/NonConformitaPage'));
 const ImpostazioniPage      = lazy(() => import('../views/ImpostazioniPage'));
 const Login                 = lazy(() => import('../Login'));
 
@@ -51,6 +54,11 @@ function RoleRouter() {
   // Admin / sede → dashboard HQ
   if ([ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.SEDE].includes(role)) {
     return <Navigate to="/admin" replace />;
+  }
+
+  // Board → solo il Cruscotto
+  if (role === ROLES.BOARD) {
+    return <Navigate to="/report" replace />;
   }
 
   // Direttore → smista per numero di strutture
@@ -91,6 +99,15 @@ function RequireAdmin() {
   return <Outlet />;
 }
 
+// Protegge /report — accessibile anche al ruolo 'board' (sola consultazione,
+// senza gli altri permessi HQ che RequireAdmin richiede)
+function RequireReportAccess() {
+  const { can, loading } = useAuth();
+  if (loading) return <Splash />;
+  if (!can('viewReports')) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
 // Protegge la route di una struttura specifica
 function RequireFacilityAccess() {
   const { facilityId }                  = useParams();
@@ -122,8 +139,23 @@ export default function AppRouter() {
               <Route path="/admin"          element={<AdminApp />} />
               <Route path="/master"         element={<MasterDashboard />} />
               <Route path="/occupazione"    element={<OccupazioneDashboard />} />
-              <Route path="/report"         element={<ReportPage />} />
+              <Route path="/non-conformita" element={<NonConformitaPage />} />
               <Route path="/impostazioni"   element={<ImpostazioniPage />} />
+            </Route>
+
+            {/* Report — admin/superadmin/sede (accesso completo) + board (solo Cruscotto) */}
+            <Route element={<RequireReportAccess />}>
+              <Route path="/report"    element={<ReportPage />} />
+              {/* Verifiche condivide lo stesso permesso di /report (viewReports):
+                  sede/admin/superadmin vedono anche "Configurazione", board e
+                  director solo la matrice di sintesi in sola lettura — la
+                  distinzione è dentro VerifichePage.jsx, non nella guardia. */}
+              <Route path="/verifiche" element={<VerifichePage />} />
+              {/* Stesso permesso di /verifiche: sede/admin/superadmin/board
+                  vedono tutte le strutture (RLS su verbali_ispettivi), il
+                  director solo le proprie — nessuna guardia aggiuntiva qui,
+                  la RLS scopa già correttamente in fetchAllVerbali(). */}
+              <Route path="/verbali-ispettivi" element={<VerbaliIspettiviPage />} />
             </Route>
 
             {/* Documenti: accessibile a tutti i ruoli autenticati

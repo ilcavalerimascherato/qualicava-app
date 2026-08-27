@@ -1,9 +1,10 @@
 /**
- * supabase/functions/invite-user/index.ts  —  v2
+ * supabase/functions/invite-user/index.ts  —  v3
  *
- * Versione semplificata: rimosso il controllo del ruolo lato Edge Function
- * che causava errori 401. La sicurezza è garantita lato UI (solo gli admin
- * vedono il pulsante) e da Supabase RLS sul database.
+ * Usa la service role key e quindi bypassa le RLS: la sicurezza NON è
+ * garantita da RLS né dal fatto che l'UI nasconda il pulsante di invito
+ * (non lo era nemmeno in precedenza). Il controllo dei permessi va fatto
+ * esplicitamente qui, verificando token e rango del chiamante.
  *
  * FLUSSO:
  *  1. Riceve email, fullName, role, companyId, facilityIds
@@ -44,8 +45,67 @@ serve(async (req) => {
 
     const emailNorm = email.trim().toLowerCase();
 
+    // ── 0. Autenticazione e autorizzazione del chiamante ───────
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: 'Non autenticato' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: callerData, error: callerAuthError } = await supabaseAdmin.auth.getUser(token);
+    if (callerAuthError || !callerData?.user) {
+      return new Response(
+        JSON.stringify({ error: 'Sessione non valida' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const callerId = callerData.user.id;
+
+    const { data: callerProfile, error: callerProfileError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('role')
+      .eq('id', callerId)
+      .single();
+
+    if (callerProfileError || !callerProfile?.role) {
+      return new Response(
+        JSON.stringify({ error: 'Profilo non trovato' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Rango dei ruoli, fail-safe a 0 per ruoli sconosciuti/non mappati.
+    const ROLE_RANK: Record<string, number> = { director: 0, board: 0, sede: 1, admin: 2, superadmin: 3 };
+    const callerRank = ROLE_RANK[callerProfile.role] ?? 0;
+    const targetRank = ROLE_RANK[role] ?? 0;
+
+    if (callerRank < 1) {
+      return new Response(
+        JSON.stringify({ error: 'Permessi insufficienti per invitare utenti' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (targetRank > callerRank) {
+      return new Response(
+        JSON.stringify({ error: 'Non puoi assegnare un ruolo superiore al tuo' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Nessun controllo company/facility aggiuntivo necessario: sede/admin/
+    // superadmin non hanno un company_id proprio (vedono tutte le strutture
+    // per design) e i director sono già esclusi dal controllo sul rango
+    // minimo (callerRank < 1) sopra.
+
     // ── 1. Crea utente o recupera esistente ───────────────────
     let userId: string;
+    let isNewAccount: boolean;
 
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email:         emailNorm,
@@ -55,7 +115,7 @@ serve(async (req) => {
 
     if (createError) {
       if (createError.message.includes('already been registered')) {
-        // Utente già esistente — cerca l'ID
+        // Utente già esistente — cerca l'ID, non è una nuova creazione
         const { data: list } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
         const existing = list?.users?.find(u => u.email === emailNorm);
         if (!existing) {
@@ -65,6 +125,7 @@ serve(async (req) => {
           );
         }
         userId = existing.id;
+        isNewAccount = false;
       } else {
         return new Response(
           JSON.stringify({ error: 'Errore creazione utente: ' + createError.message }),
@@ -73,30 +134,24 @@ serve(async (req) => {
       }
     } else {
       userId = newUser.user.id;
+      isNewAccount = true;
     }
 
-    // ── 2. Aggiorna profilo ───────────────────────────────────
-    await supabaseAdmin.from('user_profiles').upsert({
-      id:         userId,
-      email:      emailNorm,
-      full_name:  fullName || emailNorm,
-      role:       role,
-      company_id: companyId ? Number(companyId) : null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
+    // ── 2. Aggiorna profilo e strutture ───────────────────────
+    const { error: writeError } = await supabaseAdmin.rpc('admin_write_user_profile', {
+      p_actor_id:     callerId,
+      p_user_id:      userId,
+      p_email:        emailNorm,
+      p_full_name:    fullName || emailNorm,
+      p_role:         role,
+      p_company_id:   companyId ? Number(companyId) : null,
+      p_facility_ids: facilityIds,
+    });
 
-    // ── 3. Assegna strutture ──────────────────────────────────
-    if (facilityIds.length > 0) {
-      // Rimuovi accessi precedenti per questa struttura specifica
-      // (non tutti gli accessi, il direttore potrebbe gestire altre strutture)
-      await supabaseAdmin
-        .from('user_facility_access')
-        .delete()
-        .eq('user_id', userId)
-        .in('facility_id', facilityIds);
-
-      await supabaseAdmin.from('user_facility_access').insert(
-        facilityIds.map((fid: number) => ({ user_id: userId, facility_id: fid }))
+    if (writeError) {
+      return new Response(
+        JSON.stringify({ error: 'Errore scrittura profilo: ' + writeError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -114,14 +169,15 @@ serve(async (req) => {
       console.warn('[invite-user] generateLink error:', linkError.message);
     }
 
+    // Messaggio adattato al contesto: un account nuovo vs. un account già
+    // esistente a cui è stato solo (ri)assegnato profilo/ruolo/strutture.
+    const azione = isNewAccount ? 'Account creato' : 'Profilo aggiornato su account esistente';
+    const message = emailSent
+      ? `${azione} per ${emailNorm}. ${isNewAccount ? 'Email di benvenuto' : 'Email di reset password'} inviata.`
+      : `${azione} per ${emailNorm}. Email non inviata automaticamente — usa "Send password reset" dalla dashboard Supabase.`;
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        userId,
-        message: emailSent
-          ? `Account creato. Email di benvenuto inviata a ${emailNorm}.`
-          : `Account creato per ${emailNorm}. Email non inviata automaticamente — usa "Send password reset" dalla dashboard Supabase.`,
-      }),
+      JSON.stringify({ success: true, userId, isNewAccount, message }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

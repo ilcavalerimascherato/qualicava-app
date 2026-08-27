@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
-import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2, Copy } from 'lucide-react';
+import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2, Copy, FileClock } from 'lucide-react';
 import { useAuth }                               from '../contexts/AuthContext';
 import { useDashboardData, useInvalidate }       from '../hooks/useDashboardData';
 import { useBadgeCounts }                        from '../hooks/useBadgeCounts';
@@ -10,10 +10,14 @@ import { useDuplicatiCount }                     from '../hooks/useDuplicatiCoun
 import { udoService }                            from '../services/supabaseService';
 import AppHeader              from '../components/AppHeader';
 import UdoManagerModal        from '../components/UdoManagerModal';
-import QualityDashboardModal  from '../components/QualityDashboardModal';
+import SocietaModal           from '../components/SocietaModal';
+import UtentiRuoliModal       from '../components/UtentiRuoliModal';
+import SollecitiModal         from '../components/SollecitiModal';
+import MailingListModal       from '../components/MailingListModal';
 import DocFirmeModal          from '../components/DocFirmeModal';
 import CampagneSurveyModal    from '../components/CampagneSurveyModal';
 import VerificaDuplicatiModal from '../components/VerificaDuplicatiModal';
+import RegistroAttivitaModal  from '../components/RegistroAttivitaModal';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -72,7 +76,9 @@ export default function ImpostazioniPage() {
       saturazione: '/occupazione',
       haccp:       '/master',
       documenti:   '/documenti',
-      nc:          '/admin',
+      nc:          '/non-conformita',
+      verifiche:   '/verifiche',
+      verbali:     '/verbali-ispettivi',
       report:      '/report',
     };
     navigate(routes[page] ?? '/admin');
@@ -138,18 +144,17 @@ export default function ImpostazioniPage() {
             />
             <SettingsCard
               icon={<Briefcase size={14} />}
-              iconBg="#EFF6FF" iconColor="#94A3B8"
+              iconBg="#EEF2FF" iconColor="#4F46E5"
               title="Società"
               subtitle="Gestione società e gruppi"
-              badge="Prossimamente"
-              disabled
+              onClick={() => setActiveModal('societa')}
             />
             <SettingsCard
               icon={<Users size={14} />}
               iconBg="#F5F3FF" iconColor="#7C3AED"
               title="Utenti e ruoli"
               subtitle="Accessi e permessi applicazione"
-              onClick={() => setActiveModal('quality')}
+              onClick={() => setActiveModal('utenti')}
             />
           </div>
         </section>
@@ -163,7 +168,14 @@ export default function ImpostazioniPage() {
               iconBg="#FFFBEB" iconColor="#D97706"
               title="Mailing list"
               subtitle="Destinatari per invii di gruppo"
-              onClick={() => setActiveModal('quality')}
+              onClick={() => setActiveModal('mailing')}
+            />
+            <SettingsCard
+              icon={<Bell size={14} />}
+              iconBg="#FFF1F2" iconColor="#E11D48"
+              title="Solleciti"
+              subtitle="Verifica inadempienze KPI e questionari"
+              onClick={() => setActiveModal('solleciti')}
             />
             <SettingsCard
               icon={<Bell size={14} />}
@@ -213,6 +225,22 @@ export default function ImpostazioniPage() {
             </div>
           </section>
         )}
+
+        {/* Sistema */}
+        {isAdmin && (
+          <section className="mt-6">
+            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">Sistema</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              <SettingsCard
+                icon={<FileClock size={14} />}
+                iconBg="#F8FAFC" iconColor="#475569"
+                title="Registro attività"
+                subtitle="Audit log — chi ha fatto cosa e quando"
+                onClick={() => setActiveModal('audit')}
+              />
+            </div>
+          </section>
+        )}
       </main>
 
       {/* ── Modals — invariati ── */}
@@ -223,15 +251,31 @@ export default function ImpostazioniPage() {
         onSave={handleUdoSave}
         onDelete={handleUdoDelete}
       />
-      <QualityDashboardModal
-        isOpen={activeModal === 'quality'}
+      <SocietaModal
+        isOpen={activeModal === 'societa'}
+        onClose={closeModal}
+      />
+      <UtentiRuoliModal
+        isOpen={activeModal === 'utenti'}
+        onClose={closeModal}
+        facilities={data.facilities}
+        isSuperAdmin={profile?.role === 'superadmin'}
+      />
+      <SollecitiModal
+        isOpen={activeModal === 'solleciti'}
         onClose={closeModal}
         facilities={data.facilities}
         udos={data.udos}
         kpiRecords={data.kpiRecords}
         surveys={data.surveys}
         year={year}
-        isSuperAdmin={profile?.role === 'superadmin'}
+      />
+      <MailingListModal
+        isOpen={activeModal === 'mailing'}
+        onClose={closeModal}
+        facilities={data.facilities}
+        udos={data.udos}
+        year={year}
       />
       {activeModal === 'firme' && (
         <DocFirmeModal onClose={closeModal} />
@@ -241,6 +285,9 @@ export default function ImpostazioniPage() {
       )}
       {activeModal === 'duplicati' && (
         <VerificaDuplicatiModal isOpen onClose={closeModal} facilities={data.facilities} />
+      )}
+      {activeModal === 'audit' && (
+        <RegistroAttivitaModal onClose={closeModal} />
       )}
     </div>
   );

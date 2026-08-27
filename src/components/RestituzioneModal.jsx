@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { exportPDF } from '../utils/pdfExport';
 import { buildPrompt } from '../config/aiPrompts';
+import { callClaude } from '../utils/aiClient';
 import {
   ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -522,22 +523,8 @@ export default function RestituzioneModal({
         areaAttenzione,
       });
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 300,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-      const data = await response.json();
-      setAperturaText(data.content?.[0]?.text ?? '');
+      const text = await callClaude(prompt, { maxTokens: 300 });
+      setAperturaText(text);
     } catch (err) {
       console.error('Errore generazione apertura:', err);
     } finally {

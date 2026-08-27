@@ -24,6 +24,8 @@ import {
 import { exportPDF }       from '../utils/pdfExport';
 import { supabase }       from '../supabaseClient';
 import { getPromptAnalytics } from '../config/aiPrompts';
+import { callClaude } from '../utils/aiClient';
+import { getStaffCount, computeRedemptionRate } from '../utils/redemption';
 
 const metricNames = {
   // ── Senior Living / generici ─────────────────────────────
@@ -67,38 +69,6 @@ const metricNames = {
   reputazione_lavoro:           'Consiglio come Posto di Lavoro',
   reputazione_servizio:         'Consiglio per Assistenza',
 };
-
-// KPI che contiene il numero di dipendenti totali (fonte per staff_count operatori)
-const STAFF_KPI_KEY = 'Numero totale dipendenti soggetti a formazione sicurezza';
-
-
-
-/** Legge staff_count dall'ultimo record KPI completato per la struttura/survey */
-function getStaffCount(kpiRecords, facilityId, calendarId) {
-  if (!kpiRecords?.length || !calendarId) return null;
-
-  // Il calendar_id del survey è nel formato "YYYY-MM"
-  const [year, month] = calendarId.split('-').map(Number);
-
-  // Cerca prima il mese esatto, poi scorre a ritroso fino a 6 mesi
-  for (let offset = 0; offset <= 5; offset++) {
-    const d = new Date(year, month - 1 - offset, 1);
-    const rec = kpiRecords.find(k =>
-      String(k.facility_id) === String(facilityId) &&
-      Number(k.year)  === d.getFullYear() &&
-      Number(k.month) === d.getMonth() + 1 &&
-      k.status === 'completed'
-    );
-    if (rec?.metrics_json) {
-      const entry = rec.metrics_json[STAFF_KPI_KEY];
-      if (entry && !entry.is_na) {
-        const v = parseFloat(entry.value);
-        if (!isNaN(v) && v > 0) return Math.round(v);
-      }
-    }
-  }
-  return null;
-}
 
 export default function AnalyticsModal({
   isOpen, onClose, facility, type, surveys, facilities = [],
@@ -219,9 +189,7 @@ export default function AnalyticsModal({
 
   const averageScore   = chartData.length > 0 ? Math.round(chartData.reduce((s, d) => s + d.score, 0) / chartData.length) : 0;
   const totalResponses = latestSurvey?.summary_stats?.total_responses || 0;
-  const redemptionRate = targetAudience && targetAudience > 0
-    ? Math.round((totalResponses / targetAudience) * 100)
-    : null;
+  const redemptionRate = computeRedemptionRate(totalResponses, targetAudience);
 
   useEffect(() => { setAiReport(''); setReportTarget(null); }, [latestSurvey]);
 
@@ -237,29 +205,8 @@ export default function AnalyticsModal({
     try {
       const dataPayload = chartData.map(d => `${d.subject}: ${d.score}/100`).join('\n');
       const prompt      = getPromptAnalytics({ type, target, facilityName: facility.name, dataPayload });
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method:  'POST',
-        headers: {
-          'Content-Type':                            'application/json',
-          'x-api-key':                               process.env.REACT_APP_ANTHROPIC_API_KEY,
-          'anthropic-version':                       '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model:      'claude-sonnet-4-20250514',
-          max_tokens: 2048,
-          messages:   [{ role: 'user', content: prompt }],
-        }),
-      });
-
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
-        throw new Error(errBody.error?.message || response.statusText);
-      }
-
-      const json = await response.json();
-      setAiReport(json.content[0].text);
+      const text        = await callClaude(prompt, { maxTokens: 2048 });
+      setAiReport(text);
     } catch (error) { alert('Errore AI: ' + error.message); }
     finally { setIsGeneratingAI(false); }
   };

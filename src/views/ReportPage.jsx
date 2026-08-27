@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { FileText, Trophy, BarChart2, TrendingUp, Building2, Search, ChevronRight } from 'lucide-react';
+import { FileText, Trophy, BarChart2, TrendingUp, Building2, Search, ChevronRight, LayoutGrid, LineChart, Smile, ShieldAlert } from 'lucide-react';
 import { useAuth }                from '../contexts/AuthContext';
 import { useDashboardData }      from '../hooks/useDashboardData';
 import { useBadgeCounts }        from '../hooks/useBadgeCounts';
@@ -16,6 +16,10 @@ import KpiChartsModal            from '../components/KpiChartsModal';
 import KpiLaserModal             from '../components/KpiLaserModal';
 import KpiXrayModal              from '../components/KpiXrayModal';
 import KpiAnalisiComparativa     from '../components/KpiAnalisiComparativa';
+import CruscottoView             from '../components/cruscotto/CruscottoView';
+import KpiEconomicsView          from '../components/kpieconomics/KpiEconomicsView';
+import SoddisfazioneView         from '../components/soddisfazione/SoddisfazioneView';
+import ConformitaRischioView     from '../components/conformita/ConformitaRischioView';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -54,7 +58,7 @@ function ReportCard({ icon, iconBg, iconColor, title, desc, onClick, accent, bad
 
 export default function ReportPage() {
   const navigate                         = useNavigate();
-  const { isAdmin, profile, signOut }    = useAuth();
+  const { isAdmin, can, profile, signOut } = useAuth();
   const [year]                           = useState(CURRENT_YEAR);
   const { data }                         = useDashboardData(year);
   const [activeModal, setActiveModal]    = useState(null);
@@ -63,11 +67,18 @@ export default function ReportPage() {
     to:   `${CURRENT_YEAR}-12`,
   });
 
+  const [activeTab, setActiveTab] = useState('cruscotto');
+
+  // 'board' vede solo il Cruscotto; sede/admin/superadmin hanno anche
+  // l'Analisi dettagliata (le card/modali storiche di questa pagina).
+  const hasAnalisiDettagliata = can('manageStructures');
+
   const allIds = useMemo(
     () => (data.facilities ?? []).filter(f => !f.is_suspended).map(f => f.id),
     [data.facilities],
   );
-  const { totals: badgeTotals } = useBadgeCounts(allIds, year, isAdmin);
+  // Board non mostra badge nella nav (vede solo "Report") — evita query inutili.
+  const { totals: badgeTotals } = useBadgeCounts(hasAnalisiDettagliata ? allIds : [], year, isAdmin);
 
   const enrichedFacilities = useMemo(() => {
     const enriched = enrichFacilitiesData(
@@ -89,7 +100,9 @@ export default function ReportPage() {
       saturazione:  '/occupazione',
       haccp:        '/master',
       documenti:    '/documenti',
-      nc:           '/admin',
+      nc:           '/non-conformita',
+      verifiche:    '/verifiche',
+      verbali:      '/verbali-ispettivi',
       impostazioni: '/impostazioni',
     };
     navigate(routes[page] ?? '/admin');
@@ -109,33 +122,130 @@ export default function ReportPage() {
         onNavigate={handleNavigate}
       />
 
-      {/* ── Context bar ── */}
+      {/* ── Tab bar ── */}
       <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-100">
-        <div>
-          <h1 className="text-base font-semibold text-slate-900">Centro report e analisi</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Seleziona l'area di analisi</p>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setActiveTab('cruscotto')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'cruscotto' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'
+            }`}
+          >
+            <LayoutGrid size={14} /> Cruscotto
+          </button>
+          {hasAnalisiDettagliata && (
+            <button
+              onClick={() => setActiveTab('kpiEconomics')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'kpiEconomics' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <LineChart size={14} /> KPI & Economics
+            </button>
+          )}
+          {hasAnalisiDettagliata && (
+            <button
+              onClick={() => setActiveTab('soddisfazione')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'soddisfazione' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <Smile size={14} /> Soddisfazione
+            </button>
+          )}
+          {hasAnalisiDettagliata && (
+            <button
+              onClick={() => setActiveTab('conformita')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'conformita' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <ShieldAlert size={14} /> Conformità & Rischio
+            </button>
+          )}
+          {hasAnalisiDettagliata && (
+            <button
+              onClick={() => setActiveTab('analisi')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'analisi' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <Search size={14} /> Analisi dettagliata
+            </button>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">Intervallo:</span>
-          <input
-            type="month"
-            value={dateRange.from}
-            onChange={e => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-            className="border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-emerald-400"
-          />
-          <span className="text-xs text-slate-500">→</span>
-          <input
-            type="month"
-            value={dateRange.to}
-            onChange={e => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-            className="border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-emerald-400"
-          />
-        </div>
+        {activeTab === 'analisi' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">Intervallo:</span>
+            <input
+              type="month"
+              value={dateRange.from}
+              onChange={e => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+              className="border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-emerald-400"
+            />
+            <span className="text-xs text-slate-500">→</span>
+            <input
+              type="month"
+              value={dateRange.to}
+              onChange={e => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+              className="border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-emerald-400"
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Body ── */}
-      <main className="px-6 py-6 max-w-5xl mx-auto">
+      <main className="px-6 py-6 max-w-6xl mx-auto">
 
+        {activeTab === 'cruscotto' && (
+          <CruscottoView
+            facilities={data.facilities}
+            companies={data.companies}
+            udos={data.udos}
+            surveys={data.surveys}
+            kpiRecords={data.kpiRecords}
+            nonConformities={data.nonConformities}
+            campaignsClient={data.campaignsClient}
+            year={year}
+            // Le destinazioni di drill-down (/admin, /non-conformita, /occupazione)
+            // richiedono manageStructures: il ruolo board non le ha ancora, quindi
+            // niente navigazione per loro finché non esistono viste dedicate.
+            onNavigate={hasAnalisiDettagliata ? handleNavigate : undefined}
+          />
+        )}
+
+        {activeTab === 'kpiEconomics' && hasAnalisiDettagliata && (
+          <KpiEconomicsView
+            facilities={data.facilities}
+            companies={data.companies}
+            udos={data.udos}
+            kpiRecords={data.kpiRecords}
+            campaignsClient={data.campaignsClient}
+            year={year}
+          />
+        )}
+
+        {activeTab === 'soddisfazione' && hasAnalisiDettagliata && (
+          <SoddisfazioneView
+            facilities={data.facilities}
+            companies={data.companies}
+            udos={data.udos}
+            campaignsClient={data.campaignsClient}
+            campaignsOperator={data.campaignsOperator}
+          />
+        )}
+
+        {activeTab === 'conformita' && hasAnalisiDettagliata && (
+          <ConformitaRischioView
+            facilities={data.facilities}
+            companies={data.companies}
+            udos={data.udos}
+            nonConformities={data.nonConformities}
+          />
+        )}
+
+        {activeTab === 'analisi' && hasAnalisiDettagliata && (
+        <>
         <AiBriefing
           facilities={enrichedFacilities}
           kpiRecords={data.kpiRecords ?? []}
@@ -210,6 +320,8 @@ export default function ReportPage() {
             />
           </div>
         </section>
+        </>
+        )}
 
       </main>
 

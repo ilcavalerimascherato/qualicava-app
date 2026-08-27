@@ -32,9 +32,13 @@
     "eject": "react-scripts eject",
     "lint": "eslint src --ext .js,.jsx"
   },
+  "devDependencies": {
+    "eslint-plugin-security": "^3.0.1"
+  },
   "eslintConfig": {
     "extends": [
-      "react-app"
+      "react-app",
+      "plugin:security/recommended-legacy"
     ],
     "rules": {
       "curly": "off",

@@ -133,6 +133,25 @@ export function getKpiStatus(rule, value) {
 }
 
 /**
+ * Calcola lo stato semaforo a partire dal valore restituito da `computeKpiValue`
+ * (kpiFormulaEngine.js), che è già scalato ×100 per i settori percentuali ma
+ * resta un valore assoluto per i settori NUMERI/ISPEZIONI. `getKpiStatus`
+ * lavora invece sempre su scala 0-1 rispetto a `target_verde`/`target_rosso` —
+ * questo helper fa la normalizzazione corretta in un unico posto, evitando che
+ * ogni chiamante debba ricordarsi la distinzione (un `value / 100` applicato
+ * indiscriminatamente è sbagliato per i settori numerici, es. Mortalità).
+ *
+ * @param {Object} rule          - Una entry di KPI_RULES
+ * @param {number|null} computedValue - Output di computeKpiValue(rule, ...)
+ * @returns {KpiStatus}
+ */
+export function getKpiStatusFromComputedValue(rule, computedValue) {
+  if (computedValue === null || computedValue === undefined || isNaN(computedValue)) return 'neutral';
+  const normalized = isNumericSettore(rule.settore) ? computedValue : computedValue / 100;
+  return getKpiStatus(rule, normalized);
+}
+
+/**
  * Formatta un valore KPI come percentuale leggibile.
  * @param {number|null} value
  * @param {number} decimals

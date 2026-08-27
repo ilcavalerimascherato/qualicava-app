@@ -43,6 +43,7 @@ export const ROLES = /** @type {const} */ ({
   SUPERADMIN: 'superadmin',
   ADMIN:      'admin',
   SEDE:       'sede',
+  BOARD:      'board',
   DIRECTOR:   'director',
   VIEWER:     'viewer',
 });
@@ -51,6 +52,7 @@ export const ROLE_LABELS = {
   [ROLES.SUPERADMIN]: 'Super Admin',
   [ROLES.ADMIN]:      'Amministratore',
   [ROLES.SEDE]:       'Sede',
+  [ROLES.BOARD]:      'Board',
   [ROLES.DIRECTOR]:   'Direttore',
   [ROLES.VIEWER]:     'Visualizzatore',
 };

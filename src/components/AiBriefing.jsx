@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Sparkles, RefreshCw } from 'lucide-react';
+import { buildPrompt } from '../config/aiPrompts';
+import { callClaude } from '../utils/aiClient';
 
 export default function AiBriefing({ facilities = [], ncRecords = [], kpiRecords = [] }) {
   const [brief, setBrief]               = useState(null);
@@ -47,44 +49,27 @@ export default function AiBriefing({ facilities = [], ncRecords = [], kpiRecords
       weekday: 'long', day: 'numeric', month: 'long',
     });
 
-    const prompt = `Sei l'assistente AI di QualiCAVA, sistema di gestione qualità per strutture sociosanitarie italiane.
-Genera un briefing mattutino conciso in italiano per il responsabile qualità di sede.
+    const topCriticalStr = topCritical.length > 0
+      ? topCritical.map(f => `${f.name} (${f.udo}, ${f.region}) — score ${f.score}/${f.months}m${f.openNc > 0 ? `, ${f.openNc} NC aperte` : ''}`).join('; ')
+      : 'nessuna criticità rilevata';
+    const ncByRegionStr = Object.entries(ncByRegion).map(([r, n]) => `${r}: ${n}`).join(', ');
 
-Dati aggiornati al ${today}:
-- Strutture totali: ${facilities.length} (${active.length} attive, ${suspended.length} sospese)
-- Stato strutture attive: ${ok.length} in regola, ${attention.length} in attenzione, ${critical.length} critiche
-${totalOpenNc > 0 ? `- NC aperte totali: ${totalOpenNc}` : ''}
-${Object.keys(ncByRegion).length > 0 ? `- NC per regione: ${Object.entries(ncByRegion).map(([r, n]) => `${r}: ${n}`).join(', ')}` : ''}
-- Strutture più critiche: ${topCritical.length > 0
-    ? topCritical.map(f => `${f.name} (${f.udo}, ${f.region}) — score ${f.score}/${f.months}m${f.openNc > 0 ? `, ${f.openNc} NC aperte` : ''}`).join('; ')
-    : 'nessuna criticità rilevata'}
-
-Genera un briefing con questa struttura ESATTA:
-1. Una frase di apertura contestuale alla situazione generale
-2. Massimo 2-3 punti di attenzione specifici con nome struttura e problema concreto
-3. Una frase conclusiva con il focus suggerito per la giornata
-
-Tono: diretto, professionale. Massimo 120 parole. Testo continuo in 2-3 paragrafi — niente elenchi.
-Usa il grassetto HTML <strong> solo per i nomi delle strutture critiche.`;
+    const prompt = buildPrompt('briefingMattutino', {
+      today,
+      totalFacilities: facilities.length,
+      activeCount: active.length,
+      suspendedCount: suspended.length,
+      okCount: ok.length,
+      attentionCount: attention.length,
+      criticalCount: critical.length,
+      totalOpenNc,
+      ncByRegionStr,
+      topCriticalStr,
+    });
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type':                              'application/json',
-          'x-api-key':                                 process.env.REACT_APP_ANTHROPIC_API_KEY,
-          'anthropic-version':                         '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model:      'claude-sonnet-4-6',
-          max_tokens: 400,
-          messages:   [{ role: 'user', content: prompt }],
-        }),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error.message);
-      setBrief(json.content?.[0]?.text ?? '');
+      const text = await callClaude(prompt, { maxTokens: 400 });
+      setBrief(text);
       setLastGenerated(new Date());
     } catch (err) {
       setError('Impossibile generare il briefing. Riprova.');

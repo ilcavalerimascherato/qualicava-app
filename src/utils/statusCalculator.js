@@ -21,15 +21,30 @@ const getActionableMonths = (selectedYear) => {
   return []; // anno futuro
 };
 
+// Una campagna è "recente" se la sua data reale (created_at) cade entro
+// gli ultimi 12 mesi da oggi. calendar_id (YYYY-MM) non è affidabile per
+// questo confronto: è solo un raggruppamento mensile, non la data della campagna.
+const isWithinLast12Months = (createdAt) => {
+  if (!createdAt) return false;
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 12);
+  return d >= cutoff;
+};
+
 export const getSurveyStatus = (surveys, facilityId, companyId, type) => {
   const relevant = surveys.filter(s =>
     s.type === type &&
     (s.facility_id === facilityId || (!s.facility_id && s.company_id === companyId))
   );
   if (relevant.length === 0) return 'empty';
-  const latest = relevant.sort((a, b) => b.calendar_id.localeCompare(a.calendar_id))[0];
-  if (latest.ai_report_ospiti || latest.ai_report_direzione) return 'completed';
-  return 'pending';
+
+  const hasRecentCompleted = relevant
+    .filter(s => isWithinLast12Months(s.created_at))
+    .some(s => s.ai_report_ospiti || s.ai_report_direzione);
+
+  return hasRecentCompleted ? 'completed' : 'pending';
 };
 
 export const enrichFacilitiesData = (facilities, surveys, kpiRecords, year, udos = []) => {

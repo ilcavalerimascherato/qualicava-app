@@ -1,12 +1,13 @@
 // src/hooks/useBadgeCounts.js
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { getVerificheAlerts } from '../utils/verificheAlertEngine';
 
 const POLL_MS   = 60_000;
 const QUERY_CAP = 500;
 
-const EMPTY_TOTALS  = { documenti: 0, haccp: 0, haccpRossi: 0, nc: 0, kpi: 0, grand: 0 };
-const emptyFacility = () => ({ documenti: 0, haccp: 0, haccpRossi: 0, nc: 0, kpi: 0, total: 0 });
+const EMPTY_TOTALS  = { documenti: 0, haccp: 0, haccpRossi: 0, nc: 0, kpi: 0, verifiche: 0, verbaliIspettivi: 0, grand: 0 };
+const emptyFacility = () => ({ documenti: 0, haccp: 0, haccpRossi: 0, nc: 0, kpi: 0, verifiche: 0, verbaliIspettivi: 0, total: 0 });
 
 /**
  * Aggrega conteggi badge per struttura da 4 sorgenti dati in parallelo.
@@ -60,6 +61,26 @@ export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFul
       ? supabase.from('fact_kpi_monthly').select('facility_id, month').in('facility_id', ids).eq('year', currentYear)
       : Promise.resolve({ data: [], error: null });
 
+    // Verifiche in ritardo — richiede facilities (per udo_id, serve alla
+    // risoluzione dell'ereditarietà) + le tabelle di configurazione, piccole
+    // e non filtrabili per facility (template/ruoli sono config di gruppo).
+    const verFacilitiesQ = ids.length
+      ? supabase.from('facilities').select('id, udo_id, is_suspended').in('id', ids)
+      : Promise.resolve({ data: [], error: null });
+    const verTemplateQ    = ids.length ? supabase.from('verifiche_template').select('*') : Promise.resolve({ data: [], error: null });
+    const verTemplateRuoliQ = ids.length ? supabase.from('verifiche_template_ruoli').select('*') : Promise.resolve({ data: [], error: null });
+    const verSessioniQ    = ids.length
+      ? supabase.from('verifiche_sessioni').select('facility_id, template_id, data_esecuzione').in('facility_id', ids)
+      : Promise.resolve({ data: [], error: null });
+
+    // Verbali ispettivi: da rivedere (analisi AI non ancora confermata dal
+    // Direttore) o con risposta all'ente ancora da inviare.
+    const verbaliQ = ids.length
+      ? supabase.from('verbali_ispettivi')
+          .select('facility_id, stato_revisione, stato_risposta, scadenza_risposta')
+          .in('facility_id', ids)
+      : Promise.resolve({ data: [], error: null });
+
     // Admin: doc_master pubblicati e master_id distribuiti (no-op se non admin)
     const mastersQ = isAdmin
       ? supabase.from('doc_master').select('id, data_scadenza').neq('stato', 'obsoleto').neq('stato', 'bozza')
@@ -69,8 +90,8 @@ export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFul
       ? supabase.from('doc_istanze').select('master_id')
       : Promise.resolve({ data: null, error: null });
 
-    const [docsRes, haccpRes, ncRes, kpiRes, mastersRes, distRes] =
-      await Promise.all([docsQ, haccpQ, ncQ, kpiQ, mastersQ, distQ]);
+    const [docsRes, haccpRes, ncRes, kpiRes, mastersRes, distRes, verFacilitiesRes, verTemplateRes, verTemplateRuoliRes, verSessioniRes, verbaliRes] =
+      await Promise.all([docsQ, haccpQ, ncQ, kpiQ, mastersQ, distQ, verFacilitiesQ, verTemplateQ, verTemplateRuoliQ, verSessioniQ, verbaliQ]);
 
     // ── Mesi attesi: da gennaio al mese precedente al corrente ────
     const nowMonth       = new Date().getMonth() + 1;
@@ -123,19 +144,46 @@ export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFul
       }
     }
 
+    // ── Verifiche in ritardo (monitoraggio attivo) ─────────────────
+    if (!verFacilitiesRes.error && !verTemplateRes.error && !verTemplateRuoliRes.error && !verSessioniRes.error) {
+      const alerts = getVerificheAlerts({
+        facilities:    verFacilitiesRes.data ?? [],
+        templates:     verTemplateRes.data ?? [],
+        templateRuoli: verTemplateRuoliRes.data ?? [],
+        sessioni:      verSessioniRes.data ?? [],
+      });
+      for (const alert of alerts) {
+        const r = result[alert.facilityId];
+        if (r) r.verifiche++;
+      }
+    }
+
+    // ── Verbali ispettivi da rivedere / con risposta pendente ──────
+    if (!verbaliRes.error) {
+      for (const row of verbaliRes.data ?? []) {
+        const r = result[row.facility_id];
+        if (!r) continue;
+        const daRivedere = row.stato_revisione !== 'confermato';
+        const rispostaPendente = ['da_rispondere', 'bozza_predisposta'].includes(row.stato_risposta) && !!row.scadenza_risposta;
+        if (daRivedere || rispostaPendente) r.verbaliIspettivi++;
+      }
+    }
+
     // ── Totale per struttura ──────────────────────────────────────
     for (const r of Object.values(result)) {
-      r.total = r.documenti + r.haccp + r.nc + r.kpi;
+      r.total = r.documenti + r.haccp + r.nc + r.kpi + r.verifiche + r.verbaliIspettivi;
     }
 
     // ── Totali globali ────────────────────────────────────────────
-    const tots = { documenti: 0, haccp: 0, haccpRossi: 0, nc: 0, kpi: 0, grand: 0 };
+    const tots = { documenti: 0, haccp: 0, haccpRossi: 0, nc: 0, kpi: 0, verifiche: 0, verbaliIspettivi: 0, grand: 0 };
     for (const r of Object.values(result)) {
       tots.documenti  += r.documenti;
       tots.haccp      += r.haccp;
       tots.haccpRossi += r.haccpRossi;
       tots.nc         += r.nc;
       tots.kpi        += r.kpi;
+      tots.verifiche  += r.verifiche;
+      tots.verbaliIspettivi += r.verbaliIspettivi;
       tots.grand      += r.total;
     }
 

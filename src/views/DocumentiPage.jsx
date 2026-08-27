@@ -347,7 +347,9 @@ export default function DocumentiPage() {
       saturazione:  '/occupazione',
       haccp:        '/master',
       documenti:    '/documenti',
-      nc:           '/admin',
+      nc:           '/non-conformita',
+      verifiche:    '/verifiche',
+      verbali:      '/verbali-ispettivi',
       report:       '/report',
       impostazioni: '/impostazioni',
     };

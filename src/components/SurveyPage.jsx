@@ -17,7 +17,7 @@ const PERIOD_OPTIONS = [
   { value: 'personalizzato', label: 'Personalizzato' },
 ];
 
-export default function SurveyPage({ facility, surveys, onDataClick, onRestituzioneClick }) {
+export default function SurveyPage({ facility, surveys, kpiRecords, facilities, onDataClick, onRestituzioneClick }) {
   const [surveyType, setSurveyType] = useState('client');
   const [periodMode, setPeriodMode] = useState('standard');
 
@@ -58,6 +58,8 @@ export default function SurveyPage({ facility, surveys, onDataClick, onRestituzi
           facility={facility}
           surveyType={surveyType}
           surveys={surveys}
+          kpiRecords={kpiRecords}
+          facilities={facilities}
           onDataClick={onDataClick}
           onRestituzioneClick={onRestituzioneClick}
         />

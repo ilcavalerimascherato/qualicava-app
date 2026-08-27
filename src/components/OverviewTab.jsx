@@ -177,7 +177,24 @@ function RiskScoreCard({ facility, kpiRecords, onTabChange }) {
   );
 }
 
+// Confini del semestre solare PRECEDENTE a quello corrente (Gen-Giu / Lug-Dic),
+// come stringhe "YYYY-MM" confrontabili lessicograficamente con calendar_id.
+function semestrePrecedente(refDate = new Date()) {
+  const y = refDate.getFullYear();
+  const inH1 = refDate.getMonth() + 1 <= 6; // getMonth() è 0-based
+  return inH1
+    ? { start: `${y - 1}-07`, end: `${y - 1}-12` }
+    : { start: `${y}-01`, end: `${y}-06` };
+}
+
 // ── Survey + NC card ─────────────────────────────────────────
+// Lo stato di ciascun tema (Clienti/Ospiti, Staff/Operatori) si riferisce
+// sempre al semestre precedente, non "all'ultimo survey disponibile":
+// verde solo se in quel semestre esiste una relazione salvata (valorizzata
+// da "Genera documenti Word" nel pannello Analisi Campagna → ai_report_direzione),
+// giallo se ci sono risposte ma la relazione non è ancora stata generata,
+// rosso se il semestre precedente non ha proprio dati — un buco da segnalare,
+// non uno stato neutro.
 function SurveyNcCard({ facility, surveys, fBadge, onTabChange }) {
   const [ncList, setNcList] = useState([]);
 
@@ -193,17 +210,24 @@ function SurveyNcCard({ facility, surveys, fBadge, onTabChange }) {
       .then(({ data }) => setNcList(data || []));
   }, [facility?.id]);
 
-  const clientSurvey = surveys?.find(s => s.type === 'client');
-  const staffSurvey  = surveys?.find(s => s.type === 'operator');
+  const { start, end } = semestrePrecedente();
+  const inSemestre = s => s.calendar_id >= start && s.calendar_id <= end;
 
-  const surveyVariant = s => {
-    if (!s) return 'gray';
-    if (s.ai_report_direzione) return 'green';
+  const clientSemestre = surveys?.filter(s => s.type === 'client'   && inSemestre(s)) ?? [];
+  const staffSemestre  = surveys?.filter(s => s.type === 'operator' && inSemestre(s)) ?? [];
+  // Per il dettaglio "N risposte · periodo" mostrato sotto: il record più
+  // recente del semestre precedente, se presente.
+  const clientSurvey = clientSemestre.reduce((a, b) => (!a || b.calendar_id > a.calendar_id) ? b : a, null);
+  const staffSurvey  = staffSemestre.reduce((a, b) => (!a || b.calendar_id > a.calendar_id) ? b : a, null);
+
+  const surveyVariant = list => {
+    if (!list.length) return 'red';
+    if (list.some(s => s.ai_report_direzione)) return 'green';
     return 'yellow';
   };
-  const surveyLabel = s => {
-    if (!s) return 'Nessun dato';
-    if (s.ai_report_direzione) return 'Relazione OK';
+  const surveyLabel = list => {
+    if (!list.length) return 'Nessun dato sem. prec.';
+    if (list.some(s => s.ai_report_direzione)) return 'Relazione OK';
     return 'Da elaborare';
   };
 
@@ -222,7 +246,7 @@ function SurveyNcCard({ facility, surveys, fBadge, onTabChange }) {
             <p className="text-[12px] text-gray-400">
               {clientSurvey
                 ? `${clientSurvey.summary_stats?.total_responses ?? '?'} risposte · ${clientSurvey.calendar_id}`
-                : 'Nessun dato disponibile'}
+                : 'Nessun dato nel semestre precedente'}
             </p>
             {clientSurvey?.summary_stats?.is_company_wide && (
               <p className="text-[10px] text-blue-600 mt-1">
@@ -231,7 +255,7 @@ function SurveyNcCard({ facility, surveys, fBadge, onTabChange }) {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={surveyVariant(clientSurvey)}>{surveyLabel(clientSurvey)}</Badge>
+            <Badge variant={surveyVariant(clientSemestre)}>{surveyLabel(clientSemestre)}</Badge>
             <button onClick={() => onTabChange?.('survey')} className="text-[12px] text-indigo-600">→</button>
           </div>
         </div>
@@ -241,7 +265,7 @@ function SurveyNcCard({ facility, surveys, fBadge, onTabChange }) {
             <p className="text-[12px] text-gray-400">
               {staffSurvey
                 ? `${staffSurvey.summary_stats?.total_responses ?? '?'} risposte · ${staffSurvey.calendar_id}`
-                : 'Nessun dato disponibile'}
+                : 'Nessun dato nel semestre precedente'}
             </p>
             {staffSurvey?.summary_stats?.is_company_wide && (
               <p className="text-[10px] text-blue-600 mt-1">
@@ -249,7 +273,7 @@ function SurveyNcCard({ facility, surveys, fBadge, onTabChange }) {
               </p>
             )}
           </div>
-          <Badge variant={surveyVariant(staffSurvey)}>{surveyLabel(staffSurvey)}</Badge>
+          <Badge variant={surveyVariant(staffSemestre)}>{surveyLabel(staffSemestre)}</Badge>
         </div>
       </div>
 
@@ -480,22 +504,13 @@ export default function OverviewTab({ facility, surveys, year, fBadge, cdgRecord
       .then(({ data }) => setCompany(data));
   }, [facility?.company_id]);
 
-  const latestSurveys = useMemo(() => {
-    if (!surveys?.length) return [];
-    const byType = {};
-    for (const s of surveys) {
-      if (!byType[s.type] || s.calendar_id > byType[s.type].calendar_id) byType[s.type] = s;
-    }
-    return Object.values(byType);
-  }, [surveys]);
-
   return (
     <div className="space-y-3">
       {/* Riga 1: Risk score + CDG + Survey/NC */}
       <div className="grid grid-cols-3 gap-3">
         <RiskScoreCard facility={facility} kpiRecords={kpiRecords} onTabChange={onTabChange} />
         <CdgStrutturaCard facility={facility} cdgRecords={cdgRecords} />
-        <SurveyNcCard facility={facility} surveys={latestSurveys} fBadge={fBadge} onTabChange={onTabChange} />
+        <SurveyNcCard facility={facility} surveys={surveys} fBadge={fBadge} onTabChange={onTabChange} />
       </div>
 
       {/* Riga 2: Contatti + Società */}

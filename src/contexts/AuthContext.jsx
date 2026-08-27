@@ -74,6 +74,7 @@ export function AuthProvider({ children }) {
     superadmin: ['manageStructures','viewAllStructures','manageUsers','viewReports','editKpi'],
     admin:      ['manageStructures','viewAllStructures','manageUsers','viewReports','editKpi'],
     sede:       ['manageStructures','viewAllStructures','viewReports'],
+    board:      ['viewReports'],
     director:   ['editKpi','viewReports'],
   };
 

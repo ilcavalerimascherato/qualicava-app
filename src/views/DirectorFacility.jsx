@@ -16,9 +16,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
   PawPrint, LogOut, ArrowLeft, Activity, BarChart3, Database,
-  ChefHat, FileText,
+  ChefHat, FileText, FileWarning,
   AlertTriangle, TrendingUp,
-  Plus, Loader2,
+  Plus, Loader2, ClipboardCheck,
 } from 'lucide-react';
 
 import { useQueryClient }                    from '@tanstack/react-query';
@@ -48,6 +48,8 @@ import DocMyDocumentiView   from './DocMyDocumentiView';
 import { useCdgData }        from '../hooks/useCdgData';
 import SurveyPage            from '../components/SurveyPage';
 import OverviewTab           from '../components/OverviewTab';
+import VerificheTabDirector  from '../components/verifiche/VerificheTabDirector';
+import VerbaliIspettiviTab   from '../components/verbali/VerbaliIspettiviTab';
 
 // Mappa tab → conteggio badge e colore
 function getTabBadge(tabId, fBadge) {
@@ -62,6 +64,10 @@ function getTabBadge(tabId, fBadge) {
       return { count: fBadge.kpi, bg: 'bg-blue-500' };
     case 'non_conformities':
       return { count: fBadge.nc, bg: 'bg-rose-500' };
+    case 'verifiche':
+      return { count: fBadge.verifiche, bg: 'bg-rose-500' };
+    case 'verbali_ispettivi':
+      return { count: fBadge.verbaliIspettivi || 0, bg: 'bg-rose-500' };
     default:
       return { count: 0, bg: 'bg-rose-500' };
   }
@@ -72,6 +78,8 @@ const TABS = [
   { id: 'kpi',              label: 'KPI Mensili',    Icon: BarChart3     },
   { id: 'survey',           label: 'Survey',         Icon: Database      },
   { id: 'non_conformities', label: 'Non Conformità', Icon: AlertTriangle },
+  { id: 'verifiche',        label: 'Verifiche',      Icon: ClipboardCheck },
+  { id: 'verbali_ispettivi', label: 'Verbali Ispettivi', Icon: FileWarning },
   { id: 'benchmark',        label: 'Benchmark',      Icon: TrendingUp    },
   { id: 'haccp',            label: 'Documenti',      Icon: ChefHat       },
 ];
@@ -323,6 +331,8 @@ export default function DirectorFacility() {
           <SurveyPage
             facility={facility}
             surveys={facilitySurveys}
+            kpiRecords={data.kpiRecords}
+            facilities={data.facilities}
             onDataClick={handleDataClick}
             onRestituzioneClick={handleRestituzioneClick}
           />
@@ -336,6 +346,12 @@ export default function DirectorFacility() {
             onNew={() => { setNcEditId(null); open('nonConformity'); }}
             onEdit={(id) => { setNcEditId(id); open('nonConformity'); }}
           />
+        )}
+        {activeTab === 'verifiche' && (
+          <VerificheTabDirector facility={facility} />
+        )}
+        {activeTab === 'verbali_ispettivi' && (
+          <VerbaliIspettiviTab facility={facility} />
         )}
         {activeTab === 'benchmark' && (
           <BenchmarkTab facility={facility} kpiRecords={data.kpiRecords} year={year} />

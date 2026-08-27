@@ -59,11 +59,14 @@ export function useDirectorData(facilityIds, year) {
   const surveysQuery = useQuery({
     queryKey: directorKeys.surveys(ids, year),
     queryFn:  async () => {
+      // Copre anche l'anno precedente: la regola "ultimi 12 mesi" di
+      // getSurveyStatus può ricadere su campagne dell'anno solare prima.
       const { data, error } = await supabase
         .from('v_survey_data_normalized')
         .select('*')
         .in('facility_id', ids)
-        .like('calendar_id', `${year}-%`);
+        .gte('calendar_id', `${year - 1}-01`)
+        .lte('calendar_id', `${year}-12`);
       if (error) throw error;
       return data;
     },
