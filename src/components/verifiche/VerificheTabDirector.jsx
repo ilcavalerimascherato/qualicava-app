@@ -3,11 +3,11 @@
 // struttura (ereditarietà facility > udo > universale), registrazione
 // sessione, storico, pannello "In evidenza", scadenzario.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardCheck, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  getTemplates, getRuoli, getTemplateRuoli, getSessioni, getTemplateVoci,
+  getTemplates, getRuoli, getTemplateRuoli, getSessioni,
   getScadenze, creaSessioneConEsiti,
 } from '../../services/verificheService';
 import { resolveTemplatesForFacility, resolveRuoliAbilitati } from '../../utils/verificheResolve';

@@ -1,0 +1,31 @@
+-- ROLLBACK D'EMERGENZA — vedi fix_haccp_scadenzario_security_invoker.sql e
+-- fix_v_survey_data_normalized_security_invoker.sql.
+--
+-- Sintomo riportato: apertura dashboard admin lenta/errore "canceling
+-- statement due to statement timeout" dopo aver applicato security_invoker
+-- su queste 2 viste.
+--
+-- Causa più probabile: entrambe vengono interrogate SENZA filtro per
+-- facility_id, su tutte le righe, ad ogni apertura della dashboard admin
+-- (useDashboardData → v_survey_data_normalized; useHaccpSemafori →
+-- haccp_scadenzario). Con security_invoker=on la RLS delle tabelle
+-- sottostanti viene rivalutata riga per riga invece di essere bypassata
+-- come con SECURITY DEFINER — se quella RLS non è ottimizzata (funzione
+-- non STABLE, non indicizzata), il costo per query esplode su un volume
+-- alto di righe e supera lo statement_timeout.
+--
+-- Questo script riporta le 2 viste al comportamento precedente (bypass
+-- RLS) per sbloccare subito l'operatività. NON tocca
+-- v_survey_duplicati_dettaglio (non interrogata all'apertura app, nessun
+-- sintomo riportato lì) né v_benchmark_anonymous (mai stata toccata).
+--
+-- Il problema di sicurezza segnalato dal Security Advisor per queste 2
+-- viste TORNA presente dopo questo rollback — è una scelta consapevole
+-- per ripristinare l'operatività, non una soluzione definitiva. Il fix
+-- corretto va rifatto dopo aver ottimizzato la RLS sottostante (indice
+-- mancante o funzione da marcare STABLE), non abbandonato.
+--
+-- Eseguire su Supabase SQL Editor.
+
+ALTER VIEW public.haccp_scadenzario SET (security_invoker = off);
+ALTER VIEW public.v_survey_data_normalized SET (security_invoker = off);
