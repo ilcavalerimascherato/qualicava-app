@@ -40,22 +40,35 @@ export const API_CONFIG = {
 /** Fonte di verità per tutti i ruoli possibili nell'applicazione.
  *  Usato da AuthContext per i controlli, e dal pannello UserManager. */
 export const ROLES = /** @type {const} */ ({
-  SUPERADMIN: 'superadmin',
-  ADMIN:      'admin',
-  SEDE:       'sede',
-  BOARD:      'board',
-  DIRECTOR:   'director',
-  VIEWER:     'viewer',
+  SUPERADMIN:    'superadmin',
+  ADMIN:         'admin',
+  SEDE:          'sede',
+  BOARD:         'board',
+  DIRECTOR:      'director',
+  DIR_SANITARIO: 'dir_sanitario',
+  REF_STRUTTURA: 'ref_struttura',
+  REF_QUALITA:   'ref_qualita',
+  VIEWER:        'viewer',
 });
 
 export const ROLE_LABELS = {
-  [ROLES.SUPERADMIN]: 'Super Admin',
-  [ROLES.ADMIN]:      'Amministratore',
-  [ROLES.SEDE]:       'Sede',
-  [ROLES.BOARD]:      'Board',
-  [ROLES.DIRECTOR]:   'Direttore',
-  [ROLES.VIEWER]:     'Visualizzatore',
+  [ROLES.SUPERADMIN]:    'Super Admin',
+  [ROLES.ADMIN]:         'Amministratore',
+  [ROLES.SEDE]:          'Sede',
+  [ROLES.BOARD]:         'Board',
+  [ROLES.DIRECTOR]:      'Direttore',
+  [ROLES.DIR_SANITARIO]: 'Direttore Sanitario',
+  [ROLES.REF_STRUTTURA]: 'Referente Struttura',
+  [ROLES.REF_QUALITA]:   'Referente Qualità',
+  [ROLES.VIEWER]:        'Visualizzatore',
 };
+
+/** I 4 ruoli che accedono "dalle strutture" (stessa vista DirectorFacility,
+ *  stessi permessi applicativi) — solo DIRECTOR vede i dati economici, gli
+ *  altri 3 no (vedi RLS su economico_mensile/economico_mensile_struttura). */
+export const FACILITY_STAFF_ROLES = [
+  ROLES.DIRECTOR, ROLES.DIR_SANITARIO, ROLES.REF_STRUTTURA, ROLES.REF_QUALITA,
+];
 
 // ── SURVEY TYPES ──────────────────────────────────────────────
 export const SURVEY_TYPES = {

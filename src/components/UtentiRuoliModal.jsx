@@ -2,15 +2,22 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, Users, Edit2, Plus } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { ROLE_LABELS, FACILITY_STAFF_ROLES } from '../config/constants';
 
-const RUOLI = ['superadmin', 'sede', 'admin', 'board', 'director'];
+const RUOLI = ['superadmin', 'sede', 'admin', 'board', 'director', 'dir_sanitario', 'ref_struttura', 'ref_qualita'];
 const RUOLO_COLORS = {
-  superadmin: 'bg-purple-50 text-purple-700 border-purple-200',
-  sede:       'bg-indigo-50 text-indigo-700 border-indigo-200',
-  admin:      'bg-blue-50 text-blue-700 border-blue-200',
-  board:      'bg-amber-50 text-amber-700 border-amber-200',
-  director:   'bg-emerald-50 text-emerald-700 border-emerald-200',
+  superadmin:    'bg-purple-50 text-purple-700 border-purple-200',
+  sede:          'bg-indigo-50 text-indigo-700 border-indigo-200',
+  admin:         'bg-blue-50 text-blue-700 border-blue-200',
+  board:         'bg-amber-50 text-amber-700 border-amber-200',
+  director:      'bg-emerald-50 text-emerald-700 border-emerald-200',
+  dir_sanitario: 'bg-teal-50 text-teal-700 border-teal-200',
+  ref_struttura: 'bg-slate-50 text-slate-700 border-slate-200',
+  ref_qualita:   'bg-cyan-50 text-cyan-700 border-cyan-200',
 };
+// I 4 ruoli "struttura" condividono lo stesso form (Strutture assegnate) —
+// solo 'director' vede i dati economici (gestito a livello di RLS/DirectorFacility).
+const isFacilityRole = (role) => FACILITY_STAFF_ROLES.includes(role);
 
 export default function UtentiRuoliModal({ isOpen, onClose, facilities, isSuperAdmin }) {
   const [utenti, setUtenti]           = useState([]);
@@ -221,7 +228,7 @@ function NuovoUtenteForm({ facilities, onGenerate, onClose }) {
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-1">Ruolo *</label>
           <select value={form.role} onChange={set('role')} className={INP2}>
-            {RUOLI.map(r => <option key={r} value={r}>{r}</option>)}
+            {RUOLI.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
           </select>
         </div>
         <div>
@@ -229,7 +236,7 @@ function NuovoUtenteForm({ facilities, onGenerate, onClose }) {
           <input type="number" value={form.companyId} onChange={set('companyId')} className={INP2} placeholder="es. 11" />
         </div>
       </div>
-      {form.role === 'director' && (
+      {isFacilityRole(form.role) && (
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-2">Strutture assegnate</label>
           <div className="max-h-40 overflow-y-auto grid grid-cols-2 gap-1.5">
@@ -279,7 +286,7 @@ function UtenteCard({ utente: u, facilities, isEditing, isSuperAdmin, onEdit, on
         company_id: form.company_id ? parseInt(form.company_id) : null,
       }).eq('id', u.id);
 
-      if (form.role === 'director') {
+      if (isFacilityRole(form.role)) {
         await supabase.from('user_facility_access').delete().eq('user_id', u.id);
         if (form.facilityIds.length > 0) {
           await supabase.from('user_facility_access').insert(
@@ -322,14 +329,14 @@ function UtenteCard({ utente: u, facilities, isEditing, isSuperAdmin, onEdit, on
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-xs font-black px-2.5 py-1 rounded-lg border ${RUOLO_COLORS[u.role] || 'bg-slate-100 text-slate-600'}`}>{u.role}</span>
+          <span className={`text-xs font-black px-2.5 py-1 rounded-lg border ${RUOLO_COLORS[u.role] || 'bg-slate-100 text-slate-600'}`}>{ROLE_LABELS[u.role] ?? u.role}</span>
           {!isEditing && (
             <button onClick={onEdit} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"><Edit2 size={15} /></button>
           )}
         </div>
       </div>
 
-      {!isEditing && u.role === 'director' && assignedFacilities.length > 0 && (
+      {!isEditing && isFacilityRole(u.role) && assignedFacilities.length > 0 && (
         <div className="px-4 pb-3 flex flex-wrap gap-1.5">
           {assignedFacilities.map((name, i) => (
             <span key={i} className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg font-medium">{name}</span>
@@ -347,7 +354,7 @@ function UtenteCard({ utente: u, facilities, isEditing, isSuperAdmin, onEdit, on
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">Ruolo</label>
               <select value={form.role} onChange={set('role')} className={INP2}>
-                {RUOLI.map(r => <option key={r} value={r}>{r}</option>)}
+                {RUOLI.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
               </select>
             </div>
             <div>
@@ -356,7 +363,7 @@ function UtenteCard({ utente: u, facilities, isEditing, isSuperAdmin, onEdit, on
             </div>
           </div>
 
-          {form.role === 'director' && (
+          {isFacilityRole(form.role) && (
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2">Strutture assegnate</label>
               <div className="max-h-40 overflow-y-auto grid grid-cols-2 gap-1.5">

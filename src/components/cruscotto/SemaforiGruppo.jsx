@@ -1,14 +1,15 @@
 // src/components/cruscotto/SemaforiGruppo.jsx
 // 5 semafori aggregati per area (documento redesign /report, §2 Cruscotto).
-// Solo 3 hanno oggi una fonte dati reale: Qualità (KPI), Soddisfazione
-// (survey), Conformità (NC). Economico e Personale non hanno ancora fonte
-// dati (nessun CDG economico, nessuna sezione Verifiche) e vengono mostrati
-// come "Dato non disponibile" invece di essere nascosti, per comunicare cosa
-// arriverà nelle fasi successive del redesign.
+// 4 hanno oggi una fonte dati reale: Qualità (KPI), Soddisfazione (survey),
+// Conformità (NC), Economico (economico_mensile — copertura parziale, solo le
+// società con chiusura mensile caricata). Personale non ha ancora fonte dati
+// (richiede la sezione Verifiche) e resta "Dato non disponibile".
 import React, { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ClipboardCheck, Smile, ShieldAlert, Wallet, Users2 } from 'lucide-react';
 import { RISK_BADGE, calcFacilityRiskScore } from '../../utils/riskScoreEngine';
 import { RISK_THRESHOLDS } from '../../config/riskWeights';
+import { supabase } from '../../supabaseClient';
 
 function Semaforo({ icon: Icon, title, level, detail, disponibile, onClick }) {
   const badge = disponibile ? (RISK_BADGE[level] ?? RISK_BADGE.unknown) : RISK_BADGE.unknown;
@@ -67,6 +68,57 @@ export default function SemaforiGruppo({ facilities, kpiRecords, surveys, nonCon
     return { level, detail: `${aperte.length} NC aperte/in lavorazione sul gruppo` };
   }, [nonConformities]);
 
+  const currentYear = new Date().getFullYear();
+  const totalCompanies = useMemo(
+    () => new Set((facilities ?? []).filter(f => !f.is_suspended && f.company_id).map(f => f.company_id)).size,
+    [facilities]
+  );
+
+  const { data: economicoRows } = useQuery({
+    queryKey: ['economicoGruppo', currentYear],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('economico_mensile')
+        .select('company_id, mese, scenario, ricavi_totali, ebitda')
+        .eq('anno', currentYear)
+        .eq('scenario', 'actual');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const economico = useMemo(() => {
+    if (!economicoRows) return { level: 'unknown', detail: 'Caricamento…' };
+    if (economicoRows.length === 0) {
+      return {
+        level: 'unknown',
+        detail: 'Nessuna società ha ancora una chiusura mensile caricata in QualiCAVA.',
+      };
+    }
+    // Ultimo mese Actual disponibile per ciascuna società
+    const lastByCompany = {};
+    for (const r of economicoRows) {
+      const prev = lastByCompany[r.company_id];
+      if (!prev || r.mese > prev.mese) lastByCompany[r.company_id] = r;
+    }
+    const rows = Object.values(lastByCompany).filter(r => r.ricavi_totali);
+    const totRicavi = rows.reduce((s, r) => s + (r.ricavi_totali || 0), 0);
+    const totEbitda = rows.reduce((s, r) => s + (r.ebitda || 0), 0);
+    const marginePonderato = totRicavi > 0 ? (totEbitda / totRicavi * 100) : null;
+    const level = marginePonderato == null ? 'unknown'
+      : marginePonderato >= 8 ? 'low'
+      : marginePonderato >= 0 ? 'medium'
+      : 'high';
+    const coverage = totalCompanies > 0 ? `${rows.length}/${totalCompanies}` : `${rows.length}`;
+    return {
+      level,
+      detail: marginePonderato != null
+        ? `Margine EBITDA medio ponderato: ${marginePonderato.toFixed(1)}% · ${coverage} società con chiusura disponibile`
+        : `${coverage} società con chiusura disponibile, dati insufficienti per il margine`,
+    };
+  }, [economicoRows, totalCompanies]);
+
   return (
     <div className="grid grid-cols-5 gap-3">
       <Semaforo icon={ClipboardCheck} title="Qualità" disponibile level={qualita.level} detail={qualita.detail}
@@ -75,8 +127,10 @@ export default function SemaforiGruppo({ facilities, kpiRecords, surveys, nonCon
         onClick={onNavigate ? () => onNavigate('dashboard') : undefined} />
       <Semaforo icon={ShieldAlert} title="Conformità" disponibile level={conformita.level} detail={conformita.detail}
         onClick={onNavigate ? () => onNavigate('nc') : undefined} />
-      <Semaforo icon={Wallet} title="Economico" disponibile={false}
-        detail="Nessun dato di fatturato/costi in QualiCAVA oggi — in valutazione (vedi nota in calce al documento di redesign)." />
+      {/* Non cliccabile: onNavigate qui naviga verso route diverse (/admin,
+          /non-conformita...), non può cambiare tab dentro /report — il
+          drill-down verso KPI & Economics richiederebbe un canale separato. */}
+      <Semaforo icon={Wallet} title="Economico" disponibile={economico.level !== 'unknown'} level={economico.level} detail={economico.detail} />
       <Semaforo icon={Users2} title="Personale" disponibile={false}
         detail="Richiede la sezione operativa Verifiche (minutaggi assistenziali) — non ancora costruita." />
     </div>

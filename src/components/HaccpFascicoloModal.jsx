@@ -119,10 +119,9 @@ export function parseApparecchiature(testo = '') {
 // ── Componente principale ─────────────────────────────────────
 export default function HaccpFascicoloModal({ facility, onClose }) {
   const [activeTab, setActiveTab] = useState('profilo');
-  const { profile }               = useAuth();
-  const isDirector                = profile?.role === 'director';
+  const { profile, isDirector }   = useAuth();
   const canGenerate               = profile?.role === 'superadmin';
-  const canRequest                = ['admin','sede','director'].includes(profile?.role);
+  const canRequest                = ['admin','sede'].includes(profile?.role) || isDirector;
   const canEdit                   = !isDirector;
 
   const { data, loading }         = useHaccpFascicolo(facility?.id);

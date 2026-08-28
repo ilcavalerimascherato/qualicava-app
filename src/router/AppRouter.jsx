@@ -11,7 +11,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { ROLES }   from '../config/constants';
+import { ROLES, FACILITY_STAFF_ROLES } from '../config/constants';
 
 const AdminApp              = lazy(() => import('../App'));
 const DirectorApp           = lazy(() => import('../views/DirectorApp'));
@@ -61,8 +61,9 @@ function RoleRouter() {
     return <Navigate to="/report" replace />;
   }
 
-  // Direttore → smista per numero di strutture
-  if (role === ROLES.DIRECTOR) {
+  // Direttore (e ruoli struttura equivalenti: dir. sanitario, referente
+  // struttura, referente qualità) → smista per numero di strutture
+  if (FACILITY_STAFF_ROLES.includes(role)) {
     const ids = profile.accessibleFacilityIds ?? [];
 
     if (ids.length === 0) {

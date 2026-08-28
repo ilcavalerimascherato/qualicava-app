@@ -17,7 +17,7 @@ import { Toaster, toast } from 'react-hot-toast';
 import {
   PawPrint, LogOut, ArrowLeft, Activity, BarChart3, Database,
   ChefHat, FileText, FileWarning,
-  AlertTriangle, TrendingUp,
+  AlertTriangle, TrendingUp, Wallet,
   Plus, Loader2, ClipboardCheck,
 } from 'lucide-react';
 
@@ -50,6 +50,7 @@ import SurveyPage            from '../components/SurveyPage';
 import OverviewTab           from '../components/OverviewTab';
 import VerificheTabDirector  from '../components/verifiche/VerificheTabDirector';
 import VerbaliIspettiviTab   from '../components/verbali/VerbaliIspettiviTab';
+import EconomicoTab          from '../components/EconomicoTab';
 
 // Mappa tab → conteggio badge e colore
 function getTabBadge(tabId, fBadge) {
@@ -116,7 +117,7 @@ function useAdaptiveData(isAdminUser, facilityIds, year) {
 export default function DirectorFacility() {
   const { facilityId }                = useParams();
   const navigate                      = useNavigate();
-  const { profile, isAdmin, signOut, can } = useAuth();
+  const { profile, isAdmin, signOut, can, isDirectorStretto } = useAuth();
   const { modals, open, close }       = useModals();
   const queryClient                       = useQueryClient();
   const [activeTab, setActiveTab]         = useState('overview');
@@ -152,6 +153,16 @@ export default function DirectorFacility() {
     ), [data.surveys, facilityId, facility]);
 
   const hasMultipleFacilities = facilityIds.length > 1;
+
+  // Tab "Economico" — solo per 'director' in senso stretto (non per gli altri
+  // 3 ruoli struttura: dir. sanitario, referente struttura, referente qualità).
+  const visibleTabs = useMemo(() => {
+    if (!isDirectorStretto) return TABS;
+    const idx = TABS.findIndex(t => t.id === 'kpi');
+    const withEconomico = [...TABS];
+    withEconomico.splice(idx + 1, 0, { id: 'economico', label: 'Economico', Icon: Wallet });
+    return withEconomico;
+  }, [isDirectorStretto]);
 
   const { data: cdgData } = useCdgData(
     facility ? [facility.id] : [],
@@ -276,7 +287,7 @@ export default function DirectorFacility() {
 
         {/* Tab nav */}
         <nav className="flex gap-1 overflow-x-auto pb-1">
-          {TABS.map(({ id, label, Icon }) => {
+          {visibleTabs.map(({ id, label, Icon }) => {
             const tabBadge = getTabBadge(id, fBadge);
             return (
               <button
@@ -326,6 +337,9 @@ export default function DirectorFacility() {
             year={year}
             onOpenManager={() => open('kpiManager')}
           />
+        )}
+        {activeTab === 'economico' && isDirectorStretto && (
+          <EconomicoTab companyId={facility.company_id} year={year} />
         )}
         {activeTab === 'survey' && (
           <SurveyPage

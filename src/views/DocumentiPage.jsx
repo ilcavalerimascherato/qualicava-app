@@ -323,11 +323,11 @@ function ComingSoon({ label }) {
 
 export default function DocumentiPage() {
   const navigate    = useNavigate();
-  const { profile, isAdmin, signOut } = useAuth();
+  const { profile, isAdmin, isDirector, signOut } = useAuth();
 
   const isAdminRole    = ['superadmin', 'admin'].includes(profile?.role);
   const isSedeRole     = profile?.role === 'sede';
-  const isDirectorRole = profile?.role === 'director';
+  const isDirectorRole = isDirector; // include i 4 ruoli struttura, non solo 'director'
   const isUserView     = isDirectorRole || isSedeRole;
 
   // facility dell'utente corrente (per direttori/sede)

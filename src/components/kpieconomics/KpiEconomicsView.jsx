@@ -11,6 +11,7 @@ import KpiTrendBoxes from './KpiTrendBoxes';
 import OccupazioneIntegrata from './OccupazioneIntegrata';
 import CorrelazioneOccupazioneSoddisfazione from './CorrelazioneOccupazioneSoddisfazione';
 import CostoQualitaPlaceholder from './CostoQualitaPlaceholder';
+import EconomicoGruppoPanel    from './EconomicoGruppoPanel';
 
 export default function KpiEconomicsView({
   facilities, companies, udos, kpiRecords, campaignsClient, year,
@@ -43,6 +44,8 @@ export default function KpiEconomicsView({
       <KpiHeatmap facilities={filteredFacilities} kpiRecords={kpiRecords} year={year} />
 
       <KpiTrendBoxes facilities={filteredFacilities} kpiRecords={kpiRecords} year={year} />
+
+      <EconomicoGruppoPanel year={year} />
 
       <div className="grid grid-cols-2 gap-4">
         <OccupazioneIntegrata facilities={filteredFacilities} cdgByFacility={cdgByFacility} year={year} />

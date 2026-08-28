@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { FileText, Trophy, BarChart2, TrendingUp, Building2, Search, ChevronRight, LayoutGrid, LineChart, Smile, ShieldAlert } from 'lucide-react';
+import { FileText, Trophy, BarChart2, TrendingUp, Building2, Search, ChevronRight, LayoutGrid, LineChart, Smile, ShieldAlert, Wallet } from 'lucide-react';
 import { useAuth }                from '../contexts/AuthContext';
 import { useDashboardData }      from '../hooks/useDashboardData';
 import { useBadgeCounts }        from '../hooks/useBadgeCounts';
@@ -18,6 +18,7 @@ import KpiXrayModal              from '../components/KpiXrayModal';
 import KpiAnalisiComparativa     from '../components/KpiAnalisiComparativa';
 import CruscottoView             from '../components/cruscotto/CruscottoView';
 import KpiEconomicsView          from '../components/kpieconomics/KpiEconomicsView';
+import EconomicoView             from '../components/economico/EconomicoView';
 import SoddisfazioneView         from '../components/soddisfazione/SoddisfazioneView';
 import ConformitaRischioView     from '../components/conformita/ConformitaRischioView';
 
@@ -69,9 +70,11 @@ export default function ReportPage() {
 
   const [activeTab, setActiveTab] = useState('cruscotto');
 
-  // 'board' vede solo il Cruscotto; sede/admin/superadmin hanno anche
-  // l'Analisi dettagliata (le card/modali storiche di questa pagina).
-  const hasAnalisiDettagliata = can('manageStructures');
+  // Tutte le sezioni di /report (non solo il Cruscotto): sede/admin/superadmin
+  // e ora anche 'board' (permesso dedicato 'viewReportSections', separato da
+  // 'manageStructures' che resta solo per le route HQ vere e proprie — board
+  // non deve ottenere accidentalmente altri permessi di gestione struttura).
+  const hasAnalisiDettagliata = can('viewReportSections');
 
   const allIds = useMemo(
     () => (data.facilities ?? []).filter(f => !f.is_suspended).map(f => f.id),
@@ -145,6 +148,16 @@ export default function ReportPage() {
           )}
           {hasAnalisiDettagliata && (
             <button
+              onClick={() => setActiveTab('economico')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'economico' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <Wallet size={14} /> Economico
+            </button>
+          )}
+          {hasAnalisiDettagliata && (
+            <button
               onClick={() => setActiveTab('soddisfazione')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'soddisfazione' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'
@@ -208,9 +221,10 @@ export default function ReportPage() {
             campaignsClient={data.campaignsClient}
             year={year}
             // Le destinazioni di drill-down (/admin, /non-conformita, /occupazione)
-            // richiedono manageStructures: il ruolo board non le ha ancora, quindi
-            // niente navigazione per loro finché non esistono viste dedicate.
-            onNavigate={hasAnalisiDettagliata ? handleNavigate : undefined}
+            // sono vere route HQ protette da manageStructures (non da
+            // viewReportSections): board le vede nel Cruscotto ma non deve
+            // ottenere link che poi la guardia di route rimbalza indietro.
+            onNavigate={can('manageStructures') ? handleNavigate : undefined}
           />
         )}
 
@@ -223,6 +237,10 @@ export default function ReportPage() {
             campaignsClient={data.campaignsClient}
             year={year}
           />
+        )}
+
+        {activeTab === 'economico' && hasAnalisiDettagliata && (
+          <EconomicoView year={year} />
         )}
 
         {activeTab === 'soddisfazione' && hasAnalisiDettagliata && (

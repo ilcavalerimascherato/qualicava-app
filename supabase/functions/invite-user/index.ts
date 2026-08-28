@@ -80,7 +80,13 @@ serve(async (req) => {
     }
 
     // Rango dei ruoli, fail-safe a 0 per ruoli sconosciuti/non mappati.
-    const ROLE_RANK: Record<string, number> = { director: 0, board: 0, sede: 1, admin: 2, superadmin: 3 };
+    // dir_sanitario/ref_struttura/ref_qualita: stesso rango di 'director' —
+    // stessi permessi applicativi, si distinguono solo per la visibilità dei
+    // dati economici (gestita via RLS, non qui).
+    const ROLE_RANK: Record<string, number> = {
+      director: 0, dir_sanitario: 0, ref_struttura: 0, ref_qualita: 0,
+      board: 0, sede: 1, admin: 2, superadmin: 3,
+    };
     const callerRank = ROLE_RANK[callerProfile.role] ?? 0;
     const targetRank = ROLE_RANK[role] ?? 0;
 

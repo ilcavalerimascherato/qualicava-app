@@ -2,6 +2,7 @@
 // Unica fonte di verità per: sessione, profilo utente, ruolo, strutture accessibili
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { FACILITY_STAFF_ROLES } from '../config/constants';
 
 const AuthContext = createContext(null);
 
@@ -61,7 +62,12 @@ export function AuthProvider({ children }) {
   // Helper: evita di controllare manualmente il ruolo in tutta l'app
   const isAdmin      = ['superadmin', 'admin', 'sede'].includes(profile?.role);
   const isSuperAdmin = profile?.role === 'superadmin';
-  const isDirector   = profile?.role === 'director';
+  // isDirector = "utente che entra dalle strutture" (stessa vista DirectorFacility,
+  // stessi permessi applicativi) — include i 4 ruoli struttura, non solo 'director'
+  // in senso stretto. Per distinguere il SOLO direttore (es. visibilità dati
+  // economici) usare isDirectorStretto.
+  const isDirector        = FACILITY_STAFF_ROLES.includes(profile?.role);
+  const isDirectorStretto = profile?.role === 'director';
 
   const canAccessFacility = useCallback((facilityId) => {
     if (!profile) return false;
@@ -71,11 +77,14 @@ export function AuthProvider({ children }) {
 
   // Mappa permessi per ruolo — unica fonte di verità
   const PERMISSIONS = {
-    superadmin: ['manageStructures','viewAllStructures','manageUsers','viewReports','editKpi'],
-    admin:      ['manageStructures','viewAllStructures','manageUsers','viewReports','editKpi'],
-    sede:       ['manageStructures','viewAllStructures','viewReports'],
-    board:      ['viewReports'],
-    director:   ['editKpi','viewReports'],
+    superadmin:    ['manageStructures','viewAllStructures','manageUsers','viewReports','editKpi','viewReportSections'],
+    admin:         ['manageStructures','viewAllStructures','manageUsers','viewReports','editKpi','viewReportSections'],
+    sede:          ['manageStructures','viewAllStructures','viewReports','viewReportSections'],
+    board:         ['viewReports','viewReportSections'],
+    director:      ['editKpi','viewReports'],
+    dir_sanitario: ['editKpi','viewReports'],
+    ref_struttura: ['editKpi','viewReports'],
+    ref_qualita:   ['editKpi','viewReports'],
   };
 
   const can = useCallback((action) => {
@@ -90,6 +99,7 @@ export function AuthProvider({ children }) {
     isAdmin,
     isSuperAdmin,
     isDirector,
+    isDirectorStretto,
     canAccessFacility,
     can,
     signOut,
