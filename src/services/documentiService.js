@@ -3,7 +3,7 @@ import { supabase }         from '../supabaseClient';
 import PizZip               from 'pizzip';
 import { createNotifica }   from './notificheService';
 import { computeDiff }      from './auditLogService';
-import { sostituisciPlaceholderConImmagine } from './docxPlaceholderImage';
+import { sostituisciPlaceholderConImmagine, trovaHeaderDefaultPath } from './docxPlaceholderImage';
 
 // ─── doc_master ───────────────────────────────────────────────
 
@@ -260,11 +260,12 @@ function formatMeseAnno(iso) {
 }
 
 function fixSplitTags(zip) {
-  const filesToFix = [
-    'word/document.xml',
-    'word/header1.xml', 'word/header2.xml', 'word/header3.xml',
-    'word/footer1.xml', 'word/footer2.xml', 'word/footer3.xml',
-  ];
+  // header/footer scoperti dinamicamente (non limitati a 1-3): il numero del
+  // part dipende da quanti ne esistevano già nel documento di contenuto prima
+  // dell'inserimento della copertina (vedi docxCoverInjector.js).
+  const headerFooterFiles = Object.keys(zip.files)
+    .filter(f => /^word\/(header|footer)\d+\.xml$/.test(f));
+  const filesToFix = ['word/document.xml', ...headerFooterFiles];
 
   filesToFix.forEach(filename => {
     try {
@@ -304,9 +305,11 @@ export async function compileDocumento(masterFileBuffer, facilityData, masterDat
   fixSplitTags(zip);
 
   // Logo società della struttura al posto del testo {{ragione_sociale}} in
-  // intestazione (dove presente come placeholder isolato) — best-effort: se il
-  // logo non è disponibile o la sostituzione non è applicabile, si procede con
-  // il comportamento esistente (ragione_sociale compilata come testo sotto).
+  // intestazione — SOLO nel part dell'intestazione (word/headerN.xml), non nel
+  // corpo: quello nella tabella "Applicabile a" resta testo, compilato sotto
+  // da docxtemplater come sempre. Best-effort: se il logo non è disponibile o
+  // la sostituzione non è applicabile, si procede con il comportamento
+  // esistente (ragione_sociale compilata come testo).
   try {
     if (facilityData.company_id) {
       const { data: company } = await supabase
@@ -314,8 +317,9 @@ export async function compileDocumento(masterFileBuffer, facilityData, masterDat
         .select('logo_url')
         .eq('id', facilityData.company_id)
         .single();
-      if (company?.logo_url) {
-        await sostituisciPlaceholderConImmagine(zip, 'ragione_sociale', company.logo_url);
+      const headerPath = trovaHeaderDefaultPath(zip);
+      if (company?.logo_url && headerPath) {
+        await sostituisciPlaceholderConImmagine(zip, 'ragione_sociale', company.logo_url, { partPath: headerPath });
       }
     }
   } catch {

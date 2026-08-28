@@ -1,7 +1,7 @@
 // src/services/copertinaService.js
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  ImageRun, Footer, AlignmentType, BorderStyle, WidthType,
+  ImageRun, Header, Footer, PageNumber, AlignmentType, BorderStyle, WidthType,
   ShadingType, VerticalAlign,
 } from 'docx';
 
@@ -208,6 +208,12 @@ export async function generaCopertina(params) {
     children: [],
   });
 
+  // Intestazione di pagina vera (si ripete su ogni pagina, non solo sulla
+  // copertina) — così quando la copertina viene inserita in testa a un
+  // documento di contenuto, la sua intestazione sostituisce quella (spesso
+  // obsoleta) del documento originale su tutte le pagine.
+  const header = new Header({ children: [headerTable, lineaVerde] });
+
   // ── 2. TIPOLOGIA ───────────────────────────────────────────
   const tipologiaPar = new Paragraph({
     alignment: AlignmentType.CENTER,
@@ -367,11 +373,19 @@ export async function generaCopertina(params) {
   });
 
   // ── 10. PIÈ DI PAGINA ──────────────────────────────────────
-  const footerTxt = `${codice} — Rev. ${revisione} — ${dataRevisione} — Pag. 1 di 1`;
+  // "Pag. X di Y" con campi dinamici Word (non testo fisso): resta corretto
+  // anche quando la copertina viene inserita in testa a un documento più
+  // lungo, invece di restare "Pag. 1 di 1" su ogni pagina.
+  const footerPrefix = `${codice} — Rev. ${revisione} — ${dataRevisione} — Pag. `;
   const footer = new Footer({
     children: [new Paragraph({
       alignment: AlignmentType.CENTER,
-      children:  [r(footerTxt, { size: 16, color: VERDE })],
+      children: [
+        new TextRun({ text: footerPrefix, font: 'Arial', size: 16, color: VERDE }),
+        new TextRun({ children: [PageNumber.CURRENT], font: 'Arial', size: 16, color: VERDE }),
+        new TextRun({ text: ' di ', font: 'Arial', size: 16, color: VERDE }),
+        new TextRun({ children: [PageNumber.TOTAL_PAGES], font: 'Arial', size: 16, color: VERDE }),
+      ],
     })],
   });
 
@@ -385,10 +399,9 @@ export async function generaCopertina(params) {
           margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
         },
       },
+      headers: { default: header },
       footers: { default: footer },
       children: [
-        headerTable,
-        lineaVerde,
         tipologiaPar,
         titoloPar,
         emptyPar(80),

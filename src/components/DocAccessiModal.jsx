@@ -34,10 +34,10 @@ function exportCSV(rows, master) {
   const body   = rows.map(r => [
     r.facility_name,
     r.ragione_sociale,
-    r.primo_accesso  ? new Date(r.primo_accesso ).toLocaleString('it-IT') : '',
-    r.ultimo_accesso ? new Date(r.ultimo_accesso).toLocaleString('it-IT') : '',
+    r.primo_accesso_il  ? new Date(r.primo_accesso_il ).toLocaleString('it-IT') : '',
+    r.ultimo_accesso_il ? new Date(r.ultimo_accesso_il).toLocaleString('it-IT') : '',
     r.accesso_count ?? 0,
-    r.primo_accesso ? 'Scaricato' : 'Non ancora',
+    r.primo_accesso_il ? 'Scaricato' : 'Non ancora',
   ]);
   const csv = [header, ...body].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -69,13 +69,13 @@ export default function DocAccessiModal({ master, onClose }) {
   }, [master]);
 
   const filtered = useMemo(() => {
-    if (filtro === 'scaricato')  return rows.filter(r => r.primo_accesso);
-    if (filtro === 'non_ancora') return rows.filter(r => !r.primo_accesso);
+    if (filtro === 'scaricato')  return rows.filter(r => r.primo_accesso_il);
+    if (filtro === 'non_ancora') return rows.filter(r => !r.primo_accesso_il);
     return rows;
   }, [rows, filtro]);
 
   const totale      = rows.length;
-  const scaricato   = rows.filter(r => r.primo_accesso).length;
+  const scaricato   = rows.filter(r => r.primo_accesso_il).length;
   const nonAncora   = totale - scaricato;
   const copertura   = totale > 0 ? Math.round((scaricato / totale) * 100) : 0;
 
@@ -184,13 +184,13 @@ export default function DocAccessiModal({ master, onClose }) {
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-sm">{row.ragione_sociale}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs font-mono">
-                      {row.primo_accesso
-                        ? new Date(row.primo_accesso).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })
+                      {row.primo_accesso_il
+                        ? new Date(row.primo_accesso_il).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })
                         : '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs font-mono">
-                      {row.ultimo_accesso
-                        ? new Date(row.ultimo_accesso).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })
+                      {row.ultimo_accesso_il
+                        ? new Date(row.ultimo_accesso_il).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })
                         : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -199,7 +199,7 @@ export default function DocAccessiModal({ master, onClose }) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <AccessoBadge hasScaricato={!!row.primo_accesso} />
+                      <AccessoBadge hasScaricato={!!row.primo_accesso_il} />
                     </td>
                   </tr>
                 ))}

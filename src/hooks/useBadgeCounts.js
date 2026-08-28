@@ -46,7 +46,7 @@ export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFul
 
     // ── 6 query in parallelo ──────────────────────────────────────
     const docsQ = ids.length
-      ? supabase.from('doc_istanze').select('facility_id, primo_accesso_il, generato_il').in('facility_id', ids)
+      ? supabase.from('doc_istanze').select('facility_id, primo_accesso_il, generato_il, doc_master(stato)').in('facility_id', ids)
       : Promise.resolve({ data: [], error: null });
 
     const haccpQ = ids.length
@@ -105,6 +105,7 @@ export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFul
       for (const row of docsRes.data ?? []) {
         const r = result[row.facility_id];
         if (!r) continue;
+        if (row.doc_master?.stato === 'obsoleto') continue;
         const isNew     = row.primo_accesso_il === null;
         const isUpdated = row.generato_il && row.primo_accesso_il &&
           new Date(row.generato_il) > new Date(row.primo_accesso_il);

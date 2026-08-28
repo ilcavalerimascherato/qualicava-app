@@ -59,13 +59,14 @@ function DocCard({ istanza, facilityData, onDownload }) {
   const style  = CAT_STYLE[doc.categoria] ?? CAT_DEFAULT;
   const Icon   = style.icon;
   const scad   = scadenzaBadge(doc.data_scadenza);
-  const isNuovo    = !istanza.primo_accesso_il;
-  const isUpdated  = istanza.generato_il && istanza.primo_accesso_il &&
+  const isObsoleto = doc.stato === 'obsoleto';
+  const isNuovo    = !isObsoleto && !istanza.primo_accesso_il;
+  const isUpdated  = !isObsoleto && istanza.generato_il && istanza.primo_accesso_il &&
     new Date(istanza.generato_il) > new Date(istanza.primo_accesso_il);
   const [loading, setLoading] = useState(false);
 
   const handleClick = useCallback(async () => {
-    if (loading) return;
+    if (loading || isObsoleto) return;
     setLoading(true);
     try { await onDownload(istanza, facilityData); }
     catch (err) {
@@ -73,16 +74,22 @@ function DocCard({ istanza, facilityData, onDownload }) {
       alert('Errore download: ' + msg);
     }
     finally { setLoading(false); }
-  }, [loading, onDownload, istanza, facilityData]);
+  }, [loading, isObsoleto, onDownload, istanza, facilityData]);
 
   return (
-    <div className={`rounded-2xl border-2 border-white p-4 ${style.bg} flex flex-col gap-3 shadow-sm hover:shadow-md transition-all`}>
+    <div className={`rounded-2xl border-2 border-white p-4 ${style.bg} flex flex-col gap-3 shadow-sm transition-all
+      ${isObsoleto ? 'opacity-60 grayscale' : 'hover:shadow-md'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-white rounded-xl shadow-sm">
             <Icon size={18} className={style.iconColor} />
           </div>
           <div className="flex flex-col gap-1">
+            {isObsoleto && (
+              <span className="text-[9px] font-black bg-slate-600 text-white px-1.5 py-0.5 rounded uppercase tracking-wide w-fit flex items-center gap-1">
+                <Archive size={9} /> Obsoleto
+              </span>
+            )}
             {isNuovo && (
               <span className="text-[9px] font-black bg-rose-500 text-white px-1.5 py-0.5 rounded uppercase tracking-wide w-fit">
                 Nuovo
@@ -126,7 +133,12 @@ function DocCard({ istanza, facilityData, onDownload }) {
         </div>
       </div>
 
-      {doc.file_url_master ? (
+      {isObsoleto ? (
+        <div className="w-full flex items-center justify-center gap-2 bg-slate-200 text-slate-500
+          rounded-xl py-2 text-xs font-bold border border-slate-300 cursor-not-allowed">
+          <Archive size={13} /> Documento obsoleto
+        </div>
+      ) : doc.file_url_master ? (
         <button
           onClick={handleClick}
           disabled={loading}
@@ -395,6 +407,7 @@ export default function DocMyDocumentiView({ facilityId: propFacilityId = null }
           const style = CAT_STYLE[cat] ?? CAT_DEFAULT;
           const Icon  = style.icon;
           const nuoviOAggiornati = docs.filter(ist => {
+            if (ist.doc_master?.stato === 'obsoleto') return false;
             const isNew = !ist.primo_accesso_il;
             const isUpd = ist.generato_il && ist.primo_accesso_il &&
               new Date(ist.generato_il) > new Date(ist.primo_accesso_il);

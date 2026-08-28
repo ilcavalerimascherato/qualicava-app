@@ -29,6 +29,28 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Risolve il part dell'intestazione di default (quello referenziato da
+// <w:headerReference w:type="default"/> nel sectPr di word/document.xml).
+// Ogni part (document.xml, headerN.xml, ...) ha un proprio scope di
+// relationship indipendente (word/_rels/<part>.rels), quindi per inserire
+// un'immagine nell'intestazione bisogna operare su QUEL part, non su
+// document.xml — altrimenti l'immagine finisce nel corpo per errore.
+export function trovaHeaderDefaultPath(zip) {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return null;
+  const xml = docFile.asText();
+  const match = xml.match(/<w:headerReference[^>]*w:type="default"[^>]*r:id="([^"]+)"/);
+  if (!match) return null;
+
+  const relsFile = zip.file('word/_rels/document.xml.rels');
+  if (!relsFile) return null;
+  const relsDom = parseXml(relsFile.asText());
+  const relEls = Array.from(relsDom.getElementsByTagName('Relationship'));
+  const rel = relEls.find(el => el.getAttribute('Id') === match[1]);
+  if (!rel) return null;
+  return 'word/' + rel.getAttribute('Target');
+}
+
 /**
  * Sostituisce {{tagName}} con un'immagine, SOLO se il tag occupa da solo
  * l'intero contenuto testuale di un <w:t> (caso copertinaService.js). Se il
@@ -39,14 +61,16 @@ function escapeRegExp(s) {
  * @param {PizZip} zip        - istanza PizZip del .docx, MUTATA in place
  * @param {string} tagName    - nome del placeholder, senza {{ }} (es. "ragione_sociale")
  * @param {string} imageUrl   - URL pubblico dell'immagine da inserire
- * @param {{widthPx?: number, heightPx?: number}} [opts]
+ * @param {{widthPx?: number, heightPx?: number, partPath?: string}} [opts]
+ *        partPath - part XML su cui operare (default 'word/document.xml');
+ *        passare 'word/headerN.xml' per sostituire il placeholder in intestazione.
  * @returns {Promise<boolean>} true se sostituito, false se non applicabile
  */
 export async function sostituisciPlaceholderConImmagine(zip, tagName, imageUrl, opts = {}) {
   if (!imageUrl) return false;
-  const { widthPx = 160, heightPx = 60 } = opts;
+  const { widthPx = 160, heightPx = 60, partPath = 'word/document.xml' } = opts;
 
-  const docFile = zip.file('word/document.xml');
+  const docFile = zip.file(partPath);
   if (!docFile) return false;
   const xml = docFile.asText();
 
@@ -79,8 +103,11 @@ export async function sostituisciPlaceholderConImmagine(zip, tagName, imageUrl, 
   const mediaName = `ph_${tagName}_${timestamp}.${ext}`;
   zip.file(`word/media/${mediaName}`, new Uint8Array(buffer));
 
-  // ── relationship ──
-  const relsPath = 'word/_rels/document.xml.rels';
+  // ── relationship — scope locale al part (document.xml.rels, headerN.xml.rels, ...) ──
+  const partSlashIdx = partPath.lastIndexOf('/');
+  const partDir  = partPath.slice(0, partSlashIdx);
+  const partFile = partPath.slice(partSlashIdx + 1);
+  const relsPath = `${partDir}/_rels/${partFile}.rels`;
   const relsFile = zip.file(relsPath);
   const relsXml = relsFile ? relsFile.asText()
     : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${REL_NS}"></Relationships>`;
@@ -129,6 +156,6 @@ export async function sostituisciPlaceholderConImmagine(zip, tagName, imageUrl, 
     '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
 
   const newXml = xml.replace(runRegex, drawingRun);
-  zip.file('word/document.xml', newXml);
+  zip.file(partPath, newXml);
   return true;
 }
