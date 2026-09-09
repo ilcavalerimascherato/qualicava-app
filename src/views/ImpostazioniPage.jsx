@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
-import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2, Copy, FileClock } from 'lucide-react';
+import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2, Copy, FileClock, Upload } from 'lucide-react';
 import { useAuth }                               from '../contexts/AuthContext';
 import { useDashboardData, useInvalidate }       from '../hooks/useDashboardData';
 import { useBadgeCounts }                        from '../hooks/useBadgeCounts';
@@ -18,6 +18,7 @@ import DocFirmeModal          from '../components/DocFirmeModal';
 import CampagneSurveyModal    from '../components/CampagneSurveyModal';
 import VerificaDuplicatiModal from '../components/VerificaDuplicatiModal';
 import RegistroAttivitaModal  from '../components/RegistroAttivitaModal';
+import ImportOccupazioneModal from '../components/ImportOccupazioneModal';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -226,6 +227,22 @@ export default function ImpostazioniPage() {
           </section>
         )}
 
+        {/* Dati */}
+        {isAdmin && (
+          <section className="mt-6">
+            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">Dati</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              <SettingsCard
+                icon={<Upload size={14} />}
+                iconBg="#ECFDF5" iconColor="#059669"
+                title="Importa occupazione mensile"
+                subtitle="Carica il file Excel mensile di presenze/occupazione"
+                onClick={() => setActiveModal('importOccupazione')}
+              />
+            </div>
+          </section>
+        )}
+
         {/* Sistema */}
         {isAdmin && (
           <section className="mt-6">
@@ -288,6 +305,9 @@ export default function ImpostazioniPage() {
       )}
       {activeModal === 'audit' && (
         <RegistroAttivitaModal onClose={closeModal} />
+      )}
+      {activeModal === 'importOccupazione' && (
+        <ImportOccupazioneModal onClose={closeModal} />
       )}
     </div>
   );

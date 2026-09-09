@@ -134,6 +134,12 @@ export default function CdgStrutturaCard({ facility, cdgRecords }) {
             </div>
           </div>
 
+          {/* Posti letto occupati/disponibili ultimo mese */}
+          <p className="text-[10px] text-gray-500">
+            Posti letto: <span className="font-medium text-gray-700">{Math.round(summary.mediaOspiti)}</span> occupati
+            su <span className="font-medium text-gray-700">{facility.bed_count ?? '—'}</span> disponibili
+          </p>
+
           {/* Trend sparkline */}
           <div className="flex items-center justify-between pt-1 border-t border-gray-100">
             <span className="text-[10px] text-gray-400">

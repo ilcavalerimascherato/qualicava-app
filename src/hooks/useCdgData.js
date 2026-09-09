@@ -8,29 +8,43 @@ export function useCdgData(facilityIds, year) {
     queryKey: ['cdgData', facilityIds, year],
     staleTime: 2 * 60 * 1000,
     queryFn: async () => {
-      let q = supabase
-        .from('v_cdg_mensile')
-        .select('*')
-        .in('anno', [year - 1, year])
-        .order('anno')
-        .order('mese');
+      const buildQuery = () => {
+        let q = supabase
+          .from('v_cdg_mensile')
+          .select('*')
+          .in('anno', [year - 1, year])
+          .order('anno')
+          .order('mese');
 
-      if (facilityIds && facilityIds.length > 0) {
-        q = q.in('facility_id', facilityIds);
+        if (facilityIds && facilityIds.length > 0) {
+          q = q.in('facility_id', facilityIds);
+        }
+        return q;
+      };
+
+      // Supabase/PostgREST limita di default una risposta a 1000 righe:
+      // con molte strutture/servizi su 2 anni si supera facilmente, quindi
+      // pagina finché una pagina torna piena di dati.
+      const PAGE_SIZE = 1000;
+      let data = [];
+      let from = 0;
+      for (;;) {
+        const { data: page, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        data = data.concat(page || []);
+        if (!page || page.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
 
-      const { data, error } = await q;
-      if (error) throw error;
-
       const cdgByFacility = {};
-      for (const row of data || []) {
+      for (const row of data) {
         const fid = row.facility_id;
         if (!fid) continue;
         if (!cdgByFacility[fid]) cdgByFacility[fid] = [];
         cdgByFacility[fid].push(row);
       }
 
-      return { raw: data || [], cdgByFacility };
+      return { raw: data, cdgByFacility };
     },
     enabled: facilityIds === null || (Array.isArray(facilityIds) && facilityIds.length > 0),
   });
