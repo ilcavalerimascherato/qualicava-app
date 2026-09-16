@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
-import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2, Copy, FileClock, Upload } from 'lucide-react';
+import { Building2, Users, Mail, Bell, PenLine, Briefcase, BarChart2, Copy, FileClock, Upload, Bot } from 'lucide-react';
 import { useAuth }                               from '../contexts/AuthContext';
 import { useDashboardData, useInvalidate }       from '../hooks/useDashboardData';
 import { useBadgeCounts }                        from '../hooks/useBadgeCounts';
@@ -19,6 +19,7 @@ import CampagneSurveyModal    from '../components/CampagneSurveyModal';
 import VerificaDuplicatiModal from '../components/VerificaDuplicatiModal';
 import RegistroAttivitaModal  from '../components/RegistroAttivitaModal';
 import ImportOccupazioneModal from '../components/ImportOccupazioneModal';
+import AiTrasparenzaModal     from '../components/AiTrasparenzaModal';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -239,6 +240,13 @@ export default function ImpostazioniPage() {
                 subtitle="Carica il file Excel mensile di presenze/occupazione"
                 onClick={() => setActiveModal('importOccupazione')}
               />
+              <SettingsCard
+                icon={<Bot size={14} />}
+                iconBg="#F5F3FF" iconColor="#7C3AED"
+                title="Trasparenza AI"
+                subtitle="Dove e come l'AI viene chiamata: funzione, trigger e prompt"
+                onClick={() => setActiveModal('aiTrasparenza')}
+              />
             </div>
           </section>
         )}
@@ -308,6 +316,9 @@ export default function ImpostazioniPage() {
       )}
       {activeModal === 'importOccupazione' && (
         <ImportOccupazioneModal onClose={closeModal} />
+      )}
+      {activeModal === 'aiTrasparenza' && (
+        <AiTrasparenzaModal onClose={closeModal} />
       )}
     </div>
   );

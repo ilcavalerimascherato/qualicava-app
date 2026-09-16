@@ -56,11 +56,28 @@ function validateParams(requiredKeys, params, promptName) {
  *  - required: parametri obbligatori
  *  - build:    funzione che riceve params e ritorna la stringa prompt
  */
+// ── METADATI TRASPARENZA AI ─────────────────────────────────────
+/**
+ * Ogni entry di PROMPT_REGISTRY dichiara anche `meta`: da dove viene
+ * chiamata, cosa la attiva, con che client/modello e se il risultato è
+ * una bozza rivista da un umano prima di essere usata (trasparenza
+ * AI Act — vedi pulsante "Trasparenza AI" in Impostazioni → Dati,
+ * src/components/AiTrasparenzaModal.jsx, che legge SOLO questo file).
+ * Aggiungere un nuovo prompt = aggiungere `meta` insieme a `build`,
+ * comparirà automaticamente nel pannello.
+ */
 const PROMPT_REGISTRY = {
 
   // ── 1. Cliente → Ospiti/Famiglie ───────────────────────────
   clienteOspiti: {
     required: ['facilityName', 'dataPayload'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalyticsModal.jsx — handleAction() (via getPromptAnalytics)',
+      trigger: 'Click sul report AI "Ospiti" nel pannello Analytics di una campagna cliente',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, dataPayload }) => `
 Sei il Direttore della struttura "${facilityName}".
 Scrivi una "Lettera Aperta" agli OSPITI e FAMIGLIE sui risultati del questionario di gradimento.
@@ -86,6 +103,13 @@ Usa ESATTAMENTE questi 4 titoli in maiuscolo:
   // ── 2. Cliente → Direzione Struttura ───────────────────────
   clienteDirezione: {
     required: ['facilityName', 'dataPayload'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalyticsModal.jsx — handleAction() (via getPromptAnalytics)',
+      trigger: 'Click sul report AI "Direzione" nel pannello Analytics di una campagna cliente',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, dataPayload }) => `
 Sei un Auditor Analitico per la struttura "${facilityName}".
 Scrivi una relazione focalizzata per il direttore e il suo team sul questionario di gradimento clienti/ospiti.
@@ -116,6 +140,13 @@ Usa ESATTAMENTE questa struttura con titoli in maiuscolo:
   // ── 3. Operatore → Staff ───────────────────────────────────
   operatoreOspiti: {
     required: ['facilityName', 'dataPayload'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalyticsModal.jsx — handleAction() (via getPromptAnalytics)',
+      trigger: 'Click sul report AI destinato al personale nel pannello Analytics di una campagna operatori (clima interno)',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, dataPayload }) => `
 Sei il Direttore della struttura "${facilityName}".
 Scrivi una comunicazione al PERSONALE E AGLI OPERATORI sui risultati del questionario di clima interno.
@@ -141,6 +172,13 @@ Usa ESATTAMENTE questi 4 titoli in maiuscolo:
   // ── 4. Operatore → Direzione Struttura ─────────────────────
   operatoreDirezione: {
     required: ['facilityName', 'dataPayload'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalyticsModal.jsx — handleAction() (via getPromptAnalytics)',
+      trigger: 'Click sul report AI "Direzione" nel pannello Analytics di una campagna operatori (clima interno)',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, dataPayload }) => `
 Sei un Esperto di Organizzazione e Clima Aziendale per la struttura "${facilityName}".
 Scrivi una relazione esecutiva per la DIREZIONE sul questionario di clima interno del personale.
@@ -171,6 +209,13 @@ Usa ESATTAMENTE questa struttura con titoli in maiuscolo:
   // ── 5. Globale → Board (Customer Survey) ───────────────────
   globaleBoard: {
     required: ['scopeName', 'typeName', 'facilitiesIncluded', 'totalResponses', 'averageScore', 'dataPayload'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'GlobalReportModal.jsx — generateSurveyReport()',
+      trigger: 'Click "Genera report" nel tab Survey del report globale (Report → Genera report gruppo)',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile prima della pubblicazione al Board)',
+    },
     build: ({ scopeName, typeName, facilitiesIncluded, totalResponses, averageScore, dataPayload }) => `
 Sei il Senior Strategy Manager del Gruppo.
 Scrivi una Relazione formale per il BOARD DIREZIONALE.
@@ -201,6 +246,13 @@ Usa ESATTAMENTE questi titoli in maiuscolo:
   // ── 6. KPI → Mensile ───────────────────────────────────────
   kpiMensile: {
     required: ['scopeName', 'mese', 'anno', 'kpiPayload'],
+    meta: {
+      categoria: 'KPI qualità',
+      calledFrom: 'GlobalReportModal.jsx — generateKpiReport() (modalità mensile)',
+      trigger: 'Click "Genera report" nel tab KPI del report globale, con periodo impostato su un singolo mese',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile prima della pubblicazione al Board)',
+    },
     build: ({ scopeName, mese, anno, kpiPayload, anomalie = [] }) => `
 Sei il Senior Quality Manager del Gruppo.
 Scrivi una Relazione di Analisi KPI per il BOARD DIREZIONALE.
@@ -229,6 +281,13 @@ Usa ESATTAMENTE questi titoli in maiuscolo:
   // ── 7. KPI → Periodo (Trend) ────────────────────────────────
   kpiPeriodo: {
     required: ['scopeName', 'periodoStart', 'periodoEnd', 'kpiTrendPayload'],
+    meta: {
+      categoria: 'KPI qualità',
+      calledFrom: 'GlobalReportModal.jsx — generateKpiReport() (modalità periodo/trend)',
+      trigger: 'Click "Genera report" nel tab KPI del report globale, con periodo impostato su un intervallo di mesi',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile prima della pubblicazione al Board)',
+    },
     build: ({ scopeName, periodoStart, periodoEnd, kpiTrendPayload }) => `
 Sei il Senior Quality Manager del Gruppo.
 Scrivi una Relazione di Analisi Trend KPI per il BOARD DIREZIONALE.
@@ -256,6 +315,13 @@ Usa ESATTAMENTE questi titoli in maiuscolo:
   // ── 8. Apertura Direttore → Ospiti (Restituzione PDF) ────────
   restituzioneAperturaClienti: {
     required: ['facilityName', 'periodo', 'topForza', 'areaAttenzione'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'RestituzioneModal.jsx — generateApertura()',
+      trigger: 'Click generazione testo di apertura nel PDF di restituzione risultati agli ospiti',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, periodo, npsScore, topForza, areaAttenzione }) => `
 Sei il Direttore della struttura "${facilityName}".
 Scrivi un breve messaggio di apertura per il PDF di restituzione risultati
@@ -280,6 +346,13 @@ REGOLE TASSATIVE:
   // ── 9. Apertura Direttore → Operatori (Restituzione PDF) ─────
   restituzioneAperturaOperatori: {
     required: ['facilityName', 'periodo', 'topForza', 'areaAttenzione'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'RestituzioneModal.jsx — generateApertura()',
+      trigger: 'Click generazione testo di apertura nel PDF di restituzione risultati al personale',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, periodo, topForza, areaAttenzione }) => `
 Sei il Direttore della struttura "${facilityName}".
 Scrivi un breve messaggio di apertura per il PDF di restituzione risultati
@@ -303,6 +376,13 @@ REGOLE TASSATIVE:
   // ── 10. Sintesi del periodo → Ospiti (Documento Word Utenza) ──
   campagnaSintesiPeriodo: {
     required: ['facilityName', 'periodo', 'nRisposte', 'topAree', 'areeAttenzione'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalisiCampagnaPanel.jsx — generaSintesiPeriodoAI()',
+      trigger: 'Click generazione sintesi del periodo nel documento Word di restituzione agli ospiti',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, periodo, nRisposte, topAree, areeAttenzione, npsScore }) => `
 Sei il Direttore della struttura "${facilityName}".
 Scrivi una breve sintesi di come è andato il periodo, da inserire nel documento
@@ -326,6 +406,13 @@ REGOLE TASSATIVE:
   // ── 11. Punti di forza/debolezza → Direzione (Documento Word Direzione) ──
   campagnaPuntiDirezionali: {
     required: ['facilityName', 'campagnaNome', 'dataPayload'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalisiCampagnaPanel.jsx — generaPuntiDirezionaliAI()',
+      trigger: 'Click generazione punti di forza/debolezza nel documento Word di restituzione alla Direzione',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, campagnaNome, dataPayload }) => `
 Sei un Auditor Analitico per la struttura "${facilityName}".
 Analizza i risultati della campagna "${campagnaNome}" e proponi una bozza di
@@ -359,6 +446,13 @@ PUNTI DI DEBOLEZZA
   // duplicare il prompt in due entry quasi identiche.
   campagnaPuntiUtenza: {
     required: ['facilityName', 'campagnaNome', 'dataPayload'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalisiCampagnaPanel.jsx — generaPuntiUtenzaAI()',
+      trigger: 'Click generazione punti di forza/aree di miglioramento nel documento Word di restituzione a ospiti o personale',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, campagnaNome, dataPayload, audience = 'ospiti' }) => {
       const isOperatori = audience === 'operatori';
       const targetLabel = isOperatori ? 'PERSONALE E OPERATORI' : 'OSPITI E FAMIGLIE';
@@ -396,6 +490,13 @@ DOVE VOGLIAMO MIGLIORARE
   // ── 11c. Azioni per il prossimo anno / Impegno → Utenza (Documento Word Utenza) ──
   campagnaAzioniImpegnoUtenza: {
     required: ['facilityName', 'campagnaNome', 'dataPayload'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalisiCampagnaPanel.jsx — generaAzioniImpegnoUtenzaAI()',
+      trigger: 'Click generazione azioni per il prossimo anno / impegno nel documento Word di restituzione a ospiti o personale',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, campagnaNome, dataPayload, audience = 'ospiti' }) => {
       const isOperatori = audience === 'operatori';
       const targetLabel = isOperatori ? 'PERSONALE E OPERATORI' : 'OSPITI E FAMIGLIE';
@@ -437,6 +538,13 @@ IL NOSTRO IMPEGNO
   // ── 11d. Obiettivi e azioni per il prossimo semestre → Direzione (Documento Word Direzione) ──
   campagnaObiettiviDirezione: {
     required: ['facilityName', 'campagnaNome', 'dataPayload'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalisiCampagnaPanel.jsx — generaObiettiviDirezioneAI()',
+      trigger: 'Click generazione obiettivi e azioni nel documento Word di restituzione alla Direzione',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, campagnaNome, dataPayload }) => `
 Sei un Auditor Analitico per la struttura "${facilityName}".
 Analizza i risultati della campagna "${campagnaNome}" e proponi una bozza di
@@ -460,6 +568,13 @@ REGOLE TASSATIVE:
   // ── 13. Briefing mattutino → Dashboard Master ──────────────
   briefingMattutino: {
     required: ['today', 'totalFacilities', 'activeCount', 'suspendedCount', 'okCount', 'attentionCount', 'criticalCount', 'topCriticalStr'],
+    meta: {
+      categoria: 'KPI qualità',
+      calledFrom: 'AiBriefing.jsx — generateBrief()',
+      trigger: 'Apertura/refresh della card di briefing mattutino nella dashboard Master',
+      client: 'callClaude',
+      output: 'Testo mostrato direttamente all\'utente — uso informativo interno, non pubblicato all\'esterno',
+    },
     build: ({ today, totalFacilities, activeCount, suspendedCount, okCount, attentionCount, criticalCount, totalOpenNc = 0, ncByRegionStr = '', topCriticalStr }) => `
 Sei l'assistente AI di QualiCAVA, sistema di gestione qualità per strutture sociosanitarie italiane.
 Genera un briefing mattutino conciso in italiano per il responsabile qualità di sede.
@@ -484,6 +599,13 @@ Usa il grassetto HTML <strong> solo per i nomi delle strutture critiche.
   // ── 14. Sunto commenti liberi → Panel Analisi Campagna ─────
   campagnaSuntoCommenti: {
     required: ['nCommenti', 'totaleQuestionari', 'percRisposta', 'testiFormattati'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalisiCampagnaPanel.jsx — generaSunto()',
+      trigger: 'Click "Genera sunto commenti" nel pannello di analisi di una campagna',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile prima dell\'uso)',
+    },
     build: ({ nCommenti, totaleQuestionari, percRisposta, testiFormattati }) => `
 Sei un esperto di qualità nel settore socio-sanitario italiano.
 Hai ricevuto ${nCommenti} commenti liberi su un totale di ${totaleQuestionari} questionari compilati (${percRisposta}% di risposta ai campi aperti).
@@ -505,6 +627,13 @@ Rispondi in italiano, tono professionale.
   // ── 12. Temi emersi dai commenti → Direzione (Documento Word Direzione) ──
   campagnaTemiCommenti: {
     required: ['facilityName', 'commentiFormattati', 'nCommenti', 'nQuestionari'],
+    meta: {
+      categoria: 'Questionari — bozze testuali',
+      calledFrom: 'AnalisiCampagnaPanel.jsx — generaTemiCommentiAI()',
+      trigger: 'Click generazione temi emersi dai commenti nel documento Word di restituzione alla Direzione',
+      client: 'callClaude',
+      output: 'Testo (bozza editabile dal direttore prima della pubblicazione)',
+    },
     build: ({ facilityName, commentiFormattati, nCommenti, nQuestionari }) => `
 Sei un esperto di qualità nel settore socio-sanitario italiano.
 Hai ricevuto ${nCommenti} commenti liberi su ${nQuestionari} questionari compilati
@@ -537,6 +666,13 @@ REGOLE TASSATIVE:
   // src/utils/verbaliAiExtraction.js, non mostrato direttamente all'utente.
   estrazioneVerbaleIspettivo: {
     required: [],
+    meta: {
+      categoria: 'Estrazione automatica documenti (dati strutturati)',
+      calledFrom: 'verbaliAiExtraction.js — extractVerbaleFromPdf()',
+      trigger: 'Upload di un PDF di verbale ispettivo nel modulo Verifiche/Verbali Ispettivi',
+      client: 'callClaudeWithPdf (prompt + PDF allegato)',
+      output: 'JSON interno, mai mostrato grezzo — precompila il verbale, ogni campo resta modificabile/validabile dall\'utente prima del salvataggio',
+    },
     build: ({ oggi = new Date().toISOString().slice(0, 10) } = {}) => `
 Sei un esperto di compliance socio-sanitaria italiana (RSA). Ricevi in allegato un
 verbale di ispezione emesso da un ente di vigilanza (ATS, NAS o simile) su una
@@ -598,6 +734,13 @@ REGOLE TASSATIVE PER L'ESTRAZIONE:
   // parsato in src/utils/documentoAiExtraction.js.
   estrazioneMetadatiDocumento: {
     required: ['testo'],
+    meta: {
+      categoria: 'Estrazione automatica documenti (dati strutturati)',
+      calledFrom: 'documentoAiExtraction.js — estraiMetadatiDocumento()',
+      trigger: 'Upload di un documento .docx in Documenti — estrazione automatica dei metadati per la copertina',
+      client: 'callClaude',
+      output: 'JSON interno, mai mostrato grezzo — precompila i campi della copertina, ogni campo non trovato resta null e va inserito manualmente, tutti restano modificabili',
+    },
     build: ({ testo }) => `
 Sei un assistente per la gestione documentale di una RSA italiana. Ricevi il testo
 grezzo di un documento (protocollo, procedura, istruzione operativa) SENZA la
@@ -725,3 +868,48 @@ export const kpiAnalisiComparativa = {
 
   outlier: (data) => `Identifica le strutture outlier in questo gruppo LTC italiano. Distingui tra anomalie da dimensione struttura (numero ospiti) e anomalie reali di qualità. Per ogni outlier: causa probabile, rischio associato, azione raccomandata. Dati: ${JSON.stringify(data.summary)}`,
 };
+
+// Metadati trasparenza per kpiAnalisiComparativa — non è in PROMPT_REGISTRY
+// (firma diversa: (data) => stringa anziché required/build) ma segue la
+// stessa logica: aggiungere un preset = aggiungere qui la sua entry.
+const KPI_ANALISI_COMPARATIVA_META = {
+  completa:   { label: 'Analisi completa',  trigger: 'Click preset "Analisi completa" nel tab "Analisi AI" di KPI Analisi Comparativa' },
+  cadute:     { label: 'Cadute e sicurezza', trigger: 'Click preset "Cadute" nel tab "Analisi AI" di KPI Analisi Comparativa' },
+  formazione: { label: 'Formazione',        trigger: 'Click preset "Formazione" nel tab "Analisi AI" di KPI Analisi Comparativa' },
+  outlier:    { label: 'Strutture outlier', trigger: 'Click preset "Outlier" nel tab "Analisi AI" di KPI Analisi Comparativa' },
+};
+
+// ── ELENCO UNIFICATO PER IL PANNELLO "TRASPARENZA AI" ──────────
+/**
+ * Ricostruisce, per ogni prompt del sistema, un'anteprima leggibile
+ * sostituendo i parametri dinamici con segnaposto "[nomeParametro]" —
+ * così il testo mostrato nel pannello di trasparenza (Impostazioni →
+ * Dati → Trasparenza AI) è SEMPRE generato dal prompt reale, mai
+ * copiato a mano: non può andare fuori sincrono con aiPrompts.js.
+ */
+export function listAiCallSites() {
+  const daRegistro = Object.entries(PROMPT_REGISTRY).map(([id, entry]) => {
+    const placeholderParams = {};
+    (entry.required ?? []).forEach(key => { placeholderParams[key] = `[${key}]`; });
+    let promptPreview = '';
+    try {
+      promptPreview = entry.build(placeholderParams);
+    } catch (err) {
+      promptPreview = `(anteprima non disponibile: ${err.message})`;
+    }
+    return { id, ...entry.meta, promptPreview };
+  });
+
+  const datiFinti = { count: '[N]', critical: '[N]', warnings: '[N]', summary: '[dati KPI aggregati]' };
+  const daKpiComparativa = Object.entries(kpiAnalisiComparativa).map(([id, buildFn]) => ({
+    id: `kpiAnalisiComparativa.${id}`,
+    categoria: 'KPI qualità',
+    calledFrom: 'KpiAnalisiComparativa.jsx — runAiAnalysis()',
+    trigger: KPI_ANALISI_COMPARATIVA_META[id]?.trigger ?? '',
+    client: 'callClaude',
+    output: 'Testo mostrato direttamente all\'utente — uso esplorativo interno, non pubblicato all\'esterno',
+    promptPreview: buildFn(datiFinti),
+  }));
+
+  return [...daRegistro, ...daKpiComparativa];
+}
