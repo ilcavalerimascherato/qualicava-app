@@ -280,19 +280,16 @@ function UtenteCard({ utente: u, facilities, isEditing, isSuperAdmin, onEdit, on
   const handleSave = async () => {
     setSaving(true);
     try {
-      await supabase.from('user_profiles').update({
+      const { error: profileError } = await supabase.from('user_profiles').update({
         role:       form.role,
         full_name:  form.full_name,
         company_id: form.company_id ? parseInt(form.company_id) : null,
       }).eq('id', u.id);
+      if (profileError) throw profileError;
 
       if (isFacilityRole(form.role)) {
-        await supabase.from('user_facility_access').delete().eq('user_id', u.id);
-        if (form.facilityIds.length > 0) {
-          await supabase.from('user_facility_access').insert(
-            form.facilityIds.map(fid => ({ user_id: u.id, facility_id: fid }))
-          );
-        }
+        const { userService } = await import('../services/supabaseService');
+        await userService.updateAccess(u.id, form.facilityIds);
       }
       onResult({ success: true, msg: `Ruolo aggiornato per ${form.full_name || u.email}.` });
       onSaved();

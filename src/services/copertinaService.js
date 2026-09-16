@@ -42,6 +42,106 @@ async function fetchImageData(url) {
   }
 }
 
+function loadImageElement(bytes, mimeType) {
+  return new Promise((resolve) => {
+    try {
+      const blob = new Blob([bytes], { type: mimeType === 'jpg' ? 'image/jpeg' : 'image/png' });
+      const url  = URL.createObjectURL(blob);
+      const img  = new Image();
+      img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+// I file logo caricati dalle società spesso hanno margini trasparenti (PNG) o
+// bianchi (JPG) di dimensione molto diversa da un file all'altro: senza
+// ritagliarli, due loghi con lo stesso "contain" finiscono per apparire di
+// dimensione molto diversa (quello con più padding sembra più piccolo).
+// Scansiona i pixel e ritaglia al bounding box del contenuto non di sfondo.
+function trimPadding(img, mimeType) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const isJpeg = mimeType === 'jpg'; // niente alpha: sfondo tipicamente bianco
+    let minX = canvas.width, minY = canvas.height, maxX = -1, maxY = -1;
+
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x++) {
+        const i = (y * canvas.width + x) * 4;
+        const isBackground = isJpeg
+          ? (data[i] > 250 && data[i + 1] > 250 && data[i + 2] > 250)
+          : data[i + 3] < 10;
+        if (!isBackground) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < minX || maxY < minY) return null; // immagine vuota
+
+    const w = maxX - minX + 1;
+    const h = maxY - minY + 1;
+    if (w >= canvas.width * 0.98 && h >= canvas.height * 0.98) return null; // già senza padding
+
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width  = w;
+    cropCanvas.height = h;
+    cropCanvas.getContext('2d').drawImage(canvas, minX, minY, w, h, 0, 0, w, h);
+    const dataUrl = cropCanvas.toDataURL('image/png');
+    const base64  = dataUrl.split(',')[1];
+    const binary  = atob(base64);
+    const bytes   = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return { bytes, width: w, height: h, type: 'png' };
+  } catch {
+    return null; // canvas "tainted" o altro errore imprevisto: si usa l'immagine originale
+  }
+}
+
+// Scala l'immagine dentro un riquadro massimo mantenendo le proporzioni
+// originali ("contain", come in CSS) invece di stirarla/schiacciarla per
+// riempire esattamente width x height.
+function fitTransformation(natural, maxWidth, maxHeight) {
+  if (!natural?.width || !natural?.height) return { width: maxWidth, height: maxHeight };
+  const scale = Math.min(maxWidth / natural.width, maxHeight / natural.height);
+  return {
+    width:  Math.round(natural.width  * scale),
+    height: Math.round(natural.height * scale),
+  };
+}
+
+// Ritaglia il padding (se presente) e calcola la trasformazione "contain" —
+// unica funzione da chiamare per preparare un logo per l'ImageRun.
+async function prepareLogo(bytes, mimeType, maxWidth, maxHeight) {
+  const img = await loadImageElement(bytes, mimeType);
+  if (!img) return { bytes, type: mimeType, transformation: { width: maxWidth, height: maxHeight } };
+
+  const trimmed = trimPadding(img, mimeType);
+  if (trimmed) {
+    return {
+      bytes: trimmed.bytes,
+      type:  trimmed.type,
+      transformation: fitTransformation(trimmed, maxWidth, maxHeight),
+    };
+  }
+  return {
+    bytes,
+    type: mimeType,
+    transformation: fitTransformation({ width: img.naturalWidth, height: img.naturalHeight }, maxWidth, maxHeight),
+  };
+}
+
 async function fetchLogoOver() {
   const paths = [
     '/Pittogramma Over_DEF.jpg',
@@ -128,20 +228,24 @@ export async function generaCopertina(params) {
   const _indirizzoStruttura = indirizzoStruttura || '{{indirizzo}}';
   const _dataValidazione    = dataValidazione    || '{{data_approvazione}}';
 
-  // Fetch logo società
+  // Fetch logo società — ritaglio padding + dimensioni "contain" nel riquadro
+  // 220x80, così loghi con margini/proporzioni diversi da una società
+  // all'altra appaiono comunque di dimensione coerente.
   let logoImg = null;
   if (logoSocietaUrl) {
     try {
       const res    = await fetch(logoSocietaUrl);
       const buffer = await res.arrayBuffer();
-      logoImg = {
-        bytes: new Uint8Array(buffer),
-        type:  detectImgType(res.headers.get('content-type') || logoSocietaUrl),
-      };
+      const bytes  = new Uint8Array(buffer);
+      const type   = detectImgType(res.headers.get('content-type') || logoSocietaUrl);
+      logoImg = await prepareLogo(bytes, type, 220, 80);
     } catch { logoImg = null; }
   }
 
   let logoOverImg = await fetchLogoOver();
+  if (logoOverImg) {
+    logoOverImg = await prepareLogo(logoOverImg.bytes, logoOverImg.type, 80, 80);
+  }
 
   let firmaImg = null;
   if (firmaUrl) {
@@ -167,7 +271,7 @@ export async function generaCopertina(params) {
   // ── 1. HEADER ──────────────────────────────────────────────
   // Cella sx: logo se disponibile, altrimenti ragione sociale come testo
   const logoSxChildren = logoImg
-    ? [new ImageRun({ data: logoImg.bytes, transformation: { width: 220, height: 80 }, type: logoImg.type })]
+    ? [new ImageRun({ data: logoImg.bytes, transformation: logoImg.transformation, type: logoImg.type })]
     : [r(_societaNome, { bold: true, color: VERDE, size: 24 })];
 
   const headerTable = new Table({
@@ -193,7 +297,7 @@ export async function generaCopertina(params) {
             alignment: AlignmentType.RIGHT,
             spacing:   { before: 60, after: 60 },
             children: [logoOverImg
-              ? new ImageRun({ data: logoOverImg.bytes, transformation: { width: 80, height: 80 }, type: logoOverImg.type })
+              ? new ImageRun({ data: logoOverImg.bytes, transformation: logoOverImg.transformation, type: logoOverImg.type })
               : r('GRUPPO OVER', { bold: true, color: VERDE, size: 24 })
             ],
           })],
@@ -410,7 +514,13 @@ export async function generaCopertina(params) {
         applicabilitaTable,
         distribuzionePar,
         emptyPar(120),
+        // Tag di sezione docxtemplater: alla distribuzione per struttura
+        // (documentiService.js) il box validazione regionale viene incluso
+        // solo se quella struttura ha il Direttore Sanitario compilato in
+        // "Riferimenti struttura" (facilities.director_sanitario).
+        new Paragraph({ children: [r('{{#direttoreSanitarioPresente}}', { size: 8, color: 'CCCCCC' })] }),
         valTable,
+        new Paragraph({ children: [r('{{/direttoreSanitarioPresente}}', { size: 8, color: 'CCCCCC' })] }),
         emptyPar(120),
         storicoTable,
       ],

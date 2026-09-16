@@ -96,7 +96,7 @@ export default function DocAccessiModal({ master, onClose }) {
                 </h2>
                 {master?.revisione_corrente && (
                   <span className="text-[10px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-lg">
-                    Rev. {master.revisione_corrente}
+                    {master.revisione_corrente}
                   </span>
                 )}
               </div>

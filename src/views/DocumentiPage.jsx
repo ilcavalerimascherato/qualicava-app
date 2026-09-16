@@ -6,7 +6,7 @@ import {
   ChevronRight, Plus, FolderOpen, Shield,
   ArrowLeft, Eye, Loader2, Filter, RefreshCw,
   Archive, Pencil, BookOpen, X, Search, PenLine,
-  Stethoscope, Utensils, BarChart2
+  Stethoscope, Utensils, BarChart2, Wand2
 } from 'lucide-react';
 import { useAuth }             from '../contexts/AuthContext';
 import { useDashboardData }    from '../hooks/useDashboardData';
@@ -20,12 +20,15 @@ import DocStrutturaPanel          from '../components/DocStrutturaPanel';
 import DocStrutturaProprioModal   from '../components/DocStrutturaProprioModal';
 import DocMyDocumentiView         from './DocMyDocumentiView';
 import DocFirmeModal              from '../components/DocFirmeModal';
+import CartaServiziGeneratorModal from '../components/CartaServiziGeneratorModal';
+import CartaServiziGestoreModal   from '../components/CartaServiziGestoreModal';
 import { supabase } from '../supabaseClient';
 import {
   getDocMaster,
   setObsoleto,
   updateDocMaster,
-  getDocStrutturaInRevisione
+  getDocStrutturaInRevisione,
+  getFacilitiesForDistribution,
 } from '../services/documentiService';
 
 // ─── categorie ────────────────────────────────────────────────
@@ -85,8 +88,102 @@ const TABS_ADMIN = [
   { id: 'distribuzione', label: 'Distribuzione', Icon: Send       },
   { id: 'strutture',     label: 'Strutture',     Icon: Building2 },
   { id: 'firme',         label: 'Firme',         Icon: PenLine   },
+  { id: 'generazione',   label: 'Generazione',   Icon: Wand2     },
   { id: 'impostazioni',  label: 'Impostazioni',  Icon: Settings  },
 ];
+
+// ─── card generatore (tab Generazione) ─────────────────────────
+// Registro dei generatori di documento disponibili. Oggi solo la
+// Carta dei Servizi; pensato per accogliere altri generatori futuri
+// (es. Regolamento Interno) senza restrutturare il tab.
+const GENERATORI = [
+  {
+    id: 'carta_servizi', nome: 'Carta dei Servizi', udo: 'RSA',
+    descrizione: 'Genera la Carta dei Servizi con i box specifici della struttura selezionata.',
+    Icon: BookOpen, colore: 'violet',
+  },
+];
+
+function GenerazioneTab() {
+  const [strutture, setStrutture]           = useState([]);
+  const [loadingStrutture, setLoadingStrutture] = useState(true);
+  const [facilityId, setFacilityId]         = useState('');
+  const [openGeneratore, setOpenGeneratore] = useState(null); // id generatore aperto
+  const [showGestoreModal, setShowGestoreModal] = useState(false);
+
+  useEffect(() => {
+    getFacilitiesForDistribution()
+      .then(setStrutture)
+      .finally(() => setLoadingStrutture(false));
+  }, []);
+
+  const facility = strutture.find(f => String(f.id) === String(facilityId)) || null;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
+        <div className="flex-1 max-w-md">
+          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
+            Struttura
+          </label>
+          <select
+            value={facilityId}
+            onChange={e => setFacilityId(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-400 transition-all"
+            disabled={loadingStrutture}
+          >
+            <option value="">{loadingStrutture ? 'Caricamento...' : 'Seleziona una struttura...'}</option>
+            {strutture.map(f => (
+              <option key={f.id} value={f.id}>{f.name} — {f.ragione_sociale}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          onClick={() => setShowGestoreModal(true)}
+          className="flex items-center gap-2 text-sm font-black text-violet-600 hover:text-violet-800 px-4 py-2.5 rounded-xl border border-violet-200 hover:bg-violet-50 transition-colors shrink-0"
+        >
+          <Building2 size={16} /> Contenuti comuni gestore
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {GENERATORI.map(g => (
+          <button
+            key={g.id}
+            disabled={!facility}
+            onClick={() => setOpenGeneratore(g.id)}
+            className={`text-left rounded-2xl p-5 border-2 transition-all group flex flex-col gap-3
+              ${facility
+                ? `${COLORI_CLASSI[g.colore].bg} ${COLORI_CLASSI[g.colore].border} hover:shadow-md`
+                : 'bg-slate-50 border-slate-200 opacity-50 cursor-not-allowed'}`}
+          >
+            <div className={`p-2.5 rounded-xl w-fit ${COLORI_CLASSI[g.colore].iconBg}`}>
+              <g.Icon size={22} className={COLORI_CLASSI[g.colore].iconColor} />
+            </div>
+            <div>
+              <p className="font-black text-slate-800 text-sm">{g.nome}</p>
+              <p className="text-xs text-slate-500 mt-1">{g.descrizione}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {!facility && !loadingStrutture && (
+        <p className="text-sm text-slate-400 text-center py-4">
+          Seleziona una struttura per abilitare i generatori di documento.
+        </p>
+      )}
+
+      {openGeneratore === 'carta_servizi' && facility && (
+        <CartaServiziGeneratorModal facility={facility} onClose={() => setOpenGeneratore(null)} />
+      )}
+
+      {showGestoreModal && (
+        <CartaServiziGestoreModal onClose={() => setShowGestoreModal(false)} onSaved={() => setShowGestoreModal(false)} />
+      )}
+    </div>
+  );
+}
 
 // ─── helper scadenza ──────────────────────────────────────────
 
@@ -1019,6 +1116,9 @@ export default function DocumentiPage() {
         {activeTab === 'firme' && (
           <DocFirmeModal onClose={() => setActiveTab('libreria')} />
         )}
+
+        {/* ── Tab Generazione ── */}
+        {activeTab === 'generazione' && <GenerazioneTab />}
 
         {/* ── Tab Impostazioni ── */}
         {activeTab === 'impostazioni' && <ComingSoon label="Impostazioni" />}

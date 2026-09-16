@@ -18,7 +18,7 @@ import {
   PawPrint, LogOut, ArrowLeft, Activity, BarChart3, Database,
   ChefHat, FileText, FileWarning,
   AlertTriangle, TrendingUp, Wallet,
-  Plus, Loader2, ClipboardCheck,
+  Plus, Loader2, ClipboardCheck, BookOpen,
 } from 'lucide-react';
 
 import { useQueryClient }                    from '@tanstack/react-query';
@@ -44,6 +44,8 @@ import { getTimeHorizon }   from '../utils/kpiTimeHorizon';
 import KpiManagerModal      from '../components/KpiManagerModal';
 import AnalyticsModal       from '../components/AnalyticsModal';
 import HaccpFascicoloModal  from '../components/HaccpFascicoloModal';
+import CartaServiziGeneratorModal from '../components/CartaServiziGeneratorModal';
+import { formattaRevisione } from '../services/cartaServiziService';
 import DocMyDocumentiView   from './DocMyDocumentiView';
 import { useCdgData }        from '../hooks/useCdgData';
 import SurveyPage            from '../components/SurveyPage';
@@ -912,6 +914,7 @@ function BenchmarkTab({ facility, kpiRecords, year }) {
 
 // â”€â”€ Tab HACCP/Documenti â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function HaccpTab({ facility, onStatusChange, fBadge }) {
+  const { isDirectorStretto }                         = useAuth();
   const [showModal, setShowModal]                     = useState(false);
   const [haccpStatus, setHaccpStatus]                 = useState(null);
   const [haccpLoading, setHaccpLoading]               = useState(true);
@@ -920,6 +923,22 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
   const [regimeHaccp, setRegimeHaccp]                 = useState(null);
   const [esoneroNote, setEsoneroNote]                 = useState(null);
   const [cucinaCondivisa, setCucinaCondivisa]         = useState(false);
+  const [showCartaServizi, setShowCartaServizi]       = useState(false);
+  const [cdsUltima, setCdsUltima]                     = useState(null);
+
+  // Solo il ruolo 'director' in senso stretto genera la Carta dei Servizi
+  // (gli altri 3 ruoli struttura non vi accedono, come per i dati economici).
+  useEffect(() => {
+    if (!facility?.id || !isDirectorStretto) return;
+    supabase
+      .from('carta_servizi_generati')
+      .select('numero_revisione, versione_interna, data_generazione')
+      .eq('facility_id', facility.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setCdsUltima(data || null));
+  }, [facility?.id, isDirectorStretto]);
 
   useEffect(() => {
     if (!facility?.id || !facility?.haccp_obbligatorio) return;
@@ -1067,6 +1086,37 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
           <DocMyDocumentiView facilityId={facility.id} />
         </div>
+
+        {/* BOX 3 — Generatore documenti (solo direttore) */}
+        {isDirectorStretto && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="bg-violet-50 p-4 rounded-2xl">
+                <BookOpen size={32} className="text-violet-500" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-800">Generatore documenti</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Genera la Carta dei Servizi della struttura.</p>
+                {cdsUltima ? (
+                  <span className="inline-block mt-2 text-xs font-bold px-2.5 py-1 rounded-full bg-violet-100 text-violet-700">
+                    Rev. {formattaRevisione(cdsUltima)} — {cdsUltima.data_generazione}
+                  </span>
+                ) : (
+                  <p className="text-sm text-slate-400 mt-2">Nessuna Carta dei Servizi generata</p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setShowCartaServizi(true)}
+              className="bg-violet-600 text-white px-5 py-2.5 rounded-xl text-sm font-black uppercase shadow hover:bg-violet-700 transition-colors shrink-0"
+            >
+              Apri
+            </button>
+          </div>
+        )}
+        {showCartaServizi && (
+          <CartaServiziGeneratorModal facility={facility} onClose={() => setShowCartaServizi(false)} />
+        )}
       </div>
     );
   }
@@ -1170,6 +1220,37 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
           <DocMyDocumentiView facilityId={facility.id} />
         </div>
+
+        {/* BOX 3 — Generatore documenti (solo direttore) */}
+        {isDirectorStretto && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="bg-violet-50 p-4 rounded-2xl">
+                <BookOpen size={32} className="text-violet-500" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-800">Generatore documenti</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Genera la Carta dei Servizi della struttura.</p>
+                {cdsUltima ? (
+                  <span className="inline-block mt-2 text-xs font-bold px-2.5 py-1 rounded-full bg-violet-100 text-violet-700">
+                    Rev. {formattaRevisione(cdsUltima)} — {cdsUltima.data_generazione}
+                  </span>
+                ) : (
+                  <p className="text-sm text-slate-400 mt-2">Nessuna Carta dei Servizi generata</p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setShowCartaServizi(true)}
+              className="bg-violet-600 text-white px-5 py-2.5 rounded-xl text-sm font-black uppercase shadow hover:bg-violet-700 transition-colors shrink-0"
+            >
+              Apri
+            </button>
+          </div>
+        )}
+        {showCartaServizi && (
+          <CartaServiziGeneratorModal facility={facility} onClose={() => setShowCartaServizi(false)} />
+        )}
       </div>
     );
   }
@@ -1321,6 +1402,37 @@ function HaccpTab({ facility, onStatusChange, fBadge }) {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
         <DocMyDocumentiView facilityId={facility.id} />
       </div>
+
+      {/* BOX 3 — Generatore documenti (solo direttore) */}
+      {isDirectorStretto && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="bg-violet-50 p-4 rounded-2xl">
+              <BookOpen size={32} className="text-violet-500" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-800">Generatore documenti</h2>
+              <p className="text-sm text-slate-500 mt-0.5">Genera la Carta dei Servizi della struttura.</p>
+              {cdsUltima ? (
+                <span className="inline-block mt-2 text-xs font-bold px-2.5 py-1 rounded-full bg-violet-100 text-violet-700">
+                  Rev. {formattaRevisione(cdsUltima)} — {cdsUltima.data_generazione}
+                </span>
+              ) : (
+                <p className="text-sm text-slate-400 mt-2">Nessuna Carta dei Servizi generata</p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => setShowCartaServizi(true)}
+            className="bg-violet-600 text-white px-5 py-2.5 rounded-xl text-sm font-black uppercase shadow hover:bg-violet-700 transition-colors shrink-0"
+          >
+            Apri
+          </button>
+        </div>
+      )}
+      {showCartaServizi && (
+        <CartaServiziGeneratorModal facility={facility} onClose={() => setShowCartaServizi(false)} />
+      )}
 
       {showModal && (
         <HaccpFascicoloModal

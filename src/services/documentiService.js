@@ -342,6 +342,9 @@ export async function compileDocumento(masterFileBuffer, facilityData, masterDat
       udo_tipo:            facilityData.udo_tipo         ?? '',
       direttore:           facilityData.director         || '_______________',
       direttore_sanitario: facilityData.director_sanitario || '_______________',
+      // Sezione condizionale nel box "Validazione regionale" della copertina:
+      // compare solo se la struttura ha il Direttore Sanitario compilato.
+      direttoreSanitarioPresente: !!(facilityData.director_sanitario && facilityData.director_sanitario.trim()),
       email_direzione:     facilityData.email_direzione  ?? '',
       posti_letto:         facilityData.bed_count?.toString() ?? '',
       revisione:           masterData.revisione_corrente ?? '',

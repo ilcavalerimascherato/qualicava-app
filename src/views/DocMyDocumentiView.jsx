@@ -114,7 +114,7 @@ function DocCard({ istanza, facilityData, onDownload }) {
         }
         <p className="text-[11px] text-slate-500 font-bold mt-0.5">{doc.codice_documento}</p>
         {doc.revisione_corrente && (
-          <p className="text-[10px] text-slate-400 font-bold mt-0.5">Rev. {doc.revisione_corrente}</p>
+          <p className="text-[10px] text-slate-400 font-bold mt-0.5">{doc.revisione_corrente}</p>
         )}
       </div>
 

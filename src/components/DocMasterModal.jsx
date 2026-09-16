@@ -996,7 +996,7 @@ export default function DocMasterModal({
                         <div key={rev.id ?? i} className="px-4 py-3">
                           <div className="flex items-center justify-between mb-0.5">
                             <span className="text-[11px] font-black text-slate-600 uppercase">
-                              Rev. {rev.dati_vecchi?.revisione_corrente ?? '—'}
+                              {rev.dati_vecchi?.revisione_corrente ?? 'Rev. —'}
                             </span>
                             <span className="text-[10px] text-slate-400">
                               {rev.created_at ? new Date(rev.created_at).toLocaleDateString('it-IT') : ''}
