@@ -2,12 +2,13 @@
 // Vista Saturazione — griglia raggi X con saturazione % vs budget per struttura
 
 import { useState, useMemo } from 'react';
-import { Search, MapPin, ChevronDown, Check, Pause, Building2 } from 'lucide-react';
+import { Search, MapPin, ChevronDown, Check, Pause, Building2, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCdgData, aggregateCdgRecords, calcCdgSummary } from '../hooks/useCdgData';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useBadgeCounts } from '../hooks/useBadgeCounts';
+import { exportOccupazioneReport } from '../services/occupazioneReportService';
 import AppHeader from '../components/AppHeader';
 import CdgStrutturaCard from '../components/CdgStrutturaCard';
 
@@ -284,8 +285,16 @@ export default function OccupazioneDashboard() {
 
         </div>
 
-        {/* DESTRA — spazio riservato */}
-        <div className="flex-shrink-0 w-24" />
+        {/* DESTRA — esporta report */}
+        <div className="flex-shrink-0">
+          <button
+            onClick={() => exportOccupazioneReport(facilitiesConSemaforo.filter(f => !f.is_suspended))}
+            title="Esporta xlsx con occupazione mese corrente vs precedente per tutte le strutture attive"
+            className="flex items-center gap-1.5 border border-slate-200 rounded-full px-3 py-1.5 text-xs text-slate-600 bg-white hover:border-emerald-400 whitespace-nowrap"
+          >
+            <Download size={12} /> Esporta report
+          </button>
+        </div>
 
       </div>
 
