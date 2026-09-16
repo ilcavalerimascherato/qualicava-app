@@ -2,7 +2,7 @@
 // Numeri chiave del gruppo: strutture attive, ospiti totali, tasso occupazione
 // medio, NPS medio, NC aperte (documento redesign /report, §2 Cruscotto).
 import React, { useMemo } from 'react';
-import { Building2, Users, Percent, Smile, AlertTriangle } from 'lucide-react';
+import { Building2, Database, Users, Percent, Smile, AlertTriangle } from 'lucide-react';
 import { aggregateCdgRecords, calcCdgSummary } from '../../hooks/useCdgData';
 
 function Tile({ icon: Icon, label, value, sub, color }) {
@@ -26,6 +26,7 @@ export default function NumeriChiave({ facilities, cdgByFacility, nonConformitie
 
     let totalOspiti = 0;
     let totalBeds   = 0;
+    let struttureConDati = 0;
     active.forEach(f => {
       const records = cdgByFacility?.[f.id];
       if (!records?.length || !f.bed_count) return;
@@ -33,6 +34,7 @@ export default function NumeriChiave({ facilities, cdgByFacility, nonConformitie
       if (summary?.mediaOspiti != null) {
         totalOspiti += summary.mediaOspiti;
         totalBeds   += f.bed_count;
+        struttureConDati++;
       }
     });
     const tassoOccupazione = totalBeds > 0 ? (totalOspiti / totalBeds) * 100 : null;
@@ -47,8 +49,9 @@ export default function NumeriChiave({ facilities, cdgByFacility, nonConformitie
     const ncAperte = (nonConformities ?? []).filter(nc => nc.stato !== 'Chiuso').length;
 
     return {
-      struttureAttive: active.length,
-      ospitiTotali:    Math.round(totalOspiti),
+      struttureAttive:   active.length,
+      struttureConDati,
+      ospitiTotali:      Math.round(totalOspiti),
       tassoOccupazione,
       npsMedio,
       ncAperte,
@@ -56,8 +59,9 @@ export default function NumeriChiave({ facilities, cdgByFacility, nonConformitie
   }, [facilities, cdgByFacility, nonConformities, campaignsClient]);
 
   return (
-    <div className="grid grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       <Tile icon={Building2}     color="#6366f1" label="Strutture attive"      value={stats.struttureAttive} />
+      <Tile icon={Database}      color="#8b5cf6" label="Con dati occupazione"  value={stats.struttureConDati} sub={`su ${stats.struttureAttive} attive`} />
       <Tile icon={Users}         color="#0ea5e9" label="Ospiti totali"         value={stats.ospitiTotali > 0 ? stats.ospitiTotali : '—'} sub="Media ultimo mese" />
       <Tile icon={Percent}       color="#10b981" label="Occupazione media"     value={stats.tassoOccupazione != null ? `${stats.tassoOccupazione.toFixed(0)}%` : 'N/D'} />
       <Tile icon={Smile}         color="#f59e0b" label="NPS medio"             value={stats.npsMedio != null ? stats.npsMedio.toFixed(0) : 'N/D'} sub="Su 100" />

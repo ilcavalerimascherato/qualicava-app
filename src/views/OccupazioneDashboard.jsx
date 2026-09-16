@@ -117,18 +117,25 @@ export default function OccupazioneDashboard() {
     [facilitiesConSemaforo],
   );
 
-  const counts = useMemo(() => {
-    const c = { verde: 0, giallo: 0, rosso: 0, grigio: 0 };
-    facilitiesConSemaforo.forEach(f => c[f._semaforo]++);
-    return c;
-  }, [facilitiesConSemaforo]);
-
-  const totalBeds = useMemo(
-    () => facilitiesConSemaforo.reduce((sum, f) => sum + (f.bed_count || 0), 0),
+  // Strutture attive — esclude le sospese, come in Admin (statusCalculator.js),
+  // così "Posti letto attivi" e il conteggio strutture restano allineati tra le due viste.
+  const activeFacilities = useMemo(
+    () => facilitiesConSemaforo.filter(f => !f.is_suspended),
     [facilitiesConSemaforo],
   );
 
-  const totalFacilities = facilitiesConSemaforo.length;
+  const counts = useMemo(() => {
+    const c = { verde: 0, giallo: 0, rosso: 0, grigio: 0 };
+    activeFacilities.forEach(f => c[f._semaforo]++);
+    return c;
+  }, [activeFacilities]);
+
+  const totalBeds = useMemo(
+    () => activeFacilities.reduce((sum, f) => sum + (f.bed_count || 0), 0),
+    [activeFacilities],
+  );
+
+  const totalFacilities = activeFacilities.length;
 
   const filtered = useMemo(() => {
     return facilitiesConSemaforo.filter(f => {
