@@ -14,6 +14,7 @@ const ORG_CONFIG = [
   { key: 'director_sanitario',  emailKey: 'email_sanitario',           label: 'Dir. Sanitario', icon: '⚕️' },
   { key: 'referente_struttura', emailKey: 'email_referente_struttura', label: 'Ref. Struttura', icon: '🏠' },
   { key: 'referent',            emailKey: 'email_qualita',             label: 'Ref. Qualità',   icon: '✅' },
+  { key: 'responsabile_haccp',  emailKey: 'email_responsabile_haccp',  label: 'Resp. HACCP',    icon: '🍽️' },
 ];
 
 // ── Helpers UI ───────────────────────────────────────────────
@@ -314,6 +315,8 @@ function buildContattiForm(f) {
     email_referente_struttura: f.email_referente_struttura     || '',
     referent:                  f.referent                      || '',
     email_qualita:             f.email_qualita                 || '',
+    responsabile_haccp:        f.responsabile_haccp            || '',
+    email_responsabile_haccp:  f.email_responsabile_haccp      || '',
   };
 }
 
@@ -336,6 +339,7 @@ function ContattiCard({ facility: f }) {
     editing,
     f.id, f.director, f.email_direzione, f.director_sanitario, f.email_sanitario,
     f.referente_struttura, f.email_referente_struttura, f.referent, f.email_qualita,
+    f.responsabile_haccp, f.email_responsabile_haccp,
   ]);
 
   const handleSave = async () => {
@@ -350,6 +354,8 @@ function ContattiCard({ facility: f }) {
         email_referente_struttura: form.email_referente_struttura || null,
         referent:                  form.referent                  || null,
         email_qualita:             form.email_qualita             || null,
+        responsabile_haccp:        form.responsabile_haccp        || null,
+        email_responsabile_haccp:  form.email_responsabile_haccp  || null,
       }).eq('id', f.id);
       if (error) throw error;
       // Aggiornamento ottimistico: il form (già coi valori salvati) resta la fonte

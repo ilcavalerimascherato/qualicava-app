@@ -2,7 +2,7 @@
 // Unica fonte di verità per: sessione, profilo utente, ruolo, strutture accessibili
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { FACILITY_STAFF_ROLES } from '../config/constants';
+import { FACILITY_USER_ROLES, FACILITY_DOCS_ONLY_ROLES } from '../config/constants';
 
 const AuthContext = createContext(null);
 
@@ -65,9 +65,11 @@ export function AuthProvider({ children }) {
   // isDirector = "utente che entra dalle strutture" (stessa vista DirectorFacility,
   // stessi permessi applicativi) — include i 4 ruoli struttura, non solo 'director'
   // in senso stretto. Per distinguere il SOLO direttore (es. visibilità dati
-  // economici) usare isDirectorStretto.
-  const isDirector        = FACILITY_STAFF_ROLES.includes(profile?.role);
+  // economici) usare isDirectorStretto. Include anche resp_haccp, che entra
+  // nella struttura ma vede solo il tab Documenti (isDocsOnly).
+  const isDirector        = FACILITY_USER_ROLES.includes(profile?.role);
   const isDirectorStretto = profile?.role === 'director';
+  const isDocsOnly        = FACILITY_DOCS_ONLY_ROLES.includes(profile?.role);
 
   const canAccessFacility = useCallback((facilityId) => {
     if (!profile) return false;
@@ -85,6 +87,7 @@ export function AuthProvider({ children }) {
     dir_sanitario: ['editKpi','viewReports'],
     ref_struttura: ['editKpi','viewReports'],
     ref_qualita:   ['editKpi','viewReports'],
+    resp_haccp:    [],
   };
 
   const can = useCallback((action) => {
@@ -100,6 +103,7 @@ export function AuthProvider({ children }) {
     isSuperAdmin,
     isDirector,
     isDirectorStretto,
+    isDocsOnly,
     canAccessFacility,
     can,
     signOut,

@@ -119,10 +119,10 @@ function useAdaptiveData(isAdminUser, facilityIds, year) {
 export default function DirectorFacility() {
   const { facilityId }                = useParams();
   const navigate                      = useNavigate();
-  const { profile, isAdmin, signOut, can, isDirectorStretto } = useAuth();
+  const { profile, isAdmin, signOut, can, isDirectorStretto, isDocsOnly } = useAuth();
   const { modals, open, close }       = useModals();
   const queryClient                       = useQueryClient();
-  const [activeTab, setActiveTab]         = useState('overview');
+  const [activeTab, setActiveTab]         = useState(isDocsOnly ? 'haccp' : 'overview');
   const [ncEditId, setNcEditId]           = useState(null);
   const [ncRefreshKey, setNcRefreshKey]   = useState(0);
   const [dataTarget, setDataTarget]       = useState(null);
@@ -158,13 +158,15 @@ export default function DirectorFacility() {
 
   // Tab "Economico" — solo per 'director' in senso stretto (non per gli altri
   // 3 ruoli struttura: dir. sanitario, referente struttura, referente qualità).
+  // Responsabile HACCP (isDocsOnly): solo il tab Documenti.
   const visibleTabs = useMemo(() => {
+    if (isDocsOnly) return TABS.filter(t => t.id === 'haccp');
     if (!isDirectorStretto) return TABS;
     const idx = TABS.findIndex(t => t.id === 'kpi');
     const withEconomico = [...TABS];
     withEconomico.splice(idx + 1, 0, { id: 'economico', label: 'Economico', Icon: Wallet });
     return withEconomico;
-  }, [isDirectorStretto]);
+  }, [isDirectorStretto, isDocsOnly]);
 
   const { data: cdgData } = useCdgData(
     facility ? [facility.id] : [],
@@ -255,10 +257,12 @@ export default function DirectorFacility() {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-2">
-            <StatusPill label="Survey" isOk={facility.isGreen}    isPartial={facility.isYellow} />
-            <StatusPill label="KPI"    isOk={facility.isKpiGreen} />
-          </div>
+          {!isDocsOnly && (
+            <div className="hidden md:flex items-center gap-2">
+              <StatusPill label="Survey" isOk={facility.isGreen}    isPartial={facility.isYellow} />
+              <StatusPill label="KPI"    isOk={facility.isKpiGreen} />
+            </div>
+          )}
 
           {(profile?.full_name || profile?.email) && (
             <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">

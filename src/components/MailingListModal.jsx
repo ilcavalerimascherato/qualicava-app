@@ -7,6 +7,7 @@ const ROLE_FIELDS = [
   { role: 'Dir. Sanitari',    nameField: 'director_sanitario',  emailField: 'email_sanitario'           },
   { role: 'Ref. Struttura',   nameField: 'referente_struttura', emailField: 'email_referente_struttura' },
   { role: 'Ref. Qualità',     nameField: 'referent',            emailField: 'email_qualita'             },
+  { role: 'Resp. HACCP',      nameField: 'responsabile_haccp',  emailField: 'email_responsabile_haccp'  },
 ];
 
 export default function MailingListModal({ isOpen, onClose, facilities, udos, year }) {

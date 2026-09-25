@@ -36,6 +36,8 @@ export const facilityShape = PropTypes.shape({
   referente_struttura:       PropTypes.string,
   email_referente_struttura: PropTypes.string,
   email_qualita:             PropTypes.string,
+  responsabile_haccp:        PropTypes.string,
+  email_responsabile_haccp:  PropTypes.string,
   // Campi calcolati da enrichFacilitiesData
   udo_color:                 PropTypes.string,
   udo_name:                  PropTypes.string,

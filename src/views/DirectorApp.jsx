@@ -18,7 +18,7 @@ import { useBadgeCounts }        from '../hooks/useBadgeCounts';
 import { enrichFacilitiesData }  from '../utils/statusCalculator';
 
 export default function DirectorApp() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, isDocsOnly } = useAuth();
   const navigate = useNavigate();
   const year     = new Date().getFullYear();
 
@@ -99,7 +99,8 @@ export default function DirectorApp() {
                 key={f.id}
                 facility={f}
                 onClick={() => navigate(`/facility/${f.id}`)}
-                badge={badgePerFacility[f.id]}
+                badge={isDocsOnly ? undefined : badgePerFacility[f.id]}
+                docsOnly={isDocsOnly}
               />
             ))}
           </div>
@@ -109,7 +110,7 @@ export default function DirectorApp() {
   );
 }
 
-function FacilitySelectionCard({ facility: f, onClick, badge }) {
+function FacilitySelectionCard({ facility: f, onClick, badge, docsOnly = false }) {
   const statusConfig = f.isGreen
     ? { Icon: CheckCircle2, color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'In regola' }
     : f.isRed
@@ -134,17 +135,19 @@ function FacilitySelectionCard({ facility: f, onClick, badge }) {
           {badgeTotal > 99 ? '99+' : badgeTotal}
         </span>
       )}
-      <div className="flex justify-between items-start mb-3">
-        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${statusConfig.bg} ${statusConfig.color} ${statusConfig.border} border`}>
-          <Icon size={12} />
-          {statusConfig.label}
+      {!docsOnly && (
+        <div className="flex justify-between items-start mb-3">
+          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${statusConfig.bg} ${statusConfig.color} ${statusConfig.border} border`}>
+            <Icon size={12} />
+            {statusConfig.label}
+          </div>
+          {!f.isKpiGreen && (
+            <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-1 rounded-lg border border-amber-200 flex items-center gap-1">
+              <Clock size={10} /> KPI
+            </span>
+          )}
         </div>
-        {!f.isKpiGreen && (
-          <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-1 rounded-lg border border-amber-200 flex items-center gap-1">
-            <Clock size={10} /> KPI
-          </span>
-        )}
-      </div>
+      )}
 
       <h3 className="font-black text-slate-800 text-sm leading-tight mb-1 group-hover:text-indigo-700 transition-colors">
         {f.name}
@@ -161,7 +164,7 @@ function FacilitySelectionCard({ facility: f, onClick, badge }) {
 
       <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
         <span className="text-xs font-black text-indigo-600 uppercase tracking-widest group-hover:translate-x-1 transition-transform inline-block">
-          Gestisci →
+          {docsOnly ? 'Documenti →' : 'Gestisci →'}
         </span>
       </div>
     </button>

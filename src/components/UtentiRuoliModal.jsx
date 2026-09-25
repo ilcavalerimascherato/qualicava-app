@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, Users, Edit2, Plus } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import { ROLE_LABELS, FACILITY_STAFF_ROLES } from '../config/constants';
+import { ROLE_LABELS, FACILITY_USER_ROLES } from '../config/constants';
 
-const RUOLI = ['superadmin', 'sede', 'admin', 'board', 'director', 'dir_sanitario', 'ref_struttura', 'ref_qualita'];
+const RUOLI = ['superadmin', 'sede', 'admin', 'board', 'director', 'dir_sanitario', 'ref_struttura', 'ref_qualita', 'resp_haccp'];
 const RUOLO_COLORS = {
   superadmin:    'bg-purple-50 text-purple-700 border-purple-200',
   sede:          'bg-indigo-50 text-indigo-700 border-indigo-200',
@@ -14,10 +14,12 @@ const RUOLO_COLORS = {
   dir_sanitario: 'bg-teal-50 text-teal-700 border-teal-200',
   ref_struttura: 'bg-slate-50 text-slate-700 border-slate-200',
   ref_qualita:   'bg-cyan-50 text-cyan-700 border-cyan-200',
+  resp_haccp:    'bg-orange-50 text-orange-700 border-orange-200',
 };
-// I 4 ruoli "struttura" condividono lo stesso form (Strutture assegnate) —
-// solo 'director' vede i dati economici (gestito a livello di RLS/DirectorFacility).
-const isFacilityRole = (role) => FACILITY_STAFF_ROLES.includes(role);
+// I ruoli "struttura" condividono lo stesso form (Strutture assegnate) —
+// solo 'director' vede i dati economici (gestito a livello di RLS/DirectorFacility),
+// 'resp_haccp' vede solo il tab Documenti.
+const isFacilityRole = (role) => FACILITY_USER_ROLES.includes(role);
 
 export default function UtentiRuoliModal({ isOpen, onClose, facilities, isSuperAdmin }) {
   const [utenti, setUtenti]           = useState([]);

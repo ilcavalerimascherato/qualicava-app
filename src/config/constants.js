@@ -48,6 +48,7 @@ export const ROLES = /** @type {const} */ ({
   DIR_SANITARIO: 'dir_sanitario',
   REF_STRUTTURA: 'ref_struttura',
   REF_QUALITA:   'ref_qualita',
+  RESP_HACCP:    'resp_haccp',
   VIEWER:        'viewer',
 });
 
@@ -60,6 +61,7 @@ export const ROLE_LABELS = {
   [ROLES.DIR_SANITARIO]: 'Direttore Sanitario',
   [ROLES.REF_STRUTTURA]: 'Referente Struttura',
   [ROLES.REF_QUALITA]:   'Referente Qualità',
+  [ROLES.RESP_HACCP]:    'Responsabile HACCP',
   [ROLES.VIEWER]:        'Visualizzatore',
 };
 
@@ -69,6 +71,13 @@ export const ROLE_LABELS = {
 export const FACILITY_STAFF_ROLES = [
   ROLES.DIRECTOR, ROLES.DIR_SANITARIO, ROLES.REF_STRUTTURA, ROLES.REF_QUALITA,
 ];
+
+/** Ruoli che entrano nella singola struttura ma vedono SOLO il tab Documenti
+ *  (nessun KPI, survey, NC, verbali, verifiche, benchmark). */
+export const FACILITY_DOCS_ONLY_ROLES = [ROLES.RESP_HACCP];
+
+/** Tutti i ruoli assegnabili a strutture via user_facility_access. */
+export const FACILITY_USER_ROLES = [...FACILITY_STAFF_ROLES, ...FACILITY_DOCS_ONLY_ROLES];
 
 // ── SURVEY TYPES ──────────────────────────────────────────────
 export const SURVEY_TYPES = {
