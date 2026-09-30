@@ -8,51 +8,26 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../supabaseClient';
+import { fetchEffectiveHaccpSemafori } from '../utils/haccpSemaforo';
 
 // ── useHaccpSemafori ──────────────────────────────────────────
 // Carica la view haccp_scadenzario e ritorna una mappa id→semaforo
+// (regola "cucina condivisa → blu" centralizzata in utils/haccpSemaforo.js,
+// stessa fonte usata da useBadgeCounts.js per il badge di navigazione).
 // Usato da MasterDashboard per colorare i cappelli
 export function useHaccpSemafori() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['haccp', 'semafori'],
-    queryFn: async () => {
-      const [scadenzarioRes, profiliRes] = await Promise.all([
-        supabase
-          .from('haccp_scadenzario')
-          .select('struttura_id, semaforo, stato_scia, manuale_scadenza, r_haccp_scadenza, prossima_analisi'),
-        supabase
-          .from('haccp_profili')
-          .select('struttura_id, cucina_condivisa_con')
-          .not('cucina_condivisa_con', 'is', null),
-      ]);
-      if (scadenzarioRes.error) throw scadenzarioRes.error;
-      return {
-        scadenzario: scadenzarioRes.data ?? [],
-        profiliCondivisi: profiliRes.data ?? [],
-      };
-    },
+    queryFn: () => fetchEffectiveHaccpSemafori(),
     staleTime: 5 * 60 * 1000,
   });
 
-  const semafori   = {};
-  const scadenzario = {};
-  if (data) {
-    const cucinaCondivisaIds = new Set(
-      data.profiliCondivisi.map(p => p.struttura_id)
-    );
-    data.scadenzario.forEach(row => {
-      scadenzario[row.struttura_id] = row;
-      semafori[row.struttura_id] = cucinaCondivisaIds.has(row.struttura_id)
-        ? 'blu'
-        : row.semaforo;
-    });
-    // Strutture con cucina condivisa ma senza riga in haccp_scadenzario
-    data.profiliCondivisi.forEach(p => {
-      if (!(p.struttura_id in semafori)) semafori[p.struttura_id] = 'blu';
-    });
-  }
-
-  return { semafori, scadenzario, loading: isLoading, error };
+  return {
+    semafori: data?.semafori ?? {},
+    scadenzario: data?.scadenzario ?? {},
+    loading: isLoading,
+    error,
+  };
 }
 
 // ── useHaccpFascicolo ─────────────────────────────────────────

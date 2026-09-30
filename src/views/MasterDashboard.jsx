@@ -101,13 +101,17 @@ export default function MasterDashboard() {
     navigate(routes[page] ?? '/admin');
   };
 
-  // Arricchisce facilities con semaforo HACCP
+  // Arricchisce facilities con semaforo HACCP — due stati "vuoti" distinti,
+  // prima confusi nello stesso 'grigio': una struttura NON soggetta ad HACCP
+  // (haccp_obbligatorio = false, non avrà mai una riga in haccp_scadenzario)
+  // e una struttura soggetta ma senza ancora nessun dato caricato ('grigio',
+  // "da censire"). Vedi HaccpCard più sotto per il diverso trattamento visivo.
   const enriched = useMemo(() => {
     return data.facilities.map(f => {
       const sc = scadenzario?.[f.id];
       return {
         ...f,
-        haccp_semaforo:   semafori[f.id] ?? (f.haccp_obbligatorio ? 'grigio' : null),
+        haccp_semaforo:   semafori[f.id] ?? (f.haccp_obbligatorio ? 'grigio' : 'non_soggetta'),
         manuale_presente: sc ? !!sc.manuale_scadenza : false,
       };
     });
@@ -131,7 +135,7 @@ export default function MasterDashboard() {
       verde:  haccpOnly.filter(f => f.haccp_semaforo === 'verde').length,
       giallo: haccpOnly.filter(f => f.haccp_semaforo === 'giallo').length,
       rosso:  haccpOnly.filter(f => f.haccp_semaforo === 'rosso').length,
-      grigio: haccpOnly.filter(f => f.haccp_semaforo === 'grigio' || !f.haccp_semaforo).length,
+      grigio: haccpOnly.filter(f => f.haccp_semaforo === 'grigio').length,
       blu:    haccpOnly.filter(f => f.haccp_semaforo === 'blu').length,
     };
   }, [enriched]);
@@ -295,7 +299,7 @@ export default function MasterDashboard() {
             <option value="conforme">Conforme</option>
             <option value="attenzione">Attenzione</option>
             <option value="critico">Critico</option>
-            <option value="non_attivo">Non attivo</option>
+            <option value="non_attivo">Da censire</option>
           </select>
 
           {/* Sospese */}
@@ -448,7 +452,8 @@ function GroupSemafori({ facilities }) {
   const g = facilities.filter(f => f.haccp_semaforo === 'giallo').length;
   const r = facilities.filter(f => f.haccp_semaforo === 'rosso').length;
   const b = facilities.filter(f => f.haccp_semaforo === 'blu').length;
-  const n = facilities.filter(f => f.haccp_semaforo === 'grigio' || !f.haccp_semaforo).length;
+  const n = facilities.filter(f => f.haccp_semaforo === 'grigio').length;
+  const ns = facilities.filter(f => f.haccp_semaforo === 'non_soggetta').length;
   return (
     <div className="flex items-center gap-1.5">
       {v > 0 && (
@@ -476,9 +481,15 @@ function GroupSemafori({ facilities }) {
         </span>
       )}
       {n > 0 && (
-        <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0" />
-          {n} n/d
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-white border border-slate-200 px-1.5 py-0.5 rounded">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-300 flex-shrink-0" />
+          {n} da censire
+        </span>
+      )}
+      {ns > 0 && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-400 flex-shrink-0" />
+          {ns} non soggette
         </span>
       )}
     </div>
@@ -490,12 +501,18 @@ function HaccpCard({ f, udos, onClick, pending }) {
   const udoName  = udos?.find(u => u.id === f.udo_id)?.name || f.udo_name || '';
   const udoColor = f.udo_color || '#6366f1';
 
+  // 'grigio' (soggetta ad HACCP, nessun dato ancora caricato) e
+  // 'non_soggetta' (haccp_obbligatorio = false) erano prima indistinguibili
+  // — entrambe grigie per lo stesso fallback. Ora due stati distinti:
+  // "da censire" resta neutro/bianco (è solo lavoro non ancora fatto),
+  // "non soggetta" è grigio (condizione strutturale, non un'attività aperta).
   const semaforoConfig = {
-    verde:  { dot: 'bg-green-500',  bg: 'bg-green-50',  border: 'border-green-200',  label: 'Conforme',        text: 'text-green-700'  },
-    giallo: { dot: 'bg-yellow-400', bg: 'bg-yellow-50', border: 'border-yellow-200', label: 'Attenzione',      text: 'text-yellow-700' },
-    rosso:  { dot: 'bg-red-500',    bg: 'bg-red-50',    border: 'border-red-200',    label: 'Critico',         text: 'text-red-700'    },
-    blu:    { dot: 'bg-blue-500',   bg: 'bg-blue-50',   border: 'border-blue-200',   label: 'Cucina condivisa', text: 'text-blue-700'  },
-    grigio: { dot: 'bg-gray-300',   bg: 'bg-gray-50',   border: 'border-gray-200',   label: 'Non attivo',      text: 'text-gray-400'   },
+    verde:        { dot: 'bg-green-500',  bg: 'bg-green-50',  border: 'border-green-200',  label: 'Conforme',         text: 'text-green-700'  },
+    giallo:       { dot: 'bg-yellow-400', bg: 'bg-yellow-50', border: 'border-yellow-200', label: 'Attenzione',       text: 'text-yellow-700' },
+    rosso:        { dot: 'bg-red-500',    bg: 'bg-red-50',    border: 'border-red-200',    label: 'Critico',          text: 'text-red-700'    },
+    blu:          { dot: 'bg-blue-500',   bg: 'bg-blue-50',   border: 'border-blue-200',   label: 'Cucina condivisa', text: 'text-blue-700'  },
+    grigio:       { dot: 'bg-slate-300',  bg: 'bg-white',     border: 'border-slate-200',  label: 'Da censire',       text: 'text-slate-400'  },
+    non_soggetta: { dot: 'bg-gray-400',   bg: 'bg-gray-100',  border: 'border-gray-300',   label: 'Non soggetta',     text: 'text-gray-500'   },
   };
   const s = semaforoConfig[f.haccp_semaforo] || semaforoConfig.grigio;
 

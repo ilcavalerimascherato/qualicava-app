@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { getVerificheAlerts } from '../utils/verificheAlertEngine';
+import { fetchEffectiveHaccpSemafori } from '../utils/haccpSemaforo';
 
 const POLL_MS   = 60_000;
 const QUERY_CAP = 500;
@@ -49,8 +50,17 @@ export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFul
       ? supabase.from('doc_istanze').select('facility_id, primo_accesso_il, generato_il, doc_master(stato)').in('facility_id', ids)
       : Promise.resolve({ data: [], error: null });
 
+    // Semaforo effettivo (SSOT in utils/haccpSemaforo.js — stessa regola
+    // "cucina condivisa → blu" applicata dalle card della pagina HACCP,
+    // altrimenti il badge contava anche i rossi/gialli grezzi delle
+    // strutture che in pagina appaiono "condivisa").
     const haccpQ = ids.length
-      ? supabase.from('haccp_scadenzario').select('struttura_id, semaforo').in('struttura_id', ids).in('semaforo', ['rosso', 'giallo'])
+      ? fetchEffectiveHaccpSemafori(ids)
+          .then(({ semafori }) => ({
+            data: Object.entries(semafori).map(([struttura_id, semaforo]) => ({ struttura_id: Number(struttura_id), semaforo })),
+            error: null,
+          }))
+          .catch(error => ({ data: [], error }))
       : Promise.resolve({ data: [], error: null });
 
     const ncQ = ids.length
@@ -113,9 +123,11 @@ export function useBadgeCounts(facilityIds = [], currentYear = new Date().getFul
       }
     }
 
-    // ── HACCP semafori ────────────────────────────────────────────
+    // ── HACCP semafori — solo rosso/giallo (fetchEffectiveHaccpSemafori
+    // ritorna il semaforo di ogni struttura, non più pre-filtrato) ────
     if (!haccpRes.error) {
       for (const row of haccpRes.data ?? []) {
+        if (row.semaforo !== 'rosso' && row.semaforo !== 'giallo') continue;
         const r = result[row.struttura_id];
         if (!r) continue;
         r.haccp++;
