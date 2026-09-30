@@ -39,7 +39,7 @@ function ncOverdueAlerts(nonConformities, facilitiesById) {
       urgency: daysOverdue,
       label: `NC "${nc.titolo || nc.classificazione || 'senza titolo'}" scaduta da ${daysOverdue}gg`,
       facilityName: facilitiesById[nc.facility_id]?.name ?? '—',
-      target: '/non-conformita',
+      deepLink: { kind: 'nc', facilityId: nc.facility_id, ncId: nc.id },
     }));
 }
 
@@ -74,7 +74,7 @@ function kpiTrendAlerts(facilities, kpiRecords) {
           urgency: 3,
           label: `${rule.kpi_target} in rosso da 3+ mesi`,
           facilityName: facility.name,
-          target: '/report',
+          deepLink: { kind: 'kpi', facilityId: facility.id, kpiTarget: rule.kpi_target },
         });
       }
     });
@@ -103,7 +103,7 @@ function occupancyAlerts(facilities, cdgByFacility, threshold) {
       urgency: gap,
       label: `Occupazione al ${summary.saturazione.toFixed(0)}% (soglia ${threshold}%)`,
       facilityName: facility.name,
-      target: '/occupazione',
+      deepLink: { kind: 'occupancy', facilityId: facility.id, facilityName: facility.name },
     });
   });
 

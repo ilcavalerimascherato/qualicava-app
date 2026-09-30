@@ -5,8 +5,6 @@ import React, { useMemo } from 'react';
 import { AlertTriangle, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { getGroupAlerts } from '../../utils/alertEngine';
 
-const ROUTE_TO_NAV = { '/non-conformita': 'nc', '/occupazione': 'saturazione', '/report': 'report' };
-
 const SEVERITY_STYLE = {
   alta:  { dot: 'bg-red-500',   text: 'text-red-700' },
   media: { dot: 'bg-amber-400', text: 'text-amber-700' },
@@ -37,7 +35,7 @@ export default function TickerAlert({ facilities, kpiRecords, nonConformities, c
             return (
               <li key={alert.id}>
                 <button
-                  onClick={clickable ? () => onNavigate(ROUTE_TO_NAV[alert.target] ?? 'report') : undefined}
+                  onClick={clickable ? () => onNavigate(alert.deepLink) : undefined}
                   disabled={!clickable}
                   className={`w-full flex items-center gap-3 py-2 text-left rounded-lg px-1.5 -mx-1.5 transition-colors ${
                     clickable ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default'

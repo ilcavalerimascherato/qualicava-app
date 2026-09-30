@@ -11,8 +11,8 @@
  *      • director              → useDirectorData (carica solo le strutture assegnate)
  *    L'invalidazione segue la stessa logica.
  */
-import React, { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import {
   PawPrint, LogOut, ArrowLeft, Activity, BarChart3, Database,
@@ -52,7 +52,7 @@ import SurveyPage            from '../components/SurveyPage';
 import OverviewTab           from '../components/OverviewTab';
 import VerificheTabDirector  from '../components/verifiche/VerificheTabDirector';
 import VerbaliIspettiviTab   from '../components/verbali/VerbaliIspettiviTab';
-import EconomicoTab          from '../components/EconomicoTab';
+import EconomicoDirettoreTab from '../components/economico/EconomicoDirettoreTab';
 
 // Mappa tab → conteggio badge e colore
 function getTabBadge(tabId, fBadge) {
@@ -119,6 +119,7 @@ function useAdaptiveData(isAdminUser, facilityIds, year) {
 export default function DirectorFacility() {
   const { facilityId }                = useParams();
   const navigate                      = useNavigate();
+  const [searchParams]                = useSearchParams();
   const { profile, isAdmin, signOut, can, isDirectorStretto, isDocsOnly } = useAuth();
   const { modals, open, close }       = useModals();
   const queryClient                       = useQueryClient();
@@ -156,17 +157,47 @@ export default function DirectorFacility() {
 
   const hasMultipleFacilities = facilityIds.length > 1;
 
-  // Tab "Economico" — solo per 'director' in senso stretto (non per gli altri
-  // 3 ruoli struttura: dir. sanitario, referente struttura, referente qualità).
+  // Tab "Economico" — 'director' in senso stretto (non gli altri 3 ruoli
+  // struttura: dir. sanitario, referente struttura, referente qualità) e
+  // sede/admin/superadmin (isAdmin) quando consultano la struttura dal
+  // proprio cruscotto. Subito dopo "Panoramica" (non più dopo "KPI Mensili").
   // Responsabile HACCP (isDocsOnly): solo il tab Documenti.
   const visibleTabs = useMemo(() => {
     if (isDocsOnly) return TABS.filter(t => t.id === 'haccp');
-    if (!isDirectorStretto) return TABS;
-    const idx = TABS.findIndex(t => t.id === 'kpi');
+    if (!isDirectorStretto && !isAdmin) return TABS;
+    const idx = TABS.findIndex(t => t.id === 'overview');
     const withEconomico = [...TABS];
     withEconomico.splice(idx + 1, 0, { id: 'economico', label: 'Economico', Icon: Wallet });
     return withEconomico;
-  }, [isDirectorStretto, isDocsOnly]);
+  }, [isDirectorStretto, isAdmin, isDocsOnly]);
+
+  // Deep link dal box "Situazioni più urgenti" di /report (?tab=...&nc=...):
+  // applicato una sola volta all'arrivo, non ad ogni rerender (es. dopo la
+  // chiusura del modal NC che si apre da qui) — altrimenti riaprirebbe la
+  // stessa NC ogni volta che l'utente la chiude.
+  const appliedDeepLinkRef = useRef(false);
+  useEffect(() => {
+    if (appliedDeepLinkRef.current || !facility) return;
+    appliedDeepLinkRef.current = true;
+
+    const tabParam = searchParams.get('tab');
+    if (tabParam && visibleTabs.some(t => t.id === tabParam)) {
+      setActiveTab(tabParam);
+    }
+
+    // non_conformities.id è UUID, non numerico — Number(ncParam) darebbe NaN
+    // (falsy), facendo aprire il form vuoto "nuova NC" invece di quella giusta.
+    const ncParam = searchParams.get('nc');
+    if (ncParam) {
+      setNcEditId(ncParam);
+      open('nonConformity');
+    }
+  }, [facility, searchParams, visibleTabs, open]);
+
+  // Voce KPI da evidenziare/scrollare quando si arriva da un alert di
+  // /report — letto ad ogni render (non serve un guard "una tantum", il
+  // tab KPI stesso gestisce l'evidenziazione in base a questo valore).
+  const highlightKpiTarget = searchParams.get('kpi');
 
   const { data: cdgData } = useCdgData(
     facility ? [facility.id] : [],
@@ -322,8 +353,9 @@ export default function DirectorFacility() {
         </nav>
       </header>
 
-      {/* Contenuto tab */}
-      <main className="max-w-5xl mx-auto px-6 py-8">
+      {/* Contenuto tab — il tab Economico è denso (tabella + grafici affiancati),
+          gli serve più larghezza degli altri tab, testuali/a colonna singola. */}
+      <main className={`${activeTab === 'economico' ? 'max-w-7xl' : 'max-w-5xl'} mx-auto px-6 py-8`}>
         {activeTab === 'overview' && (
           <OverviewTab
             facility={facility}
@@ -342,10 +374,11 @@ export default function DirectorFacility() {
             kpiRecords={data.kpiRecords}
             year={year}
             onOpenManager={() => open('kpiManager')}
+            highlightKpiTarget={highlightKpiTarget}
           />
         )}
-        {activeTab === 'economico' && isDirectorStretto && (
-          <EconomicoTab companyId={facility.company_id} year={year} />
+        {activeTab === 'economico' && (isDirectorStretto || isAdmin) && (
+          <EconomicoDirettoreTab facility={facility} year={year} cdgRecords={cdgRecords} />
         )}
         {activeTab === 'survey' && (
           <SurveyPage
@@ -539,7 +572,14 @@ function NonConformitiesTab({ facility, year, profile, refreshKey = 0, onNew, on
   );
 }
 
-function KpiTab({ facility, kpiRecords, year, onOpenManager }) {
+function KpiTab({ facility, kpiRecords, year, onOpenManager, highlightKpiTarget }) {
+  // Arrivo da un alert di /report ("Situazioni più urgenti"): scrolla fino
+  // alla card del KPI segnalato non appena il tab è montato.
+  useEffect(() => {
+    if (!highlightKpiTarget) return;
+    document.getElementById(`kpi-${highlightKpiTarget}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightKpiTarget]);
+
   const now            = new Date();
   const currentMonth   = now.getMonth() + 1;
   const isCurrentYear  = Number(year) === now.getFullYear();
@@ -621,7 +661,7 @@ function KpiTab({ facility, kpiRecords, year, onOpenManager }) {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {withData.map(({ rule, data, isPerc }) => (
-                <KpiCard key={rule.kpi_target} rule={rule} data={data} isPerc={isPerc} />
+                <KpiCard key={rule.kpi_target} rule={rule} data={data} isPerc={isPerc} highlighted={rule.kpi_target === highlightKpiTarget} />
               ))}
             </div>
           </div>
@@ -641,7 +681,7 @@ function KpiTab({ facility, kpiRecords, year, onOpenManager }) {
   );
 }
 
-function KpiCard({ rule, data, isPerc }) {
+function KpiCard({ rule, data, isPerc, highlighted }) {
   const hasTarget  = rule.target_verde !== null;
   const useBar     = isNumericSettore(rule.settore);
   const unit       = isPerc ? '%' : '';
@@ -658,7 +698,12 @@ function KpiCard({ rule, data, isPerc }) {
   const lastColor = getColor(lastVal?.value);
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm transition-shadow">
+    <div
+      id={`kpi-${rule.kpi_target}`}
+      className={`bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow ${
+        highlighted ? 'border-indigo-300 ring-2 ring-indigo-400' : 'border-slate-200'
+      }`}
+    >
       <div className="flex justify-between items-start mb-3">
         <h4 className="text-xs font-black text-slate-700 uppercase leading-tight pr-2 line-clamp-2">
           {getKpiLabel(rule)}

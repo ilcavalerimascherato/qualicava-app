@@ -111,6 +111,19 @@ export default function ReportPage() {
     navigate(routes[page] ?? '/admin');
   };
 
+  // Click su una situazione del box "Situazioni più urgenti" (TickerAlert):
+  // porta diretti alla scheda/voce specifica invece che alla pagina generica.
+  const handleAlertNavigate = (deepLink) => {
+    if (!deepLink) return;
+    if (deepLink.kind === 'nc') {
+      navigate(`/facility/${deepLink.facilityId}?tab=non_conformities&nc=${deepLink.ncId}`);
+    } else if (deepLink.kind === 'kpi') {
+      navigate(`/facility/${deepLink.facilityId}?tab=kpi&kpi=${encodeURIComponent(deepLink.kpiTarget)}`);
+    } else if (deepLink.kind === 'occupancy') {
+      navigate(`/occupazione?search=${encodeURIComponent(deepLink.facilityName)}`);
+    }
+  };
+
   const closeModal = () => setActiveModal(null);
 
   return (
@@ -225,6 +238,13 @@ export default function ReportPage() {
             // viewReportSections): board le vede nel Cruscotto ma non deve
             // ottenere link che poi la guardia di route rimbalza indietro.
             onNavigate={can('manageStructures') ? handleNavigate : undefined}
+            // Stessa guardia di onNavigate sopra: gli alert puntano a
+            // /facility/:id e /occupazione, entrambe fuori portata per board.
+            onNavigateAlert={can('manageStructures') ? handleAlertNavigate : undefined}
+            // A differenza di onNavigate/onNavigateAlert questo resta dentro
+            // /report (cambia solo il tab attivo) — nessuna guardia di route
+            // da rispettare, board compresa (ha viewReportSections).
+            onOpenEconomico={() => setActiveTab('economico')}
           />
         )}
 

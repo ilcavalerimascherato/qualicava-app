@@ -17,7 +17,7 @@ import SocietaCard from './SocietaCard';
 
 export default function CruscottoView({
   facilities, companies, udos, surveys, kpiRecords, nonConformities, campaignsClient,
-  year, onNavigate,
+  year, onNavigate, onNavigateAlert, onOpenEconomico,
 }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
 
@@ -74,6 +74,7 @@ export default function CruscottoView({
         surveys={surveys}
         nonConformities={filteredNc}
         onNavigate={onNavigate}
+        onOpenEconomico={onOpenEconomico}
       />
 
       <TickerAlert
@@ -81,7 +82,7 @@ export default function CruscottoView({
         kpiRecords={kpiRecords}
         nonConformities={filteredNc}
         cdgByFacility={cdgByFacility}
-        onNavigate={onNavigate}
+        onNavigate={onNavigateAlert}
       />
 
       <div>

@@ -148,6 +148,14 @@ export function calcCdgSummary(records, bedCount) {
       ? parseFloat((parseFloat(r.budget_media_ospiti) / bedCount * 100).toFixed(1)) : null,
   }));
 
+  // Trend ingressi/dimissioni mensili (ultimi 12 mesi) — stesso dataset di
+  // trend12, per il box "Andamento ingressi e dimissioni" della dash Direttore.
+  const movimentiTrend12 = last12.map(r => ({
+    label:      `${r.anno}-${String(r.mese).padStart(2, '0')}`,
+    ingressi:   r.ingressi ?? null,
+    dimissioni: r.dimissioni ?? null,
+  }));
+
   return {
     mese:            lastMonth.mese,
     anno:            lastMonth.anno,
@@ -166,5 +174,6 @@ export function calcCdgSummary(records, bedCount) {
     dimissioniMese,
     mesiDisponibili: last12.length,
     trend12,
+    movimentiTrend12,
   };
 }

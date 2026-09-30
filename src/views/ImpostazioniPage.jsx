@@ -19,6 +19,7 @@ import CampagneSurveyModal    from '../components/CampagneSurveyModal';
 import VerificaDuplicatiModal from '../components/VerificaDuplicatiModal';
 import RegistroAttivitaModal  from '../components/RegistroAttivitaModal';
 import ImportOccupazioneModal from '../components/ImportOccupazioneModal';
+import ImportChiusuraModal    from '../components/ImportChiusuraModal';
 import AiTrasparenzaModal     from '../components/AiTrasparenzaModal';
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -241,6 +242,13 @@ export default function ImpostazioniPage() {
                 onClick={() => setActiveModal('importOccupazione')}
               />
               <SettingsCard
+                icon={<Upload size={14} />}
+                iconBg="#EEF2FF" iconColor="#4F46E5"
+                title="Importa chiusura mensile"
+                subtitle="Carica il file Excel di chiusura P&L del Controllo di Gestione"
+                onClick={() => setActiveModal('importChiusura')}
+              />
+              <SettingsCard
                 icon={<Bot size={14} />}
                 iconBg="#F5F3FF" iconColor="#7C3AED"
                 title="Trasparenza AI"
@@ -316,6 +324,9 @@ export default function ImpostazioniPage() {
       )}
       {activeModal === 'importOccupazione' && (
         <ImportOccupazioneModal onClose={closeModal} />
+      )}
+      {activeModal === 'importChiusura' && (
+        <ImportChiusuraModal facilities={data.facilities} onClose={closeModal} />
       )}
       {activeModal === 'aiTrasparenza' && (
         <AiTrasparenzaModal onClose={closeModal} />
