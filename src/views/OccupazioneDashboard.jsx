@@ -3,14 +3,14 @@
 
 import { useState, useMemo } from 'react';
 import { Search, MapPin, ChevronDown, Check, Pause, Building2, Download } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCdgData, aggregateCdgRecords, calcCdgSummary } from '../hooks/useCdgData';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useBadgeCounts } from '../hooks/useBadgeCounts';
-import { exportOccupazioneReport } from '../services/occupazioneReportService';
 import AppHeader from '../components/AppHeader';
 import CdgStrutturaCard from '../components/CdgStrutturaCard';
+import EsportaOccupazioneModal from '../components/EsportaOccupazioneModal';
 
 function GroupSemafori({ facilities }) {
   const v = facilities.filter(f => f._semaforo === 'verde').length;
@@ -59,13 +59,18 @@ export default function OccupazioneDashboard() {
   const navigate = useNavigate();
   const { isAdmin, profile, signOut } = useAuth();
   const year = new Date().getFullYear();
+  const [searchParams] = useSearchParams();
   const [filtroSemaforo, setFiltroSemaforo]     = useState(null);
-  const [search, setSearch]                     = useState('');
+  // Arrivo da un alert di /report ("Situazioni più urgenti", occupazione
+  // sotto soglia): preimposta il filtro testuale già esistente sul nome
+  // della struttura invece di introdurre uno scroll/evidenziazione dedicati.
+  const [search, setSearch]                     = useState(() => searchParams.get('search') || '');
   const [filterUdo, setFilterUdo]               = useState('');
   const [selectedRegions, setSelectedRegions]   = useState([]);
   const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
   const [showSuspended, setShowSuspended]       = useState(false);
   const [showSocieta, setShowSocieta]           = useState(false);
+  const [showExportModal, setShowExportModal]   = useState(false);
 
   const { data: dashData, loading } = useDashboardData(year);
   const { data: cdgData }           = useCdgData(null, year);
@@ -295,8 +300,8 @@ export default function OccupazioneDashboard() {
         {/* DESTRA — esporta report */}
         <div className="flex-shrink-0">
           <button
-            onClick={() => exportOccupazioneReport(facilitiesConSemaforo.filter(f => !f.is_suspended))}
-            title="Esporta xlsx con occupazione mese corrente vs precedente per tutte le strutture attive"
+            onClick={() => setShowExportModal(true)}
+            title="Esporta xlsx con occupazione per tutte le strutture attive, scegliendo i mesi da confrontare"
             className="flex items-center gap-1.5 border border-slate-200 rounded-full px-3 py-1.5 text-xs text-slate-600 bg-white hover:border-emerald-400 whitespace-nowrap"
           >
             <Download size={12} /> Esporta report
@@ -387,6 +392,13 @@ export default function OccupazioneDashboard() {
           ))
         )}
       </div>
+
+      {showExportModal && (
+        <EsportaOccupazioneModal
+          facilities={activeFacilities}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
 
     </div>
   );
