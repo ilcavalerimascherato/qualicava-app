@@ -2,11 +2,12 @@
 // Schermata di revisione/conferma dei dati estratti dall'AI — nessun dato
 // arriva a non_conformities finché il Direttore non preme "Conferma".
 import { useEffect, useState } from 'react';
-import { X, Loader2, AlertTriangle, ChevronDown, ChevronUp, CheckCircle2, Send, MessageSquareText, FileStack } from 'lucide-react';
+import { X, Loader2, AlertTriangle, ChevronDown, ChevronUp, CheckCircle2, Send, MessageSquareText, FileStack, Link2, Unlink } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   fetchVerbaleConRilievi, updateVerbaleHeader, updateRilievo, deleteRilievo,
-  confermaVerbaleEGeneraNc, segnaRispostaInviata,
+  confermaVerbaleEGeneraNc, segnaRispostaInviata, fetchVerbaliByFacility,
+  cercaVerbaliCandidatiRiferimento,
 } from '../../services/verbaliIspettiviService';
 import CorrispondenzaPanel from './CorrispondenzaPanel';
 
@@ -57,6 +58,11 @@ export default function VerbaleReviewModal({ verbaleId, facility, onClose, onCon
   const [rilievi, setRilievi] = useState([]);
   const [showTeam, setShowTeam] = useState(false);
   const [tab, setTab] = useState('dati'); // 'dati' | 'risposta'
+  const [prefillSignal, setPrefillSignal] = useState(null);
+  const [verbaliStruttura, setVerbaliStruttura] = useState([]);
+  const [riferimentiCandidati, setRiferimentiCandidati] = useState({}); // indice riferimento -> candidati trovati
+  const [riferimentiIgnorati, setRiferimentiIgnorati] = useState(new Set());
+  const [showCollegaManuale, setShowCollegaManuale] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +72,26 @@ export default function VerbaleReviewModal({ verbaleId, facility, onClose, onCon
         if (cancelled) return;
         setForm(verbale);
         setRilievi(r);
+
+        if (facility?.id) {
+          const struttura = await fetchVerbaliByFacility(facility.id);
+          if (cancelled) return;
+          setVerbaliStruttura(struttura.filter(v => v.id !== verbale.id));
+        }
+
+        // Riferimenti a documenti precedenti rilevati dall'AI — solo
+        // suggerimento, il collegamento resta sempre una conferma manuale
+        // dell'operatore (bottone "Collega" più sotto).
+        const riferimenti = verbale.ai_estrazione_raw?.riferimenti_documenti_precedenti ?? [];
+        if (riferimenti.length && facility?.id) {
+          const risultati = await Promise.all(
+            riferimenti.map(rif => cercaVerbaliCandidatiRiferimento(facility.id, rif).catch(() => []))
+          );
+          if (cancelled) return;
+          const map = {};
+          risultati.forEach((candidati, i) => { map[i] = candidati.filter(c => c.id !== verbale.id); });
+          setRiferimentiCandidati(map);
+        }
       } catch (err) {
         if (!cancelled) setError(`Impossibile caricare il verbale: ${err.message}`);
       } finally {
@@ -73,7 +99,18 @@ export default function VerbaleReviewModal({ verbaleId, facility, onClose, onCon
       }
     })();
     return () => { cancelled = true; };
-  }, [verbaleId]);
+  }, [verbaleId, facility?.id]);
+
+  const collegaProcedimento = async (targetId) => {
+    await updateVerbaleHeader(form.id, { procedimento_verbale_id: targetId });
+    setForm(f => ({ ...f, procedimento_verbale_id: targetId }));
+    setShowCollegaManuale(false);
+  };
+
+  const scollegaProcedimento = async () => {
+    await updateVerbaleHeader(form.id, { procedimento_verbale_id: null });
+    setForm(f => ({ ...f, procedimento_verbale_id: null }));
+  };
 
   const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
 
@@ -221,6 +258,69 @@ export default function VerbaleReviewModal({ verbaleId, facility, onClose, onCon
         <div className="overflow-y-auto px-6 py-5 space-y-5">
 
           {tab === 'dati' && <>
+
+          {/* Riferimenti a documenti precedenti — solo suggerimento AI,
+              collegamento sempre confermato manualmente dall'operatore. */}
+          {(form.ai_estrazione_raw?.riferimenti_documenti_precedenti ?? []).map((rif, i) => {
+            if (riferimentiIgnorati.has(i) || form.procedimento_verbale_id) return null;
+            const candidati = riferimentiCandidati[i] ?? [];
+            const ignora = () => setRiferimentiIgnorati(s => new Set(s).add(i));
+            return (
+              <div key={i} className={`flex items-start gap-2 rounded-xl px-4 py-3 text-xs border ${candidati.length ? 'bg-indigo-50 border-indigo-200 text-indigo-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                <Link2 size={14} className="mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p>Il documento cita un atto precedente: <b>{rif.descrizione_testuale}</b>
+                    {rif.numero_o_protocollo && ` (${rif.numero_o_protocollo})`}{rif.data && ` del ${rif.data}`}.</p>
+                  {candidati.length ? (
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                      {candidati.map(c => (
+                        <button key={c.id} onClick={() => collegaProcedimento(c.id)}
+                          className="text-[11px] font-bold bg-white border border-indigo-300 text-indigo-700 px-2.5 py-1 rounded-lg hover:bg-indigo-100">
+                          Collega a Verbale N. {c.numero_verbale || '—'} del {c.data_sopralluogo || '—'}
+                        </button>
+                      ))}
+                      <button onClick={ignora} className="text-[11px] font-bold text-slate-500 hover:text-slate-700">Ignora</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span>Non risulta caricato in archivio per questa struttura — verifica di averlo acquisito.</span>
+                      <button onClick={ignora} className="text-[11px] font-bold text-slate-500 hover:text-slate-700 flex-shrink-0">Ignora</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Collegamento a procedimento — stato attuale + selettore manuale */}
+          {form.procedimento_verbale_id ? (
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-600">
+              <Link2 size={13} className="text-indigo-500 flex-shrink-0" />
+              <span className="flex-1">
+                Collegato allo stesso procedimento del Verbale N. {verbaliStruttura.find(v => v.id === form.procedimento_verbale_id)?.numero_verbale || '—'}
+                {' '}del {verbaliStruttura.find(v => v.id === form.procedimento_verbale_id)?.data_sopralluogo || '—'}
+              </span>
+              <button onClick={scollegaProcedimento} className="flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-red-500">
+                <Unlink size={12} /> Scollega
+              </button>
+            </div>
+          ) : (
+            <div>
+              {showCollegaManuale ? (
+                <select onChange={e => e.target.value && collegaProcedimento(Number(e.target.value))} defaultValue=""
+                  className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 outline-none focus:border-indigo-400">
+                  <option value="" disabled>Seleziona il verbale precedente dello stesso procedimento…</option>
+                  {verbaliStruttura.map(v => (
+                    <option key={v.id} value={v.id}>Verbale N. {v.numero_verbale || '—'} del {v.data_sopralluogo || '—'}</option>
+                  ))}
+                </select>
+              ) : (
+                <button onClick={() => setShowCollegaManuale(true)} className="text-xs font-bold text-indigo-600 flex items-center gap-1">
+                  <Link2 size={13} /> Collega manualmente a un verbale precedente
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Coerenza struttura */}
           {form.cudes_estratto && (
@@ -370,12 +470,40 @@ export default function VerbaleReviewModal({ verbaleId, facility, onClose, onCon
 
           {tab === 'risposta' && <>
 
-          {/* Risposta — sezione a piena larghezza, non più compressa in un
-              collapsible tra i rilievi e il team. */}
+          {/* Cronologia in cima: cosa è già stato agganciato/inviato/ricevuto,
+              prima dei controlli per il passo successivo. Anche il percorso
+              "È stato inviato un altro documento" passa da qui: pre-compila
+              il form invece di usare la bozza AI. onSaved risincronizza lo
+              stato locale quando quel salvataggio segna la risposta come
+              inviata (side-effect che avviene lato servizio, non qui). */}
+          <CorrispondenzaPanel
+            verbaleId={form.id}
+            facilityId={facility?.id}
+            prefillSignal={prefillSignal}
+            verbaleContesto={{
+              numero_verbale: form.numero_verbale,
+              ente: form.ente,
+              data_sopralluogo: form.data_sopralluogo,
+              documentazione_richiesta: form.documentazione_richiesta,
+              rilievi: rilievi.filter(r => !r.escluso_da_nc).map(r => ({ area_tematica: r.area_tematica, tipo: r.tipo, descrizione: r.descrizione })),
+            }}
+            onSaved={(row) => {
+              if (row.tipo === 'risposta_iniziale' && row.direzione === 'in_uscita') {
+                setForm(f => ({ ...f, stato_risposta: 'inviata', data_risposta_inviata: row.data }));
+              }
+            }}
+          />
+
+          {/* Azioni per il passo successivo */}
           {form.stato_risposta === 'non_richiesta' ? (
             <p className="text-xs text-slate-400 italic py-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
               Questo verbale non richiede una risposta formale all'ente.
             </p>
+          ) : form.stato_risposta === 'inviata' ? (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2.5 text-xs">
+              <CheckCircle2 size={14} className="flex-shrink-0" />
+              Risposta inviata il {form.data_risposta_inviata} — dettaglio nella cronologia sopra.
+            </div>
           ) : (
             <div className="border border-slate-200 rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
@@ -390,11 +518,7 @@ export default function VerbaleReviewModal({ verbaleId, facility, onClose, onCon
                   <p className="text-xs text-slate-600">{form.indirizzo_invio_risposta || '—'}</p>
                 </div>
                 <div>
-                  {form.stato_risposta === 'inviata' ? (
-                    <Pill variant="success">✓ Inviata il {form.data_risposta_inviata}</Pill>
-                  ) : (
-                    <Pill variant="warning">Da inviare</Pill>
-                  )}
+                  <Pill variant="warning">Da inviare</Pill>
                 </div>
               </div>
 
@@ -408,22 +532,26 @@ export default function VerbaleReviewModal({ verbaleId, facility, onClose, onCon
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Testo della risposta — bozza AI, da rivedere prima dell'invio</p>
                 <textarea rows={12} value={form.bozza_risposta_ai || ''} onChange={setField('bozza_risposta_ai')}
-                  disabled={form.stato_risposta === 'inviata'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y disabled:opacity-60" />
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y" />
               </div>
 
-              {form.stato_risposta !== 'inviata' && (
-                <div className="flex justify-end">
-                  <button onClick={inviaRisposta} disabled={saving} className="flex items-center gap-2 text-xs font-bold bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
-                    <Send size={13} /> Segna risposta come inviata
-                  </button>
-                </div>
-              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setPrefillSignal({
+                    tipo: 'risposta_iniziale', direzione: 'in_uscita',
+                    oggetto: `Risposta a Verbale N. ${form.numero_verbale || '?'}`,
+                    _nonce: Date.now(),
+                  })}
+                  className="text-xs font-bold text-slate-500 hover:bg-slate-100 px-4 py-2 rounded-xl transition-colors"
+                >
+                  È stato inviato un altro documento
+                </button>
+                <button onClick={inviaRisposta} disabled={saving} className="flex items-center gap-2 text-xs font-bold bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                  <Send size={13} /> Segna risposta come inviata
+                </button>
+              </div>
             </div>
           )}
-
-          {/* Corrispondenza — note, proroghe, integrazioni, esito procedimento */}
-          <CorrispondenzaPanel verbaleId={form.id} facilityId={facility?.id} />
 
           </>}
 

@@ -22,7 +22,7 @@ const STEPS = [
 export default function VerbaleUploadModal({ facility, onClose, onExtracted }) {
   const { profile } = useAuth();
   const [file, setFile] = useState(null);
-  const [allegato, setAllegato] = useState(null);
+  const [allegati, setAllegati] = useState([]);
   const [dragging, setDragging] = useState(false);
   const [phase, setPhase] = useState('idle'); // idle | upload | analisi | estrazione | errore
   const [error, setError] = useState('');
@@ -57,12 +57,17 @@ export default function VerbaleUploadModal({ facility, onClose, onExtracted }) {
       await updateVerbaleHeader(verbale.id, { pdf_storage_path: path });
       notificaVerbaleCaricato({ facilityName: facility.name }).catch(() => {});
 
-      // Allegato opzionale ricevuto insieme al verbale — stessa pratica,
-      // registrato come prima voce della corrispondenza (non analizzato
-      // dall'AI, solo archiviato e collegato).
-      if (allegato) {
-        const { path: allegatoPath, fileName } = await uploadAllegato(facility.id, verbale.id, allegato);
-        await addAllegatoAcquisizione({ verbaleId: verbale.id, storagePath: allegatoPath, fileName, createdBy: profile?.id });
+      // Allegati opzionali ricevuti insieme al verbale (una PEC porta quasi
+      // sempre più di un file) — stessa pratica, registrati come prima voce
+      // della corrispondenza (non analizzati dall'AI, solo archiviati e
+      // collegati).
+      if (allegati.length) {
+        const caricati = [];
+        for (const a of allegati) {
+          const { path, fileName } = await uploadAllegato(facility.id, verbale.id, a);
+          caricati.push({ storagePath: path, fileName });
+        }
+        await addAllegatoAcquisizione({ verbaleId: verbale.id, allegati: caricati, createdBy: profile?.id });
       }
 
       setPhase('analisi');
@@ -139,31 +144,31 @@ export default function VerbaleUploadModal({ facility, onClose, onExtracted }) {
               )}
 
               {file && (
-                <div className="mt-3">
-                  {allegato ? (
-                    <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <div className="mt-3 space-y-2">
+                  {allegati.map((a, i) => (
+                    <div key={i} className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
                       <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
                         <Paperclip size={14} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-700 truncate">{allegato.name}</p>
-                        <p className="text-xs text-slate-400">Allegato · {(allegato.size / 1024).toFixed(0)} KB</p>
+                        <p className="text-sm font-bold text-slate-700 truncate">{a.name}</p>
+                        <p className="text-xs text-slate-400">Allegato · {(a.size / 1024).toFixed(0)} KB</p>
                       </div>
-                      <button onClick={() => setAllegato(null)} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>
+                      <button onClick={() => setAllegati(list => list.filter((_, j) => j !== i))} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>
                     </div>
-                  ) : (
-                    <button
-                      onClick={() => allegatoInputRef.current?.click()}
-                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800"
-                    >
-                      <Paperclip size={13} /> Aggiungi un allegato (stessa pratica, opzionale)
-                    </button>
-                  )}
+                  ))}
+                  <button
+                    onClick={() => allegatoInputRef.current?.click()}
+                    className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800"
+                  >
+                    <Paperclip size={13} /> Aggiungi allegati — anche più di uno (stessa pratica, opzionale)
+                  </button>
                   <input
                     ref={allegatoInputRef}
                     type="file"
+                    multiple
                     className="hidden"
-                    onChange={e => setAllegato(e.target.files?.[0] ?? null)}
+                    onChange={e => setAllegati(list => [...list, ...Array.from(e.target.files ?? [])])}
                   />
                 </div>
               )}

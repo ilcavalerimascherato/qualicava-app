@@ -722,6 +722,13 @@ REGOLE TASSATIVE PER L'ESTRAZIONE:
   parentesi quadre, es. "[elencare qui la documentazione allegata]".
 - Date sempre in formato ISO "YYYY-MM-DD". Se l'anno non è specificato ma
   desumibile dal contesto, deducilo; altrimenti null.
+- "riferimenti_documenti_precedenti": cerca esplicitamente frasi che citano un
+  atto precedente della stessa pratica, es. "in seguito al verbale n. X del...",
+  "con nota prot. Y del...", "a integrazione di quanto comunicato con nota del...",
+  "facendo seguito al sopralluogo del...". Per ognuna estrai un elemento
+  dell'array. Se il documento non cita nessun atto precedente, l'array resta
+  vuoto — NON inventare un riferimento che non è esplicitamente scritto nel
+  testo.
 - Non includere MAI commenti, spiegazioni o testo fuori dal JSON.
 `.trim(),
   },
@@ -775,6 +782,65 @@ REGOLE TASSATIVE:
 `.trim(),
   },
 
+  // ── 17. Verifica allegati PEC → Corrispondenza Verbali Ispettivi ──
+  // Gira PRIMA del salvataggio (bottone "Verifica con AI" in
+  // CorrispondenzaPanel.jsx): l'utente vede il risultato e decide se
+  // confermare il salvataggio, l'AI non salva né blocca nulla da sola.
+  // Un solo verbale di contesto (quello a cui la corrispondenza è
+  // agganciata) contro uno o più PDF allegati nello stesso messaggio.
+  // Output JSON interno — validato/parsato in
+  // src/utils/corrispondenzaAiAnalisi.js.
+  analisiAllegatiCorrispondenza: {
+    required: ['verbale'],
+    meta: {
+      categoria: 'Estrazione automatica documenti (dati strutturati)',
+      calledFrom: 'corrispondenzaAiAnalisi.js — analizzaAllegatiCorrispondenza()',
+      trigger: 'Bottone "Verifica con AI" nel form di aggiunta corrispondenza del modulo Verbali Ispettivi, quando è allegato almeno un PDF',
+      client: 'callClaudeWithPdfs (prompt + uno o più PDF allegati)',
+      output: 'JSON interno, mai mostrato grezzo — precompila il riquadro di verifica (coerenza/considerazioni), l\'utente decide se confermare il salvataggio',
+    },
+    build: ({ verbale }) => `
+Sei un esperto di compliance socio-sanitaria italiana (RSA). Ricevi in allegato uno o più
+documenti (PDF) che un operatore sta per registrare come corrispondenza collegata a un
+verbale di ispezione già presente a sistema. Il tuo compito è un controllo di coerenza,
+non un giudizio definitivo: l'operatore deciderà se salvare comunque.
+
+VERBALE A CUI QUESTA CORRISPONDENZA VIENE COLLEGATA:
+- Numero: ${verbale.numero_verbale || 'non specificato'}
+- Ente: ${verbale.ente || 'non specificato'}
+- Data sopralluogo: ${verbale.data_sopralluogo || 'non specificata'}
+- Documentazione richiesta dall'ente: ${verbale.documentazione_richiesta || 'nessuna specifica'}
+- Rilievi/prescrizioni aperti: ${(verbale.rilievi ?? []).length
+    ? verbale.rilievi.map(r => `\n  · ${r.area_tematica || r.tipo}: ${r.descrizione}`).join('')
+    : 'nessuno'}
+
+ESTRAI dai documenti allegati i seguenti dati e rispondi ESCLUSIVAMENTE con un oggetto
+JSON valido, nessun testo prima o dopo, nessun blocco markdown \`\`\`, secondo questo schema:
+
+${CORRISPONDENZA_ANALISI_SCHEMA_DESCRIPTION}
+
+REGOLE TASSATIVE:
+- "riferimenti_rilevati": individua frasi che citano un atto precedente (es. "in
+  seguito al verbale n. X del...", "con nota prot. Y del..."), stesso principio già
+  usato per l'estrazione del verbale principale. Array vuoto se non c'è nulla di
+  esplicito — non inventare.
+- "coerente_con_verbale_selezionato": confronta i riferimenti rilevati (numero, ente,
+  data) col verbale di contesto sopra. false SOLO se c'è un'incoerenza chiara ed
+  esplicita (es. citano un verbale con un numero o una data diversi); true se
+  corrispondono o se il documento si riferisce chiaramente allo stesso verbale senza
+  citarne gli estremi; null se il documento non contiene alcun riferimento
+  confrontabile (es. una semplice nota senza citazioni).
+- "motivazione_incoerenza": solo se coerente_con_verbale_selezionato è false — una
+  frase che spiega cosa non torna, citando cosa hai trovato nel documento.
+- "considerazioni": osservazione libera e SINTETICA (max 3-4 frasi) solo se hai
+  elementi concreti — es. un punto della documentazione richiesta o un rilievo aperto
+  che non risulta affrontato nei documenti allegati. null se non hai nulla di
+  specifico da segnalare: non riempire per forza questo campo con un commento
+  generico.
+- Non includere MAI commenti, spiegazioni o testo fuori dal JSON.
+`.trim(),
+  },
+
 };
 
 // Schema JSON atteso dal prompt "estrazioneVerbaleIspettivo" — esportato a
@@ -818,7 +884,31 @@ export const VERBALE_EXTRACTION_SCHEMA_DESCRIPTION = `{
   "indirizzo_invio_risposta": string|null,
   "oggetto_pec_suggerito": string|null,
   "responsabile_istruttoria": {"nome": string|null, "telefono": string|null, "email": string|null},
-  "bozza_risposta_suggerita": string|null      // solo se scadenza_risposta presente
+  "bozza_risposta_suggerita": string|null,     // solo se scadenza_risposta presente
+  "riferimenti_documenti_precedenti": [
+    {
+      "tipo_riferimento": "verbale" | "nota_prot" | "altro",
+      "descrizione_testuale": string,          // frase (anche parafrasata) del verbale che cita l'atto precedente
+      "numero_o_protocollo": string|null,
+      "data": "YYYY-MM-DD"|null
+    }
+  ]                                             // array vuoto se il documento non cita nessun atto precedente
+}`;
+
+// Schema JSON atteso dal prompt "analisiAllegatiCorrispondenza" — esportato a
+// parte così src/utils/corrispondenzaAiAnalisi.js può riferirlo senza duplicarlo.
+export const CORRISPONDENZA_ANALISI_SCHEMA_DESCRIPTION = `{
+  "riferimenti_rilevati": [
+    {
+      "tipo_riferimento": "verbale" | "nota_prot" | "altro",
+      "descrizione_testuale": string,
+      "numero_o_protocollo": string|null,
+      "data": "YYYY-MM-DD"|null
+    }
+  ],
+  "coerente_con_verbale_selezionato": true|false|null,
+  "motivazione_incoerenza": string|null,
+  "considerazioni": string|null
 }`;
 
 // ── FACTORY UNIFICATA ─────────────────────────────────────────

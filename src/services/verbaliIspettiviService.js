@@ -285,25 +285,61 @@ export async function confermaVerbaleEGeneraNc({ verbale, rilievi, facility, pro
 export async function fetchCorrispondenza(verbaleId) {
   const { data, error } = await supabase
     .from('verbali_corrispondenza')
-    .select('*')
+    .select('*, verbali_corrispondenza_allegati(*)')
     .eq('verbale_id', verbaleId)
     .order('data', { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
 
-export async function addCorrispondenza({ verbaleId, tipo, direzione, data, oggetto, testo, protocollo, allegatoStoragePath, createdBy }) {
+// allegati: [{ storagePath, fileName }] — zero o più file per voce (una PEC
+// reale porta quasi sempre più di un allegato). Quando la voce è la risposta
+// ufficiale inviata all'ente (tipo 'risposta_iniziale' in uscita), segna
+// anche l'header del verbale come "inviata" — stesso side-effect sia che il
+// testo sia la bozza AI sia che sia stato inviato un documento diverso
+// (vedi VerbaleReviewModal: bottone "È stato inviato un altro documento").
+// analisiAi: { stato: 'completata'|'errore', risultato } — già calcolato
+// lato client PRIMA di chiamare questa funzione (CorrispondenzaPanel: bottone
+// "Verifica con AI" -> esito mostrato -> "Conferma e salva"). Non c'è nessun
+// giro di analisi qui: quando si arriva a salvare, è già stato deciso.
+export async function addCorrispondenza({ verbaleId, tipo, direzione, data, oggetto, testo, protocollo, allegati, riferimentoCorrispondenzaId, analisiAi, createdBy }) {
   const { data: row, error } = await supabase
     .from('verbali_corrispondenza')
     .insert([{
       verbale_id: verbaleId, tipo, direzione, data,
       oggetto: oggetto || null, testo: testo || null, protocollo: protocollo || null,
-      allegato_storage_path: allegatoStoragePath || null,
+      riferimento_corrispondenza_id: riferimentoCorrispondenzaId || null,
+      ...(analisiAi ? {
+        analisi_ai_stato: analisiAi.stato,
+        analisi_ai_risultato: analisiAi.risultato ?? null,
+        analisi_ai_il: new Date().toISOString(),
+      } : {}),
       created_by: createdBy ?? null,
     }])
     .select()
     .single();
   if (error) throw error;
+
+  if (allegati?.length) {
+    const { error: allErr } = await supabase.from('verbali_corrispondenza_allegati').insert(
+      allegati.map(a => ({
+        corrispondenza_id: row.id,
+        storage_path: a.storagePath,
+        nome_file: a.fileName,
+        created_by: createdBy ?? null,
+      }))
+    );
+    if (allErr) throw allErr;
+  }
+
+  if (tipo === 'risposta_iniziale' && direzione === 'in_uscita') {
+    await supabase.from('verbali_ispettivi').update({
+      stato_risposta: 'inviata',
+      data_risposta_inviata: data,
+      updated_at: new Date().toISOString(),
+    }).eq('id', verbaleId);
+  }
+
   return row;
 }
 
@@ -312,39 +348,61 @@ export async function deleteCorrispondenza(id) {
   if (error) throw error;
 }
 
-// Registra l'allegato acquisito insieme al verbale (stessa pratica) come
+// Registra gli allegati acquisiti insieme al verbale (stessa pratica) come
 // prima voce della corrispondenza — coerente col resto della timeline
 // invece di essere un campo separato senza storia.
-export async function addAllegatoAcquisizione({ verbaleId, storagePath, fileName, createdBy }) {
+export async function addAllegatoAcquisizione({ verbaleId, allegati, createdBy }) {
+  const nomi = allegati.map(a => a.fileName).join(', ');
   return addCorrispondenza({
     verbaleId,
     tipo: 'integrazione',
     direzione: 'in_entrata',
     data: new Date().toISOString().slice(0, 10),
-    oggetto: `Allegato acquisito con il verbale: ${fileName}`,
-    allegatoStoragePath: storagePath,
+    oggetto: `Allegati acquisiti con il verbale: ${nomi}`,
+    allegati,
     createdBy,
   });
 }
 
 // ── Gestione risposta ──────────────────────────────────────────────
+// Percorso "bozza AI inviata così com'è" — l'aggiornamento di stato_risposta
+// avviene dentro addCorrispondenza, identico al percorso alternativo
+// (bottone "È stato inviato un altro documento" in VerbaleReviewModal).
 export async function segnaRispostaInviata({ verbale, testoInviato, createdBy }) {
-  const oggi = new Date().toISOString().slice(0, 10);
-  await supabase.from('verbali_ispettivi').update({
-    stato_risposta: 'inviata',
-    data_risposta_inviata: oggi,
-    updated_at: new Date().toISOString(),
-  }).eq('id', verbale.id);
-
-  await addCorrispondenza({
+  return addCorrispondenza({
     verbaleId: verbale.id,
     tipo: 'risposta_iniziale',
     direzione: 'in_uscita',
-    data: oggi,
+    data: new Date().toISOString().slice(0, 10),
     oggetto: `Risposta a Verbale N. ${verbale.numero_verbale || '?'}`,
     testo: testoInviato || null,
     createdBy,
   });
+}
+
+// ── Riferimenti a documenti precedenti (rilevati dall'AI, da confermare) ──
+// Ricerca per suggerire un collegamento manuale — mai un match automatico:
+// l'operatore conferma sempre esplicitamente in VerbaleReviewModal.
+export async function cercaVerbaliCandidatiRiferimento(facilityId, riferimento) {
+  let query = supabase
+    .from('verbali_ispettivi')
+    .select('id, numero_verbale, data_sopralluogo, ente, tipo_ispezione')
+    .eq('facility_id', facilityId);
+
+  const { numero_o_protocollo: numero, data } = riferimento || {};
+  if (numero && data) {
+    query = query.or(`numero_verbale.ilike.%${numero}%,data_sopralluogo.eq.${data}`);
+  } else if (numero) {
+    query = query.ilike('numero_verbale', `%${numero}%`);
+  } else if (data) {
+    query = query.eq('data_sopralluogo', data);
+  } else {
+    return [];
+  }
+
+  const { data: rows, error } = await query.order('data_sopralluogo', { ascending: false }).limit(5);
+  if (error) throw error;
+  return rows ?? [];
 }
 
 // ── Notifica admin al caricamento ──────────────────────────────────

@@ -26,5 +26,7 @@ export const AUDIT_LOG_TABLES = [
   { group: 'Sistema',        tables: ['notifications'] },
   { group: 'Verbali ispettivi', tables: [
       'verbali_ispettivi', 'verbali_rilievi', 'verbali_corrispondenza',
+      'verbali_corrispondenza_allegati',
   ]},
+  { group: 'Economico', tables: ['chiusura_mensile_struttura'] },
 ];

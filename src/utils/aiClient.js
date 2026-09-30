@@ -66,3 +66,37 @@ export async function callClaudeWithPdf(prompt, pdfBase64, { maxTokens = 8000 } 
   if (data.error) throw new Error(data.error.message);
   return (data.content ?? []).map(b => (b.type === 'text' ? b.text : '')).join('');
 }
+
+// Variante con più PDF allegati come content block distinti nello stesso
+// messaggio (es. tutti gli allegati di una singola voce di corrispondenza
+// analizzati insieme, invece di una chiamata per file).
+export async function callClaudeWithPdfs(prompt, pdfBase64Array, { maxTokens = 4000 } = {}) {
+  if (!process.env.REACT_APP_ANTHROPIC_API_KEY) {
+    throw new Error('Chiave API Anthropic non configurata.');
+  }
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      messages: [{
+        role: 'user',
+        content: [
+          ...pdfBase64Array.map(data => ({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } })),
+          { type: 'text', text: prompt },
+        ],
+      }],
+    }),
+  });
+
+  const data = await response.json();
+  if (data.error) throw new Error(data.error.message);
+  return (data.content ?? []).map(b => (b.type === 'text' ? b.text : '')).join('');
+}

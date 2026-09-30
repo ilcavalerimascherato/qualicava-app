@@ -3,7 +3,7 @@
 // revisione. Stato dei modal gestito localmente (nessuna registrazione in
 // ModalContext: nessun altro punto dell'app deve aprirli, per ora).
 import { useEffect, useState, useCallback } from 'react';
-import { FileText, Loader2 } from 'lucide-react';
+import { FileText, Loader2, ChevronDown, Link2 } from 'lucide-react';
 import { fetchVerbaliByFacility } from '../../services/verbaliIspettiviService';
 import VerbaleUploadModal from './VerbaleUploadModal';
 import VerbaleReviewModal from './VerbaleReviewModal';
@@ -45,6 +45,7 @@ export default function VerbaliIspettiviTab({ facility }) {
   const [error, setError] = useState('');
   const [showUpload, setShowUpload] = useState(false);
   const [reviewId, setReviewId] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
 
   const load = useCallback(async () => {
     if (!facility?.id) return;
@@ -61,6 +62,19 @@ export default function VerbaliIspettiviTab({ facility }) {
   }, [facility?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Verbali collegati allo stesso procedimento (procedimento_verbale_id)
+  // spariscono dalla lista piatta e diventano righe espandibili sotto
+  // l'atto capofila, invece di comparire come voci separate scollegate.
+  const byId = new Map(verbali.map(v => [v.id, v]));
+  const capofila = verbali.filter(v => !v.procedimento_verbale_id || !byId.has(v.procedimento_verbale_id));
+  const collegatiA = (id) => verbali.filter(v => v.procedimento_verbale_id === id);
+
+  const toggleGroup = (id) => setExpandedGroups(s => {
+    const next = new Set(s);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   return (
     <div className="space-y-5">
@@ -87,29 +101,32 @@ export default function VerbaliIspettiviTab({ facility }) {
         </div>
       ) : (
         <div className="space-y-2.5">
-          {verbali.map(v => (
-            <button
-              key={v.id}
-              onClick={() => setReviewId(v.id)}
-              disabled={v.stato_elaborazione_ai === 'in_coda' || v.stato_elaborazione_ai === 'in_corso'}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-white hover:border-indigo-300 transition-colors text-left disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
-                <FileText size={16} className="text-slate-400" />
+          {capofila.map(v => {
+            const collegati = collegatiA(v.id);
+            const espanso = expandedGroups.has(v.id);
+            return (
+              <div key={v.id}>
+                <div className="w-full flex items-center gap-2">
+                  <VerbaleRow v={v} onOpen={() => setReviewId(v.id)} />
+                  {collegati.length > 0 && (
+                    <button
+                      onClick={() => toggleGroup(v.id)}
+                      className="flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-indigo-600 px-2 py-1.5 flex-shrink-0"
+                      title="Atti collegati allo stesso procedimento"
+                    >
+                      <Link2 size={12} /> +{collegati.length}
+                      <ChevronDown size={12} className={`transition-transform ${espanso ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                </div>
+                {espanso && (
+                  <div className="pl-8 mt-2 space-y-2">
+                    {collegati.map(c => <VerbaleRow key={c.id} v={c} onOpen={() => setReviewId(c.id)} />)}
+                  </div>
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-700 truncate">
-                  Verbale N. {v.numero_verbale || '—'} · {TIPO_LABEL[v.tipo_ispezione] || 'Ispezione'}
-                  {v.data_sopralluogo && ` · ${v.data_sopralluogo}`}
-                </p>
-                <p className="text-xs text-slate-400 truncate">{v.ente || 'Ente non identificato'}</p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {statoBadge(v)}
-                {rispostaBadge(v)}
-              </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -130,5 +147,30 @@ export default function VerbaliIspettiviTab({ facility }) {
         />
       )}
     </div>
+  );
+}
+
+function VerbaleRow({ v, onOpen }) {
+  return (
+    <button
+      onClick={onOpen}
+      disabled={v.stato_elaborazione_ai === 'in_coda' || v.stato_elaborazione_ai === 'in_corso'}
+      className="flex-1 min-w-0 w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-white hover:border-indigo-300 transition-colors text-left disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
+        <FileText size={16} className="text-slate-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-slate-700 truncate">
+          Verbale N. {v.numero_verbale || '—'} · {TIPO_LABEL[v.tipo_ispezione] || 'Ispezione'}
+          {v.data_sopralluogo && ` · ${v.data_sopralluogo}`}
+        </p>
+        <p className="text-xs text-slate-400 truncate">{v.ente || 'Ente non identificato'}</p>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {statoBadge(v)}
+        {rispostaBadge(v)}
+      </div>
+    </button>
   );
 }
