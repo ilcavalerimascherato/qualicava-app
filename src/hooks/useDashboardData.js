@@ -62,13 +62,18 @@ const fetchers = {
     return data;
   },
   // Campagne survey ospiti con punteggi già aggregati (avg_scores.nps_consiglio)
-  // — usato dal Cruscotto per l'NPS medio di gruppo.
+  // — usato dal Cruscotto per l'NPS medio di gruppo. Include sia le campagne
+  // per struttura (facility_id valorizzato) sia quelle a livello società
+  // (facility_id NULL, company_id valorizzato — es. OASI, poco organico
+  // distribuito su più strutture) — i consumer che filtrano per facility_id
+  // (es. CruscottoView) ignorano naturalmente queste ultime, il tab
+  // Soddisfazione (RadarPerUdo/TrendNpsPerUdo/GapOspitiOperatoriPerUdo) le
+  // usa esplicitamente via company_id.
   campaignsClient: async () => {
     const { data, error } = await supabase
       .from('v_survey_campagne')
       .select('campagna_id, facility_id, company_id, survey_type, data_inizio, data_fine, n_risposte, avg_scores')
-      .eq('survey_type', 'client')
-      .not('facility_id', 'is', null);
+      .eq('survey_type', 'client');
     if (error) throw error;
     return data;
   },
@@ -77,8 +82,7 @@ const fetchers = {
     const { data, error } = await supabase
       .from('v_survey_campagne')
       .select('campagna_id, facility_id, company_id, survey_type, data_inizio, data_fine, n_risposte, avg_scores')
-      .eq('survey_type', 'operator')
-      .not('facility_id', 'is', null);
+      .eq('survey_type', 'operator');
     if (error) throw error;
     return data;
   },

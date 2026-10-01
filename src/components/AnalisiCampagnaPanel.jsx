@@ -57,7 +57,7 @@ export function NpsGauge({ nps }) {
   );
 }
 
-export function RadarCategorie({ avgScores, udoAvgScores, surveyType }) {
+export function RadarCategorie({ avgScores, udoAvgScores, surveyType, primaryLabel = 'Struttura', compareLabel = 'Media UDO' }) {
   const cats = surveyType === 'operator' ? CATEGORIE_OPERATOR : CATEGORIE_CLIENT;
   const data = Object.entries(cats).map(([cat, keys]) => {
     const vals = keys.map(k => avgScores?.[k]).filter(v => v != null);
@@ -76,8 +76,8 @@ export function RadarCategorie({ avgScores, udoAvgScores, surveyType }) {
         <RadarChart data={data}>
           <PolarGrid stroke="#e2e8f0" />
           <PolarAngleAxis dataKey="cat" tick={{ fontSize: 11, fill: '#64748b' }} />
-          <Radar name="Struttura" dataKey="struttura" stroke="#2a78d6" fill="#2a78d6" fillOpacity={0.25} strokeWidth={2} />
-          <Radar name="Media UDO" dataKey="udo" stroke="#94a3b8" fill="none" strokeWidth={1.5} strokeDasharray="4 2" />
+          <Radar name={primaryLabel} dataKey="struttura" stroke="#2a78d6" fill="#2a78d6" fillOpacity={0.25} strokeWidth={2} />
+          <Radar name={compareLabel} dataKey="udo" stroke="#94a3b8" fill="none" strokeWidth={1.5} strokeDasharray="4 2" />
           <Tooltip
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
@@ -86,8 +86,8 @@ export function RadarCategorie({ avgScores, udoAvgScores, surveyType }) {
               return (
                 <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-3 text-xs max-w-[200px]">
                   <p className="font-bold text-slate-700 mb-2">{payload[0]?.payload?.cat}</p>
-                  <p className="text-blue-600 font-medium mb-1">Struttura: {payload[0]?.value}/100</p>
-                  {payload[1] && <p className="text-slate-400 mb-2">Media UDO: {payload[1]?.value}/100</p>}
+                  <p className="text-blue-600 font-medium mb-1">{primaryLabel}: {payload[0]?.value}/100</p>
+                  {payload[1] && <p className="text-slate-400 mb-2">{compareLabel}: {payload[1]?.value}/100</p>}
                   {keys.length > 0 && (
                     <>
                       <p className="text-slate-400 text-[10px] uppercase tracking-wide mb-1">Domande incluse:</p>
@@ -106,8 +106,8 @@ export function RadarCategorie({ avgScores, udoAvgScores, surveyType }) {
         </RadarChart>
       </ResponsiveContainer>
       <div className="flex gap-4 justify-center text-[10px] text-slate-500 mt-1">
-        <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-blue-500 inline-block"></span>Struttura</span>
-        <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-slate-400 inline-block" style={{borderTop:'2px dashed #94a3b8'}}></span>Media UDO</span>
+        <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-blue-500 inline-block"></span>{primaryLabel}</span>
+        <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-slate-400 inline-block" style={{borderTop:'2px dashed #94a3b8'}}></span>{compareLabel}</span>
       </div>
     </div>
   );

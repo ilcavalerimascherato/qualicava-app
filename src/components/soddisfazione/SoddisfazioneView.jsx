@@ -3,12 +3,18 @@
 // dimensione, trend NPS con early warning, word cloud commenti liberi,
 // confronto ospiti vs operatori. Sola consultazione — la generazione
 // documenti resta nella sezione operativa Survey (SurveyPage.jsx).
+//
+// Revisione 2026-09-30 (Claudio): niente più drill-down per singola
+// struttura in questo report — quelle si guardano dalla dash del Direttore
+// (/facility/:id). Qui l'unità è l'UDO (le "diverse realtà" del gruppo) +
+// le rilevazioni a livello società mostrate come voce a sé (vedi
+// soddisfazioneGroups.js e fix_survey_company_wide_ssot.sql).
 import React, { useMemo, useState } from 'react';
 import UniversalFilterBar, { EMPTY_FILTERS, applyFacilityFilters } from '../cruscotto/UniversalFilterBar';
-import BenchmarkDimensioni from './BenchmarkDimensioni';
-import NpsTrendChart from './NpsTrendChart';
+import RadarPerUdo from './RadarPerUdo';
+import TrendNpsPerUdo from './TrendNpsPerUdo';
 import WordCloudCommenti from './WordCloudCommenti';
-import OspitiVsOperatoriPanel from './OspitiVsOperatoriPanel';
+import GapOspitiOperatoriPerUdo from './GapOspitiOperatoriPerUdo';
 
 const PERIOD_OPTIONS = [
   { value: '12', label: 'Ultimi 12 mesi' },
@@ -59,13 +65,13 @@ export default function SoddisfazioneView({
         </select>
       </div>
 
-      <BenchmarkDimensioni facilities={filteredFacilities} campaignsClient={campaignsClient} campaignsOperator={campaignsOperator} />
+      <RadarPerUdo facilities={filteredFacilities} udos={udos} companies={companies} campaignsClient={campaignsClient} campaignsOperator={campaignsOperator} />
 
-      <NpsTrendChart facilities={filteredFacilities} campaignsClient={campaignsClient} />
+      <TrendNpsPerUdo facilities={filteredFacilities} udos={udos} companies={companies} campaignsClient={campaignsClient} />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <WordCloudCommenti facilityIds={filteredFacilityIds} fromDate={fromDate} toDate={toDate} />
-        <OspitiVsOperatoriPanel facilities={filteredFacilities} campaignsClient={campaignsClient} campaignsOperator={campaignsOperator} />
+        <GapOspitiOperatoriPerUdo facilities={filteredFacilities} udos={udos} companies={companies} campaignsClient={campaignsClient} campaignsOperator={campaignsOperator} />
       </div>
     </div>
   );

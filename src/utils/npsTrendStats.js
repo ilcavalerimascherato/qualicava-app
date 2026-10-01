@@ -49,17 +49,22 @@ export function computeFacilityNpsTrend(campaigns, facilityId) {
 
 /**
  * Media e deviazione standard di gruppo per semestre, su un insieme di
- * strutture (es. stesso tipo UDO) — usata per la banda del grafico.
+ * strutture (es. stesso tipo UDO) e/o società (campagne a livello società,
+ * facility_id NULL — stessa regola SSOT di computeWeightedAvgScores in
+ * surveyAggregation.js) — usata sia per una banda di sfondo sia come linea
+ * di gruppo/UDO a sé stante.
  * @param {Array} campaigns
  * @param {Array<number|string>} facilityIds
+ * @param {Array<number|string>} [companyIds]
  * @returns {Array<{ label: string, sortKey: number, mean: number, std: number, count: number }>}
  */
-export function computeGroupNpsBySemester(campaigns, facilityIds) {
-  const ids = new Set(facilityIds.map(String));
+export function computeGroupNpsBySemester(campaigns, facilityIds, companyIds = []) {
+  const fIds = new Set((facilityIds ?? []).map(String));
+  const cIds = new Set((companyIds ?? []).map(String));
   const bySemester = new Map();
 
   (campaigns ?? [])
-    .filter(c => ids.has(String(c.facility_id)))
+    .filter(c => (c.facility_id != null ? fIds.has(String(c.facility_id)) : cIds.has(String(c.company_id))))
     .forEach(c => {
       const nps = c.avg_scores?.nps_consiglio;
       const dateRef = c.data_fine || c.data_inizio;
