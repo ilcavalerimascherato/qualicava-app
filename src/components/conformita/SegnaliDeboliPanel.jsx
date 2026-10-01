@@ -17,7 +17,9 @@ export default function SegnaliDeboliPanel({ nonConformities, facilities }) {
   );
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4">
+    // Stessa scelta di TickerAlert.jsx: una lista di poche righe corte resta
+    // una striscia centrata invece di stirarsi su tutta la larghezza del tab.
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 max-w-2xl mx-auto">
       <div className="flex items-center gap-2 mb-1">
         <Radar size={14} className="text-slate-400" />
         <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Segnali deboli</h3>

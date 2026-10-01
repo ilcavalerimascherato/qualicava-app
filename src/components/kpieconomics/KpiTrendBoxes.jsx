@@ -111,7 +111,7 @@ export default function KpiTrendBoxes({ facilities, kpiRecords, year }) {
           {KPI_SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-2.5 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
         {rules.map(rule => (
           <KpiBox key={rule.kpi_target} rule={rule} facilities={facilities} kpiRecords={kpiRecords} months={months} />
         ))}

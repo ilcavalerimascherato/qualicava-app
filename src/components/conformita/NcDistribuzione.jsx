@@ -8,7 +8,7 @@ import { computeNcDistribution } from '../../utils/ncStats';
 const GRAVITA_COLOR = { Bassa: '#94a3b8', Media: '#f59e0b', Alta: '#ef4444' };
 const STATO_COLOR = { Aperto: '#ef4444', Pending: '#f59e0b', Chiuso: '#10b981' };
 
-function DistChart({ title, data, colorMap, defaultColor = '#3b82f6' }) {
+function DistChart({ title, data, colorMap, defaultColor = '#3b82f6', yAxisWidth = 140 }) {
   const chartData = useMemo(
     () => Object.entries(data).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     [data]
@@ -24,7 +24,7 @@ function DistChart({ title, data, colorMap, defaultColor = '#3b82f6' }) {
           <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} allowDecimals={false} />
-            <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11, fill: '#475569' }} />
+            <YAxis type="category" dataKey="name" width={yAxisWidth} tick={{ fontSize: 11, fill: '#475569' }} />
             <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
             <Bar dataKey="count" radius={[0, 4, 4, 0]}>
               {chartData.map(d => <Cell key={d.name} fill={colorMap?.[d.name] ?? defaultColor} />)}
@@ -42,10 +42,13 @@ export default function NcDistribuzione({ nonConformities }) {
   const byStato     = useMemo(() => computeNcDistribution(nonConformities, 'stato'), [nonConformities]);
 
   return (
-    <div className="grid grid-cols-3 gap-4">
-      <DistChart title="Per tipologia" data={byTipologia} />
-      <DistChart title="Per gravità" data={byGravita} colorMap={GRAVITA_COLOR} />
-      <DistChart title="Per stato" data={byStato} colorMap={STATO_COLOR} />
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* "classificazione" è testo libero (può essere lungo) — width maggiore
+          della larghezza di default, a differenza di gravità/stato che sono
+          enum brevi fissi (Bassa/Media/Alta, Aperto/Pending/Chiuso). */}
+      <DistChart title="Per tipologia" data={byTipologia} yAxisWidth={220} />
+      <DistChart title="Per gravità" data={byGravita} colorMap={GRAVITA_COLOR} yAxisWidth={90} />
+      <DistChart title="Per stato" data={byStato} colorMap={STATO_COLOR} yAxisWidth={90} />
     </div>
   );
 }

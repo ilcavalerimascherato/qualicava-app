@@ -89,12 +89,12 @@ export default function CruscottoView({
         <p className="text-[11px] font-medium text-slate-400 uppercase tracking-widest mb-3">
           Società del gruppo
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
           {companiesToShow.map(c => (
             <SocietaCard key={c.id} company={c} facilities={filteredFacilities} kpiRecords={kpiRecords} />
           ))}
           {companiesToShow.length === 0 && (
-            <p className="text-sm text-slate-400 col-span-2 text-center py-8">
+            <p className="text-sm text-slate-400 col-span-full text-center py-8">
               Nessuna società corrisponde ai filtri selezionati.
             </p>
           )}

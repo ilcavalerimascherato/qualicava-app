@@ -39,14 +39,14 @@ export default function ConformitaRischioView({ facilities, companies, udos, non
 
       <NcTrendMensile nonConformities={filteredNc} />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <NcTempoChiusura nonConformities={filteredNc} />
         <NcAging nonConformities={filteredNc} />
       </div>
 
       <SegnaliDeboliPanel nonConformities={filteredNc} facilities={filteredFacilities} />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <SaeIspettiviPlaceholder />
         <VerbaliIspettiviSummaryCard facilities={filteredFacilities} />
       </div>

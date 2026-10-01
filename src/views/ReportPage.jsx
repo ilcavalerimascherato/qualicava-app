@@ -221,7 +221,12 @@ export default function ReportPage() {
       </div>
 
       {/* ── Body ── */}
-      <main className="px-6 py-6 max-w-6xl mx-auto">
+      {/* Era max-w-6xl (1152px): strozzava ogni griglia interna di ogni tab
+          indipendentemente dai loro breakpoint responsive (xl:/2xl: non si
+          attivavano mai). 1800px lascia comunque un tetto (i paragrafi di
+          AiBriefing non devono diventare righe lunghissime su un ultra-wide)
+          ma usa davvero lo spazio su schermi ampi. */}
+      <main className="px-6 py-6 max-w-[1800px] mx-auto">
 
         {activeTab === 'cruscotto' && (
           <CruscottoView

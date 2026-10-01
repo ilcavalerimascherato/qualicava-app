@@ -91,7 +91,7 @@ export default function EconomicoView({ year }) {
           <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => v.toLocaleString('it-IT')} />
-            <YAxis type="category" dataKey="facilityName" tick={{ fontSize: 12, fontWeight: 600 }} width={140} />
+            <YAxis type="category" dataKey="facilityName" tick={{ fontSize: 12, fontWeight: 600 }} width={220} />
             <Tooltip formatter={v => fmtEuro(v)} />
             <Bar dataKey="ebitdaYtd" name="EBITDA YTD" radius={[0, 6, 6, 0]} barSize={22}>
               {chartData.map((_, i) => <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />)}

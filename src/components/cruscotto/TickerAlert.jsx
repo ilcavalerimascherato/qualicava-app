@@ -15,8 +15,11 @@ export default function TickerAlert({ facilities, kpiRecords, nonConformities, c
     facilities, kpiRecords, nonConformities, cdgByFacility,
   }), [facilities, kpiRecords, nonConformities, cdgByFacility]);
 
+  // Una lista di poche righe corte non deve stirarsi su tutta la larghezza
+  // del cruscotto (ora molto più ampio) — resta una striscia centrata
+  // invece che un elenco con una fila di spazio vuoto accanto a ogni riga.
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4">
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 max-w-2xl mx-auto">
       <div className="flex items-center gap-2 mb-3">
         <AlertTriangle size={16} className="text-amber-500" />
         <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Situazioni più urgenti</h3>
