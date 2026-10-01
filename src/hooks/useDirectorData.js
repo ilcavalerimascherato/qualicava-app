@@ -59,18 +59,32 @@ export function useDirectorData(facilityIds, year) {
   const surveysQuery = useQuery({
     queryKey: directorKeys.surveys(ids, year),
     queryFn:  async () => {
+      // Le survey a livello società (v_survey_data_normalized: facility_id
+      // NULL, company_id valorizzato — vedi fix_survey_company_wide_ssot.sql)
+      // vanno recuperate anche per company_id, non solo per facility_id,
+      // altrimenti un direttore la cui struttura è coperta da una
+      // rilevazione societaria (es. poco organico distribuito su più
+      // strutture) non la vedrebbe più sulla propria pagina. Dipende da
+      // facilitiesQuery per conoscere le company_id delle strutture assegnate.
+      const companyIds = [...new Set(
+        (facilitiesQuery.data ?? []).map(f => f.company_id).filter(Boolean)
+      )];
+      const orFilter = companyIds.length > 0
+        ? `facility_id.in.(${ids.join(',')}),company_id.in.(${companyIds.join(',')})`
+        : `facility_id.in.(${ids.join(',')})`;
+
       // Copre anche l'anno precedente: la regola "ultimi 12 mesi" di
       // getSurveyStatus può ricadere su campagne dell'anno solare prima.
       const { data, error } = await supabase
         .from('v_survey_data_normalized')
         .select('*')
-        .in('facility_id', ids)
+        .or(orFilter)
         .gte('calendar_id', `${year - 1}-01`)
         .lte('calendar_id', `${year}-12`);
       if (error) throw error;
       return data;
     },
-    enabled,
+    enabled: enabled && facilitiesQuery.isSuccess,
     staleTime: 60 * 1000,
   });
 
